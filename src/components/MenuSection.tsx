@@ -36,8 +36,11 @@ export const DEFAULT_MENU_ITEMS: MenuItem[] = [
 
 const categories = ["All", "Burgers", "Sides", "Drinks", "Desserts"];
 
-const formatCurrency = (value: number) =>
-  new Intl.NumberFormat("en-KE", { style: "currency", currency: "KES" }).format(value);
+const formatCurrency = (value: number) => {
+  const currency = import.meta.env.VITE_CURRENCY_CODE || "KES";
+  const locale = currency === "KES" ? "en-KE" : "en-US";
+  return new Intl.NumberFormat(locale, { style: "currency", currency }).format(value);
+};
 
 const MenuSection = () => {
   const [active, setActive] = useState("All");

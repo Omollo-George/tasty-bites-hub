@@ -1,6 +1,6 @@
 # API Proxy: Redirect frontend /api calls to your actual backend server
-# Replace the URL below with your actual deployed backend URL (e.g., on Heroku, Render, etc.)
-/api/*  https://api.tastybites-backend.com/api/:splat  200
+# Ensure this matches the URL of your deployed backend service
+/api/*  https://your-real-backend-api.com/api/:splat  200
 
 # Handle SPA routing: redirect all requests to index.html
 /*    /index.html   200
