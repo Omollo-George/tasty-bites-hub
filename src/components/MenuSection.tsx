@@ -36,6 +36,8 @@ export const DEFAULT_MENU_ITEMS: MenuItem[] = [
 
 const categories = ["All", "Burgers", "Sides", "Drinks", "Desserts"];
 
+const COMMON_MODIFIERS = ["No Onion", "Extra Cheese", "Extra Sauce", "Large", "Well Done", "No Sugar", "Extra Ice"];
+
 const formatCurrency = (value: number) => {
   const currency = import.meta.env.VITE_CURRENCY_CODE || "KES";
   const locale = currency === "KES" ? "en-KE" : "en-US";
@@ -46,6 +48,7 @@ const MenuSection = () => {
   const [active, setActive] = useState("All");
   const [rate, setRate] = useState<number>(1);
   const [menuItems, setMenuItems] = useState<MenuItem[]>(DEFAULT_MENU_ITEMS);
+  const [sessionOrders, setSessionOrders] = useState<CartItem[][]>([]);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [activeItem, setActiveItem] = useState<string | null>(null);
   const [activeQuantity, setActiveQuantity] = useState<number>(1);
@@ -53,7 +56,6 @@ const MenuSection = () => {
   const [tableNumber, setTableNumber] = useState("");
   const [orderType, setOrderType] = useState<"table" | "takeaway">("table");
   const [paymentMethod, setPaymentMethod] = useState<"mpesa" | "cash">("mpesa");
-  const [splitCount, setSplitCount] = useState<number>(1);
   const [phoneNumber, setPhoneNumber] = useState("");
   const [processing, setProcessing] = useState(false);
 
@@ -120,15 +122,38 @@ const MenuSection = () => {
     setActiveQuantity(1);
   };
 
+  const toggleModifier = (mod: string) => {
+    const currentMods = activeModifiers.split(",").map(m => m.trim()).filter(Boolean);
+    if (currentMods.includes(mod)) {
+      setActiveModifiers(currentMods.filter(m => m !== mod).join(", "));
+    } else {
+      const updated = [...currentMods, mod];
+      setActiveModifiers(updated.join(", "));
+    }
+  };
+
   const removeCartItem = (index: number) => {
     setCart((current) => current.filter((_, idx) => idx !== index));
   };
 
-  const subtotal = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
-  const splitAmount = splitCount > 1 ? subtotal / splitCount : subtotal;
+  const removeSessionOrder = (index: number) => {
+    setSessionOrders((current) => current.filter((_, idx) => idx !== index));
+  };
+
+  const addCartToSession = () => {
+    if (cart.length === 0) return;
+    setSessionOrders([...sessionOrders, cart]);
+    setCart([]);
+    toast({ title: "Order Group Saved", description: "The current items have been added to the consolidated bill." });
+  };
+
+  const sessionSubtotal = sessionOrders.reduce((sum, order) => 
+    sum + order.reduce((s, i) => s + (i.price * i.quantity), 0), 0);
+  const cartSubtotal = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
+  const subtotal = sessionSubtotal + cartSubtotal;
 
   const handleCreateOrder = async () => {
-    if (cart.length === 0) {
+    if (cart.length === 0 && sessionOrders.length === 0) {
       toast({ title: "Add items first", description: "Build a cart before creating an order." });
       return;
     }
@@ -151,12 +176,14 @@ const MenuSection = () => {
 
     setProcessing(true);
 
+    const allItems = [...sessionOrders.flatMap(o => o), ...cart];
+
     try {
       const response = await fetch("/api/payments/pos/create-order/", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          items: cart.map((item) => ({
+          items: allItems.map((item) => ({
             name: item.name,
             price: item.price,
             quantity: item.quantity,
@@ -164,8 +191,9 @@ const MenuSection = () => {
             seat_number: 1,
           })),
           table_number: tableNumber.trim(),
-          split_count: splitCount,
+          split_count: 1,
           phone: cleanedPhone,
+          split_phones: [],
           order_type: orderType,
           payment_method: paymentMethod,
         }),
@@ -192,9 +220,9 @@ const MenuSection = () => {
       }
 
       setCart([]);
+      setSessionOrders([]);
       setTableNumber("");
       setPhoneNumber("");
-      setSplitCount(1);
 
       toast({
         title: "Order created",
@@ -260,21 +288,37 @@ const MenuSection = () => {
 
                   {activeItem === item.name ? (
                     <div className="flex flex-col gap-3 w-full max-w-sm">
-                      <div className="grid grid-cols-2 gap-2">
-                        <input
-                          type="number"
-                          min={1}
-                          value={activeQuantity}
-                          onChange={(event) => setActiveQuantity(Number(event.target.value) || 1)}
-                          className="rounded-full border border-slate-700 bg-slate-800 px-4 py-2 text-sm text-slate-100 outline-none focus:ring-2 focus:ring-primary"
-                        />
-                        <input
-                          type="text"
-                          value={activeModifiers}
-                          onChange={(event) => setActiveModifiers(event.target.value)}
-                          placeholder="Modifiers (comma-separated)"
-                          className="rounded-full border border-slate-700 bg-slate-800 px-4 py-2 text-sm text-slate-100 outline-none focus:ring-2 focus:ring-primary"
-                        />
+                      <div className="flex flex-col gap-3">
+                        <div className="flex items-center gap-3">
+                          <label className="text-xs font-bold text-slate-400 uppercase tracking-tighter">Quantity</label>
+                          <input
+                            type="number"
+                            min={1}
+                            value={activeQuantity}
+                            onChange={(event) => setActiveQuantity(Number(event.target.value) || 1)}
+                            className="w-20 rounded-full border border-slate-700 bg-slate-800 px-4 py-1.5 text-sm text-slate-100 outline-none focus:ring-2 focus:ring-primary"
+                          />
+                        </div>
+                        
+                        <div className="flex flex-wrap gap-1.5">
+                          {COMMON_MODIFIERS.map((mod) => {
+                            const isSelected = activeModifiers.split(",").map(m => m.trim()).filter(Boolean).includes(mod);
+                            return (
+                              <button
+                                key={mod}
+                                type="button"
+                                onClick={() => toggleModifier(mod)}
+                                className={`px-3 py-1 rounded-full text-[10px] font-bold transition-all border ${
+                                  isSelected
+                                    ? "bg-[#d69e2e] text-[#1a365d] border-[#d69e2e] shadow-md shadow-[#d69e2e]/20"
+                                    : "bg-slate-800 text-slate-400 border-slate-700 hover:border-slate-500"
+                                }`}
+                              >
+                                {mod}
+                              </button>
+                            );
+                          })}
+                        </div>
                       </div>
                       <div className="flex gap-2">
                         <button
@@ -309,32 +353,59 @@ const MenuSection = () => {
 
           <aside className="bg-slate-900 rounded-xl p-6 shadow-card border border-slate-800">
             <div className="mb-6">
-              <p className="text-sm text-slate-400">POS Order Builder</p>
-              <h3 className="font-display text-2xl text-slate-100">Current Cart</h3>
+              <p className="text-sm text-slate-400">Session Management</p>
+              <h3 className="font-display text-2xl text-slate-100">Table Billing</h3>
             </div>
 
-            {cart.length === 0 ? (
-              <p className="text-slate-400">Select items and build a table order.</p>
+            {cart.length === 0 && sessionOrders.length === 0 ? (
+              <p className="text-slate-400">Select items and build a multi-order session.</p>
             ) : (
               <div className="space-y-4">
-                {cart.map((item, index) => (
-                  <div key={`${item.name}-${index}`} className="rounded-xl border border-slate-800 p-4 bg-slate-950">
-                    <div className="flex items-center justify-between gap-3">
-                      <div>
-                        <p className="font-semibold text-slate-100">{item.name}</p>
-                        <p className="text-sm text-slate-400">
-                          {item.quantity} x {formatCurrency(item.price)}
-                        </p>
-                        {item.modifiers.length > 0 && (
-                          <p className="text-xs text-slate-500 mt-1">Modifiers: {item.modifiers.join(", ")}</p>
-                        )}
-                      </div>
-                      <button type="button" onClick={() => removeCartItem(index)} className="text-sm text-destructive">
-                        Remove
-                      </button>
+                {sessionOrders.map((orderItems, oIdx) => (
+                  <div key={oIdx} className="rounded-xl border-l-4 border-[#d69e2e] p-4 bg-slate-950/50 mb-2">
+                    <div className="flex justify-between items-center mb-2">
+                      <p className="text-[10px] font-bold text-[#d69e2e] uppercase tracking-tighter">Saved Group #{oIdx + 1}</p>
+                      <button onClick={() => removeSessionOrder(oIdx)} className="text-[10px] text-destructive hover:underline">Discard Group</button>
                     </div>
+                    {orderItems.map((item, iIdx) => (
+                      <div key={iIdx} className="flex justify-between text-xs text-slate-300">
+                        <span>{item.quantity}x {item.name}</span>
+                        <span>{formatCurrency(item.price * item.quantity)}</span>
+                      </div>
+                    ))}
                   </div>
                 ))}
+
+                {cart.length > 0 && (
+                  <div className="space-y-3">
+                    <p className="text-[10px] font-bold text-slate-500 uppercase">Active Selection</p>
+                    {cart.map((item, index) => (
+                      <div key={`${item.name}-${index}`} className="rounded-xl border border-slate-800 p-4 bg-slate-950">
+                        <div className="flex items-center justify-between gap-3">
+                          <div>
+                            <p className="font-semibold text-slate-100">{item.name}</p>
+                            <p className="text-sm text-slate-400">
+                              {item.quantity} x {formatCurrency(item.price)}
+                            </p>
+                            {item.modifiers.length > 0 && (
+                              <p className="text-xs text-slate-500 mt-1">Modifiers: {item.modifiers.join(", ")}</p>
+                            )}
+                          </div>
+                          <button type="button" onClick={() => removeCartItem(index)} className="text-sm text-destructive">
+                            Remove
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                    <button
+                      type="button"
+                      onClick={addCartToSession}
+                      className="w-full rounded-full border border-[#d69e2e] text-[#d69e2e] py-2 text-xs font-bold hover:bg-[#d69e2e] hover:text-white transition-all"
+                    >
+                      Add to Grouped Bill
+                    </button>
+                  </div>
+                )}
 
                 <div className="grid gap-3">
                   <div className="space-y-2">
@@ -391,30 +462,17 @@ const MenuSection = () => {
                   </div>
 
                   <label className="text-sm font-semibold text-slate-300">
-                    {paymentMethod === "mpesa" ? (
-                      <>M-Pesa Phone <span className="text-destructive">*</span></>
-                    ) : (
-                      "Phone (optional)"
-                    )}
+                    {paymentMethod === "mpesa" ? "M-Pesa Phone" : "Phone (optional)"}
+                    {paymentMethod === "mpesa" && <span className="text-destructive"> *</span>}
                   </label>
+                  
                   <input
                     type="tel"
                     value={phoneNumber}
-                    onChange={(event) => setPhoneNumber(event.target.value)}
+                    onChange={(e) => setPhoneNumber(e.target.value)}
                     placeholder="2547XXXXXXXX"
                     className="w-full rounded-full border border-slate-700 bg-slate-800 px-4 py-2 text-sm text-slate-100 outline-none focus:ring-2 focus:ring-primary"
                   />
-
-                  <div className="flex items-center gap-3">
-                    <label className="text-sm font-semibold text-slate-300">Split bill</label>
-                    <input
-                      type="number"
-                      min={1}
-                      value={splitCount}
-                      onChange={(event) => setSplitCount(Math.max(1, Number(event.target.value) || 1))}
-                      className="w-24 rounded-full border border-slate-700 bg-slate-800 px-4 py-2 text-sm text-slate-100 outline-none focus:ring-2 focus:ring-primary"
-                    />
-                  </div>
                 </div>
 
                 <div className="space-y-2 pt-4 border-t border-slate-800">
@@ -422,12 +480,6 @@ const MenuSection = () => {
                     <span>Subtotal</span>
                     <span>{formatCurrency(subtotal * rate)}</span>
                   </div>
-                  {splitCount > 1 && (
-                    <div className="flex items-center justify-between text-sm text-slate-400">
-                      <span>Per person</span>
-                      <span>{formatCurrency(splitAmount * rate)}</span>
-                    </div>
-                  )}
                 </div>
 
                 <button
@@ -436,7 +488,7 @@ const MenuSection = () => {
                   disabled={processing}
                   className="w-full rounded-full bg-[#1a365d] text-[#d69e2e] border border-[#d69e2e]/30 px-5 py-3 text-sm font-semibold transition-all hover:scale-105 disabled:cursor-wait disabled:opacity-70"
                 >
-                  {processing ? "Creating order..." : "Create POS Order"}
+                  {processing ? "Processing consolidated payment..." : "Pay All Orders Now"}
                 </button>
               </div>
             )}

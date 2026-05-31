@@ -22,8 +22,8 @@ const AdminSidebar: React.FC = () => {
       <div className="mb-10 px-4 flex flex-col gap-4">
         <TastyBitesIcon size={40} />
         <div>
-          <p className="text-[10px] uppercase tracking-[0.4em] text-[#d69e2e] font-bold mb-1">Management</p>
-          <h2 className="font-display text-2xl text-white tracking-tight">Tasty Bites<span className="text-[#d69e2e]">.</span></h2>
+          <p className="text-[10px] uppercase tracking-[0.4em] text-[#d69e2e] font-bold mb-1">Hotel Management</p>
+          <h2 className="font-display text-2xl text-white tracking-tight">Tasty Bites Hub<span className="text-[#d69e2e]">.</span></h2>
         </div>
       </div>
       <nav className="flex flex-col gap-3">

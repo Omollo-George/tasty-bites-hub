@@ -157,7 +157,7 @@ const AdminAuthGuard: React.FC<{ children: React.ReactNode }> = ({ children }) =
             <button
               type="button"
               onClick={staySignedIn}
-              className="inline-flex items-center justify-center rounded-full bg-orange-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-orange-600"
+              className="inline-flex items-center justify-center rounded-full bg-[#d69e2e] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#d69e2e]/80"
             >
               Stay signed in
             </button>

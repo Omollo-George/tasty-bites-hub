@@ -18,7 +18,7 @@ const About = () => {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
           {features.map((f) => (
             <div key={f.title} className="text-center group">
-              <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-hero-gradient flex items-center justify-center shadow-warm group-hover:scale-110 transition-transform">
+              <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-[#1a365d] flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform">
                 <f.icon className="w-7 h-7 text-primary-foreground" />
               </div>
               <h3 className="font-display text-2xl text-slate-100 mb-2">{f.title}</h3>

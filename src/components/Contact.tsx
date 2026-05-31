@@ -11,17 +11,17 @@ const Contact = () => {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-4xl mx-auto">
           <div className="bg-slate-900 rounded-xl p-8 text-center shadow-card border border-slate-800">
             <MapPin className="w-8 h-8 text-primary mx-auto mb-4" />
-            <h3 className="font-display text-xl text-slate-100 mb-2">LOCATION</h3>
+            <h3 className="font-display text-xl text-slate-100 mb-2 text-[#d69e2e]">LOCATION</h3>
             <p className="text-slate-400 text-sm">123 Flavor Street<br />Downtown Food District<br />New York, NY 10001</p>
           </div>
           <div className="bg-slate-900 rounded-xl p-8 text-center shadow-card border border-slate-800">
             <Clock className="w-8 h-8 text-primary mx-auto mb-4" />
-            <h3 className="font-display text-xl text-slate-100 mb-2">HOURS</h3>
+            <h3 className="font-display text-xl text-slate-100 mb-2 text-[#d69e2e]">HOURS</h3>
             <p className="text-slate-400 text-sm">Mon – Fri: 10AM – 11PM<br />Saturday: 11AM – 12AM<br />Sunday: 11AM – 10PM</p>
           </div>
           <div className="bg-slate-900 rounded-xl p-8 text-center shadow-card border border-slate-800">
             <Phone className="w-8 h-8 text-primary mx-auto mb-4" />
-            <h3 className="font-display text-xl text-slate-100 mb-2">CONTACT</h3>
+            <h3 className="font-display text-xl text-slate-100 mb-2 text-[#d69e2e]">CONTACT</h3>
             <p className="text-slate-400 text-sm">(555) 123-BITE<br />hello@tastybites.com<br />@tastybites</p>
           </div>
         </div>
