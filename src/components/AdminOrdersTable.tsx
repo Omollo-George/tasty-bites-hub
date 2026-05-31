@@ -35,10 +35,22 @@ const OrdersTable: React.FC = () => {
     }
   }
 
-  useEffect(()=>{ fetchOrders() }, [])
+  // Handle scale: Auto-refresh the dashboard every 10 seconds
+  useEffect(() => {
+    fetchOrders();
+    const interval = setInterval(fetchOrders, 10000);
+    return () => clearInterval(interval);
+  }, []);
 
   const updateStatus = async (order_id: string, status: string) => {
     const token = localStorage.getItem('admin_token') || ''
+    
+    // Optimistic UI Update: Instantly update the local state for high-volume responsiveness
+    const previousOrders = [...orders];
+    setOrders(current => current.map(o => 
+      o.order_id === order_id ? { ...o, status } : o
+    ));
+
     try {
       const r = await fetch(`/api/payments/orders/${encodeURIComponent(order_id)}/update/`, {
         method: 'POST',
@@ -47,12 +59,15 @@ const OrdersTable: React.FC = () => {
       })
       const j = await r.json()
       if (r.ok) {
-        fetchOrders()
+        // Status confirmed by server
       } else {
+        // Rollback on failure
+        setOrders(previousOrders);
         alert(j.error || 'Failed')
       }
     } catch (e) {
       console.error(e)
+      setOrders(previousOrders);
       const message = e instanceof Error ? e.message : String(e)
       alert(`Network error: ${message}`)
     }

@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { Flame, BadgeCheck } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import Receipt from "./Receipt";
 
 type MenuItem = {
   name: string;
@@ -58,6 +59,7 @@ const MenuSection = () => {
   const [paymentMethod, setPaymentMethod] = useState<"mpesa" | "cash">("mpesa");
   const [phoneNumber, setPhoneNumber] = useState("");
   const [processing, setProcessing] = useState(false);
+  const [lastOrder, setLastOrder] = useState<any>(null);
 
   const { toast } = useToast();
 
@@ -95,6 +97,13 @@ const MenuSection = () => {
     setActiveItem(itemName);
     setActiveQuantity(1);
     setActiveModifiers("");
+  };
+
+  const resetForm = () => {
+    setCart([]);
+    setSessionOrders([]);
+    setTableNumber("");
+    setPhoneNumber("");
   };
 
   const addItemToCart = (itemName: string) => {
@@ -219,29 +228,100 @@ const MenuSection = () => {
         return;
       }
 
-      setCart([]);
-      setSessionOrders([]);
-      setTableNumber("");
-      setPhoneNumber("");
+      const receiptData = { ...data, items: allItems, total_amount: subtotal * rate };
 
-      toast({
-        title: "Order created",
-        description: data.payment_method === "mpesa" 
-          ? `Order ${data.order_id} created. Check your phone for the M-Pesa prompt.`
-          : `Order ${data.order_id} created and marked as paid via Cash.`,
-      });
+      if (paymentMethod === "mpesa") {
+        if (!data.stk_response?.CheckoutRequestID) {
+          toast({ title: "System Busy", description: "The payment gateway is currently handling high traffic. Please try again.", variant: "destructive" });
+          setProcessing(false);
+          fetch(`/api/payments/orders/${encodeURIComponent(data.order_id)}/discard/`, { method: 'DELETE' }).catch(() => {});
+          return;
+        }
 
-      // You can poll payment status using /api/payments/status/?checkout_id=...
+        const checkoutId = data.stk_response.CheckoutRequestID;
+        let transactionSettled = false;
+        toast({
+          title: "Awaiting Confirmation",
+          description: "Please complete the M-Pesa prompt on your phone to generate your receipt.",
+        });
+
+        // Poll payment status from backend every 3 seconds
+        const pollInterval = setInterval(async () => {
+          try {
+            const statusRes = await fetch(`/api/payments/status/?checkout_id=${checkoutId}`);
+            if (statusRes.ok) {
+              const statusData = await statusRes.json();
+              if (statusData.status === "success") {
+                transactionSettled = true;
+                clearInterval(pollInterval);
+                setProcessing(false);
+                setLastOrder(receiptData);
+                toast({ title: "Payment Confirmed", description: "Receipt generated successfully." });
+                resetForm();
+              } else if (statusData.status === "failed" || statusData.status === "error") {
+                transactionSettled = true;
+                clearInterval(pollInterval);
+                setProcessing(false);
+                toast({
+                  title: "Payment Failed",
+                  description: `Transaction for order ${data.order_id} was unsuccessful. The order has been discarded.`,
+                  variant: "destructive",
+                });
+
+                // Discard order on payment failure to ensure it isn't recorded
+                fetch(`/api/payments/orders/${encodeURIComponent(data.order_id)}/discard/`, {
+                  method: 'DELETE',
+                }).catch(() => {});
+              }
+            }
+          } catch (e) {
+            // Silently ignore network errors in polling and retry next interval
+          }
+        }, 3000);
+
+        // 1-minute safety timeout to stop polling and discard uncompleted transaction
+        setTimeout(() => {
+          if (!transactionSettled) {
+            clearInterval(pollInterval);
+            setProcessing(false);
+            toast({
+              title: "Payment Timeout",
+              description: "The payment window has expired. The order has been cancelled and discarded.",
+              variant: "destructive",
+            });
+
+            // Notify backend to discard the order so it isn't recorded/stored
+            fetch(`/api/payments/orders/${encodeURIComponent(data.order_id)}/discard/`, {
+              method: 'DELETE',
+            }).catch(() => {});
+          }
+        }, 60000); // 60 seconds is typical for STK Push expiry
+
+      } else {
+        // Cash payment - generate immediately as it is considered settled
+        setLastOrder(receiptData);
+        toast({
+          title: "Order created",
+          description: `Order ${data.order_id} created and marked as paid via Cash.`,
+        });
+        resetForm();
+        setProcessing(false);
+      }
+
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       toast({ title: "Order error", description: `Unable to reach backend: ${message}` });
-    } finally {
       setProcessing(false);
+    } finally {
+      // Processing state is now handled manually in all logic paths above
     }
   };
 
   return (
     <section id="menu" className="py-24 bg-slate-950 text-slate-200">
+      {lastOrder && (
+        <Receipt order={lastOrder} onClose={() => setLastOrder(null)} />
+      )}
       <div className="container mx-auto px-4">
         <div className="text-center mb-12">
           <p className="font-body text-primary text-sm font-semibold uppercase tracking-[0.2em] mb-2">Our Menu</p>
