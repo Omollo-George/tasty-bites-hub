@@ -3,7 +3,7 @@ const Footer = () => {
     <footer className="bg-foreground py-12">
       <div className="container mx-auto px-4 text-center">
         <p className="font-display text-3xl text-primary mb-4">TASTY BITES</p>
-        <p className="text-background/60 text-sm mb-6">Bold flavors. Fast service. Always fresh.</p>
+        <p className="text-background/60 text-sm mb-6">Efficiency. Quality. Reliability. The standard in hospitality management.</p>
         <div className="flex justify-center gap-6 mb-8">
           {["Home", "Menu", "About", "Contact"].map((link) => (
             <a

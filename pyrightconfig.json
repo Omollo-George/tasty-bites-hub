@@ -1,0 +1,12 @@
+{
+  "typeCheckingMode": "basic",
+  "reportMissingModuleSource": "none",
+  "reportAttributeAccessIssue": "none",
+  "reportArgumentType": "none",
+  "pythonVersion": "3.12",
+  "pythonPlatform": "Windows",
+  "venvPath": "C:\\Users\\Admin\\AppData\\Local\\Programs\\Python",
+  "venv": "Python312",
+  "useLibraryCodeForTypes": true
+}
+

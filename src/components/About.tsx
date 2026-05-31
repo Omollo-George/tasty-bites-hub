@@ -1,19 +1,19 @@
-import { Clock, Flame, Heart, Truck } from "lucide-react";
+import { Clock, ShieldCheck, Zap, LayoutDashboard } from "lucide-react";
 
 const features = [
-  { icon: Flame, title: "Flame Grilled", desc: "Every patty grilled over an open flame for that perfect char." },
-  { icon: Heart, title: "Fresh Daily", desc: "Ingredients sourced fresh every morning from local suppliers." },
-  { icon: Clock, title: "Fast Service", desc: "From order to tray in under 5 minutes, guaranteed." },
-  { icon: Truck, title: "Free Delivery", desc: "Free delivery on orders over $25 within a 5-mile radius." },
+  { icon: Zap, title: "Operational Speed", desc: "Streamlined order-to-service pipelines for maximum efficiency." },
+  { icon: ShieldCheck, title: "Quality Standards", desc: "Automated inventory checks ensuring 100% freshness compliance." },
+  { icon: Clock, title: "Real-time Tracking", desc: "Precise kitchen management and preparation time monitoring." },
+  { icon: LayoutDashboard, title: "Centralized Control", desc: "Unified dashboard for managing multiple dining outlets." },
 ];
 
 const About = () => {
   return (
-    <section id="about" className="py-24 bg-muted/50">
+    <section id="about" className="py-24 bg-slate-900">
       <div className="container mx-auto px-4">
         <div className="text-center mb-16">
           <p className="font-body text-primary text-sm font-semibold uppercase tracking-[0.2em] mb-2">Why Us</p>
-          <h2 className="font-display text-5xl md:text-6xl text-foreground">THE TASTY DIFFERENCE</h2>
+          <h2 className="font-display text-5xl md:text-6xl text-slate-100">THE TASTY DIFFERENCE</h2>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
           {features.map((f) => (
@@ -21,8 +21,8 @@ const About = () => {
               <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-hero-gradient flex items-center justify-center shadow-warm group-hover:scale-110 transition-transform">
                 <f.icon className="w-7 h-7 text-primary-foreground" />
               </div>
-              <h3 className="font-display text-2xl text-foreground mb-2">{f.title}</h3>
-              <p className="text-muted-foreground text-sm">{f.desc}</p>
+              <h3 className="font-display text-2xl text-slate-100 mb-2">{f.title}</h3>
+              <p className="text-slate-400 text-sm">{f.desc}</p>
             </div>
           ))}
         </div>
