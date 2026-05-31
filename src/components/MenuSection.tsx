@@ -224,7 +224,7 @@ const MenuSection = () => {
               onClick={() => setActive(cat)}
               className={`px-6 py-2 rounded-full text-sm font-semibold transition-all ${
                 active === cat
-                  ? "bg-hero-gradient text-primary-foreground shadow-warm"
+                  ? "bg-[#1a365d] text-[#d69e2e] border border-[#d69e2e]/30 shadow-lg"
                   : "bg-slate-900 text-slate-400 hover:bg-slate-800"
               }`}
             >
@@ -238,7 +238,7 @@ const MenuSection = () => {
             {filtered.map((item) => (
               <div
                 key={item.name}
-                className="bg-slate-900 rounded-xl p-6 shadow-card hover:shadow-orange-500/10 transition-shadow border border-slate-800 group"
+                className="bg-slate-900 rounded-xl p-6 shadow-card hover:shadow-[#d69e2e]/10 transition-shadow border border-slate-800 group"
               >
                 <div className="flex items-start justify-between mb-2">
                   <h3 className="font-display text-2xl text-slate-100 group-hover:text-primary transition-colors">
@@ -277,7 +277,7 @@ const MenuSection = () => {
                         <button
                           type="button"
                           onClick={() => addItemToCart(item.name)}
-                          className="bg-hero-gradient text-primary-foreground px-4 py-2 rounded-full text-sm font-semibold hover:scale-105 transition-transform"
+                          className="bg-[#1a365d] text-[#d69e2e] border border-[#d69e2e]/30 px-4 py-2 rounded-full text-sm font-semibold hover:scale-105 transition-transform"
                         >
                           Add to Cart
                         </button>
@@ -294,7 +294,7 @@ const MenuSection = () => {
                     <button
                       type="button"
                       onClick={() => openAddItem(item.name)}
-                      className="bg-hero-gradient text-primary-foreground px-5 py-2 rounded-full text-sm font-semibold transition-all hover:scale-105"
+                      className="bg-[#1a365d] text-[#d69e2e] border border-[#d69e2e]/30 px-5 py-2 rounded-full text-sm font-semibold transition-all hover:scale-105"
                     >
                       Add to Cart
                     </button>
@@ -431,7 +431,7 @@ const MenuSection = () => {
                   type="button"
                   onClick={handleCreateOrder}
                   disabled={processing}
-                  className="w-full rounded-full bg-hero-gradient px-5 py-3 text-sm font-semibold text-primary-foreground transition-all hover:scale-105 disabled:cursor-wait disabled:opacity-70"
+                  className="w-full rounded-full bg-[#1a365d] text-[#d69e2e] border border-[#d69e2e]/30 px-5 py-3 text-sm font-semibold transition-all hover:scale-105 disabled:cursor-wait disabled:opacity-70"
                 >
                   {processing ? "Creating order..." : "Create POS Order"}
                 </button>

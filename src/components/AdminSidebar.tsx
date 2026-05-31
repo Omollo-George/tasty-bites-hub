@@ -51,7 +51,7 @@ const AdminSidebar: React.FC = () => {
             className={({ isActive }) =>
               `px-4 py-3 rounded-2xl text-sm font-medium transition-all ${
                 isActive
-                  ? 'bg-orange-500 text-white shadow-lg shadow-orange-500/20'
+                  ? 'bg-[#1a365d] text-[#d69e2e] shadow-lg shadow-[#1a365d]/20 border border-[#d69e2e]/30'
                   : 'hover:bg-slate-800 hover:text-white'
               }`
             }

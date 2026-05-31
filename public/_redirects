@@ -1,0 +1,6 @@
+# API Proxy: Redirect frontend /api calls to your actual backend server
+# Replace the URL below with your production backend URL
+/api/*  https://your-backend-api-url.com/api/:splat  200
+
+# Handle SPA routing: redirect all requests to index.html
+/*    /index.html   200

@@ -59,7 +59,7 @@ const Navbar = () => {
           <a
             href="#menu"
             onClick={() => setOpen(false)}
-            className="bg-hero-gradient text-primary-foreground px-6 py-2 rounded-full text-sm font-semibold text-center"
+            className="bg-[#1a365d] text-[#d69e2e] border border-[#d69e2e]/30 px-6 py-2 rounded-full text-sm font-semibold text-center"
           >
             Order Now
           </a>
