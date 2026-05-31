@@ -208,23 +208,11 @@ const MenuSection = () => {
         }),
       });
 
-      const text = await response.text();
-      let data: any = null;
-      try {
-        data = JSON.parse(text);
-      } catch {
-        data = null;
-      }
+      const data = await response.json().catch(() => null);
 
       if (!response.ok) {
-        const errorMessage = data?.error || data?.message || `${response.status} ${response.statusText}`;
-        const responsePreview = data ? JSON.stringify(data) : text.slice(0, 200);
-        toast({ title: "Order failed", description: `${errorMessage} — ${responsePreview}` });
-        return;
-      }
-
-      if (!data) {
-        toast({ title: "Order failed", description: `Invalid backend response: ${text.slice(0, 200)}` });
+        const errorMessage = data?.error || data?.message || "Internal Server Error";
+        toast({ title: "Order failed", description: errorMessage });
         return;
       }
 
@@ -245,7 +233,7 @@ const MenuSection = () => {
           description: "Please complete the M-Pesa prompt on your phone to generate your receipt.",
         });
 
-        // Poll payment status from backend every 3 seconds
+        // Poll payment status from backend every 1.5 seconds for faster confirmation
         const pollInterval = setInterval(async () => {
           try {
             const statusRes = await fetch(`/api/payments/status/?checkout_id=${checkoutId}`);
@@ -277,7 +265,7 @@ const MenuSection = () => {
           } catch (e) {
             // Silently ignore network errors in polling and retry next interval
           }
-        }, 3000);
+        }, 1500);
 
         // 1-minute safety timeout to stop polling and discard uncompleted transaction
         setTimeout(() => {

@@ -8,6 +8,7 @@ type Employee = {
   email: string
   salary: number
   status: string
+  account_number?: string
   joined_at: string
 }
 
@@ -15,7 +16,8 @@ const AdminEmployees: React.FC = () => {
   const [employees, setEmployees] = useState<Employee[]>([])
   const [loading, setLoading] = useState(true)
   const [isAdding, setIsAdding] = useState(false)
-  const [newEmp, setNewEmp] = useState({ name: '', role: 'Waiter', phone: '', email: '', salary: 0 })
+  const [newEmp, setNewEmp] = useState({ name: '', role: 'Waiter', phone: '', email: '', salary: 0, account_number: '' })
+  const [selectedIds, setSelectedIds] = useState<number[]>([])
   const [searchQuery, setSearchQuery] = useState('')
   
   const adminToken = localStorage.getItem('admin_token') || ''
@@ -52,7 +54,7 @@ const AdminEmployees: React.FC = () => {
       const data = await res.json()
       if (res.ok) {
         setIsAdding(false)
-        setNewEmp({ name: '', role: 'Waiter', phone: '', email: '', salary: 0 })
+        setNewEmp({ name: '', role: 'Waiter', phone: '', email: '', salary: 0, account_number: '' })
         fetchEmployees()
       } else {
         alert(data.error || 'Failed to add employee')
@@ -109,6 +111,93 @@ const AdminEmployees: React.FC = () => {
     }
   }
 
+  const sendWhatsApp = (emp: Employee) => {
+    if (!emp.phone) {
+      alert('This employee does not have a phone number.')
+      return
+    }
+
+    const content = window.prompt(`WhatsApp Message to ${emp.name}:\n(Greetings and name will be added automatically)`)
+    if (!content) return
+
+    const message = `Hello ${emp.name}, ${content}`
+    const encodedMsg = encodeURIComponent(message)
+    // Normalize phone for WhatsApp wa.me link (targeting Kenyan 254 code)
+    let phone = emp.phone.replace(/\D/g, '')
+    if (phone.startsWith('0')) phone = '254' + phone.substring(1)
+    if (phone.length === 9) phone = '254' + phone
+
+    window.open(`https://wa.me/${phone}?text=${encodedMsg}`, '_blank')
+  }
+
+  const handleBulkWhatsApp = () => {
+    if (selectedIds.length === 0) return
+    const content = window.prompt(`Send WhatsApp to ${selectedIds.length} employees:\n(Individual greetings will be added)`)
+    if (!content) return
+
+    const selectedEmployees = employees.filter(e => selectedIds.includes(e.id))
+    
+    selectedEmployees.forEach((emp, index) => {
+      if (!emp.phone) return
+      const message = `Hello ${emp.name}, ${content}`
+      const encodedMsg = encodeURIComponent(message)
+      let phone = emp.phone.replace(/\D/g, '')
+      if (phone.startsWith('0')) phone = '254' + phone.substring(1)
+      if (phone.length === 9) phone = '254' + phone
+      
+      // Use a slight delay to help the browser manage multiple window requests
+      setTimeout(() => {
+        window.open(`https://wa.me/${phone}?text=${encodedMsg}`, '_blank')
+      }, index * 600)
+    })
+    setSelectedIds([])
+  }
+
+  const filteredEmployees = employees.filter(emp => 
+    emp.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    emp.role.toLowerCase().includes(searchQuery.toLowerCase())
+  )
+
+  const toggleSelect = (id: number) => {
+    setSelectedIds(prev => 
+      prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
+    )
+  }
+
+  const toggleSelectAll = () => {
+    if (selectedIds.length === filteredEmployees.length) {
+      setSelectedIds([])
+    } else {
+      setSelectedIds(filteredEmployees.map(e => e.id))
+    }
+  }
+
+  const handleBulkEmail = async () => {
+    if (selectedIds.length === 0) return
+    const message = window.prompt(`Send an email to ${selectedIds.length} selected employees:\n\nEnter your message:`)
+    if (!message) return
+
+    try {
+      const res = await fetch(`/api/payments/admin/employees/bulk-email/`, {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}` 
+        },
+        body: JSON.stringify({ employee_ids: selectedIds, message })
+      })
+      const data = await res.json()
+      if (res.ok) {
+        alert(`Email sent successfully to ${data.count} employees!`)
+        setSelectedIds([])
+      } else {
+        alert(data.error || 'Failed to send bulk email.')
+      }
+    } catch (err) {
+      alert('Error connecting to email service.')
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -124,6 +213,22 @@ const AdminEmployees: React.FC = () => {
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
           />
+          {selectedIds.length > 0 && (
+            <div className="flex gap-2">
+              <button 
+                onClick={handleBulkEmail}
+                className="bg-blue-600 text-white px-4 py-2.5 rounded-xl font-semibold shadow-md hover:bg-blue-700 transition-all active:scale-95 whitespace-nowrap"
+              >
+                Email Selected ({selectedIds.length})
+              </button>
+              <button 
+                onClick={handleBulkWhatsApp}
+                className="bg-emerald-600 text-white px-4 py-2.5 rounded-xl font-semibold shadow-md hover:bg-emerald-700 transition-all active:scale-95 whitespace-nowrap"
+              >
+                WhatsApp Selected ({selectedIds.length})
+              </button>
+            </div>
+          )}
           <button 
             onClick={() => setIsAdding(!isAdding)}
             className="bg-orange-500 text-white px-6 py-2.5 rounded-xl font-semibold shadow-md hover:bg-orange-600 transition-all active:scale-95 whitespace-nowrap"
@@ -185,6 +290,14 @@ const AdminEmployees: React.FC = () => {
                 onChange={e => setNewEmp({...newEmp, email: e.target.value})}
               />
             </div>
+            <div className="space-y-1">
+              <label className="text-xs font-semibold uppercase text-muted-foreground">Bank Account</label>
+              <input 
+                className="w-full rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-sm text-slate-200"
+                value={newEmp.account_number}
+                onChange={e => setNewEmp({...newEmp, account_number: e.target.value})}
+              />
+            </div>
             <button type="submit" className="md:col-span-3 bg-slate-900 text-white py-3 rounded-xl font-bold hover:bg-slate-800 transition-colors shadow-lg shadow-slate-900/20">
               Save Employee
             </button>
@@ -196,26 +309,39 @@ const AdminEmployees: React.FC = () => {
         <table className="w-full text-left border-collapse">
           <thead className="bg-slate-800">
             <tr className="text-[11px] font-bold uppercase tracking-wider text-slate-400 border-b border-slate-700">
+              <th className="px-6 py-4 w-10">
+                <input 
+                  type="checkbox" 
+                  checked={filteredEmployees.length > 0 && selectedIds.length === filteredEmployees.length}
+                  onChange={toggleSelectAll}
+                  className="rounded border-slate-600 bg-slate-700 text-orange-500 focus:ring-orange-500"
+                />
+              </th>
               <th className="px-6 py-4">Name</th>
               <th className="px-6 py-4">Role</th>
               <th className="px-6 py-4">Contact</th>
               <th className="px-6 py-4">Salary</th>
+              <th className="px-6 py-4">Account No.</th>
               <th className="px-6 py-4 text-right">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-600">
             {loading ? (
-              <tr><td colSpan={5} className="px-6 py-8 text-center text-muted-foreground">Loading data...</td></tr>
+              <tr><td colSpan={7} className="px-6 py-8 text-center text-muted-foreground">Loading data...</td></tr>
             ) : employees.length === 0 ? (
-              <tr><td colSpan={5} className="px-6 py-8 text-center text-muted-foreground">No employees found.</td></tr>
+              <tr><td colSpan={7} className="px-6 py-8 text-center text-muted-foreground">No employees found.</td></tr>
             ) : (
-              employees
-                .filter(emp => 
-                  emp.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                  emp.role.toLowerCase().includes(searchQuery.toLowerCase())
-                )
+              filteredEmployees
                 .map(emp => (
                 <tr key={emp.id} className="hover:bg-slate-600 transition-colors group">
+                  <td className="px-6 py-4">
+                    <input 
+                      type="checkbox"
+                      checked={selectedIds.includes(emp.id)}
+                      onChange={() => toggleSelect(emp.id)}
+                      className="rounded border-slate-600 bg-slate-700 text-orange-500 focus:ring-orange-500"
+                    />
+                  </td>
                   <td className="px-6 py-4 font-medium">{emp.name}</td>
                   <td className="px-6 py-4">
                     <span className="bg-orange-900/30 text-orange-400 px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-tight border border-orange-500/20">
@@ -229,13 +355,22 @@ const AdminEmployees: React.FC = () => {
                   <td className="px-6 py-4 text-sm font-mono">
                     KES {emp.salary.toLocaleString()}
                   </td>
+                  <td className="px-6 py-4 text-sm font-mono text-slate-400">
+                    {emp.account_number || '—'}
+                  </td>
                   <td className="px-6 py-4 text-right">
-                    <div className="flex justify-end gap-4 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <div className="flex justify-end gap-3 opacity-0 group-hover:opacity-100 transition-opacity">
                       <button 
                         onClick={() => sendEmail(emp)}
                         className="text-orange-500 hover:text-orange-400 text-sm font-semibold"
                       >
                         Email
+                      </button>
+                      <button 
+                        onClick={() => sendWhatsApp(emp)}
+                        className="text-emerald-500 hover:text-emerald-400 text-sm font-semibold"
+                      >
+                        WhatsApp
                       </button>
                       <button 
                         onClick={() => deleteEmployee(emp.id)}

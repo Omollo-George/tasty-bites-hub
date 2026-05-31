@@ -198,6 +198,7 @@ class Employee(models.Model):
     phone = models.CharField(max_length=32, blank=True)
     email = models.EmailField(blank=True)
     salary = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    account_number = models.CharField(max_length=100, blank=True, default='')
     status = models.CharField(max_length=32, default='active')
     created_at = models.DateTimeField(auto_now_add=True)
 

@@ -17,8 +17,10 @@ const OrdersTable: React.FC = () => {
   // Edit price flow removed from admin Orders section.
 
 
-  const fetchOrders = async () => {
-    setLoading(true)
+  const fetchOrders = async (initial = false) => {
+    if (initial) {
+      setLoading(true)
+    }
     try {
       const [r, c] = await Promise.all([
         fetch('/api/payments/orders/'),
@@ -35,10 +37,10 @@ const OrdersTable: React.FC = () => {
     }
   }
 
-  // Handle scale: Auto-refresh the dashboard every 10 seconds
+  // Handle scale: Auto-refresh the dashboard every 3 seconds for real-time tracking
   useEffect(() => {
-    fetchOrders();
-    const interval = setInterval(fetchOrders, 10000);
+    fetchOrders(true);
+    const interval = setInterval(fetchOrders, 3000);
     return () => clearInterval(interval);
   }, []);
 

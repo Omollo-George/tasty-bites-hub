@@ -14,8 +14,11 @@ import AdminSettings from "./pages/Admin/Settings";
 import AdminEmployees from "./pages/Admin/Employees";
 import AdminReports from "./pages/Admin/Reports";
 import AdminStock from "./pages/Admin/Stock";
+import AdminAutomation from "./components/AdminAutomation";
+import AdminKDS from "./pages/Admin/KDS";
 import AdminLogin from "./pages/Admin/Login";
 import AdminAuthGuard from "./components/AdminAuthGuard";
+import OrderTracking from "./pages/OrderTracking";
 
 const queryClient = new QueryClient();
 
@@ -40,11 +43,14 @@ const App = () => (
               <Route index element={<AdminHome />} />
               <Route path="orders" element={<AdminOrders />} />
               <Route path="reports" element={<AdminReports />} />
+              <Route path="automation" element={<AdminAutomation />} />
               <Route path="menu" element={<AdminMenu />} />
               <Route path="employees" element={<AdminEmployees />} />
               <Route path="stock" element={<AdminStock />} />
               <Route path="settings" element={<AdminSettings />} />
+              <Route path="kds" element={<AdminKDS />} /> {/* New KDS Route */}
             </Route>
+            <Route path="/track/:orderId?" element={<OrderTracking />} /> {/* New Customer Tracking Route */}
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>

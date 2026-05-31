@@ -25,6 +25,7 @@ urlpatterns = [
     path('menu-items/<int:item_id>/update-stock/', views.menu_item_stock_update, name='menu_item_stock_update'),
     path('menu-items/<int:item_id>/delete/', views.menu_item_delete, name='menu_item_delete'),
     path('admin/clear/', views.admin_clear, name='admin_clear'),
+    path('automation/insights/', views.automation_insights, name='automation_insights'),
 
     path('reports/summary/', views.report_summary, name='report_summary'),
     path('reports/download/', views.download_report, name='download_report'),
@@ -37,6 +38,7 @@ urlpatterns = [
     path('admin/employees/', views.employees_list, name='employees_list'),
     path('admin/employees/<int:employee_id>/', views.employee_detail, name='employee_detail'),
     path('admin/employees/<int:employee_id>/email/', views.send_employee_email, name='send_employee_email'),
+    path('admin/employees/bulk-email/', views.send_bulk_employee_email, name='send_bulk_employee_email'),
     
     # POS & KDS Endpoints
     path('pos/tables/', views.table_list, name='table_list'),
