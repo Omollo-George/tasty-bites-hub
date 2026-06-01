@@ -10,9 +10,12 @@ export default defineConfig(({ mode }) => ({
     port: 5174,
     proxy: {
       '/api': {
-        target: 'http://127.0.0.1:8000',
+        // Ensure this port matches the one your backend server listens on
+        target: 'http://localhost:8000',
         changeOrigin: true,
         secure: false,
+        // Optional: Use this if your backend API doesn't have the /api prefix
+        // rewrite: (path) => path.replace(/^\/api/, ''),
       },
     },
     hmr: {
@@ -23,6 +26,7 @@ export default defineConfig(({ mode }) => ({
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
+      "@tasty-bites-hub/shared": path.resolve(__dirname, "./shared/index.ts"),
     },
   },
 }));
