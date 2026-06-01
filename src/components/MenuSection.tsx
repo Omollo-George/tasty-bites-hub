@@ -228,27 +228,33 @@ const MenuSection = () => {
 
         const checkoutId = data.stk_response.CheckoutRequestID;
         let transactionSettled = false;
+        let pollTimeout: number | undefined;
+
         toast({
           title: "Awaiting Confirmation",
           description: "Please complete the M-Pesa prompt on your phone to generate your receipt.",
         });
 
-        // Poll payment status from backend every 1.5 seconds for faster confirmation
-        const pollInterval = setInterval(async () => {
+        const checkPaymentStatus = async () => {
+          if (transactionSettled) return;
+
           try {
             const statusRes = await fetch(`/api/payments/status/?checkout_id=${checkoutId}`);
             if (statusRes.ok) {
               const statusData = await statusRes.json();
               if (statusData.status === "success") {
                 transactionSettled = true;
-                clearInterval(pollInterval);
+                if (pollTimeout) window.clearTimeout(pollTimeout);
                 setProcessing(false);
                 setLastOrder(receiptData);
                 toast({ title: "Payment Confirmed", description: "Receipt generated successfully." });
                 resetForm();
-              } else if (statusData.status === "failed" || statusData.status === "error") {
+                return;
+              }
+
+              if (statusData.status === "failed" || statusData.status === "error") {
                 transactionSettled = true;
-                clearInterval(pollInterval);
+                if (pollTimeout) window.clearTimeout(pollTimeout);
                 setProcessing(false);
                 toast({
                   title: "Payment Failed",
@@ -256,32 +262,31 @@ const MenuSection = () => {
                   variant: "destructive",
                 });
 
-                // Discard order on payment failure to ensure it isn't recorded
-                fetch(`/api/payments/orders/${encodeURIComponent(data.order_id)}/discard/`, {
-                  method: 'DELETE',
-                }).catch(() => {});
+                return;
               }
             }
           } catch (e) {
-            // Silently ignore network errors in polling and retry next interval
+            // ignore transient polling errors and retry quickly
           }
-        }, 1500);
+
+          if (!transactionSettled) {
+            pollTimeout = window.setTimeout(checkPaymentStatus, 800);
+          }
+        };
+
+        // Start polling quickly to catch the callback as soon as it arrives.
+        pollTimeout = window.setTimeout(checkPaymentStatus, 500);
 
         // 1-minute safety timeout to stop polling and discard uncompleted transaction
         setTimeout(() => {
           if (!transactionSettled) {
-            clearInterval(pollInterval);
+            if (pollTimeout) window.clearTimeout(pollTimeout);
             setProcessing(false);
             toast({
               title: "Payment Timeout",
-              description: "The payment window has expired. The order has been cancelled and discarded.",
+              description: "The payment window has expired. The order has been cancelled.",
               variant: "destructive",
             });
-
-            // Notify backend to discard the order so it isn't recorded/stored
-            fetch(`/api/payments/orders/${encodeURIComponent(data.order_id)}/discard/`, {
-              method: 'DELETE',
-            }).catch(() => {});
           }
         }, 60000); // 60 seconds is typical for STK Push expiry
 

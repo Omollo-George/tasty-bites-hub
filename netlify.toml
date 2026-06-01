@@ -1,10 +1,10 @@
 [build]
   # Point to the root where your workspaces are defined
   base = ""
-  # Build the client workspace specifically
+  # Build using the root config
   command = "npm run build"
   # The directory where Vite generates the production files
-  publish = "client/dist"
+  publish = "dist"
 
 [[redirects]]
   # Proxy API requests to your Django backend on Render

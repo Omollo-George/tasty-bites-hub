@@ -21,10 +21,10 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/6.0/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-_@p9bh$hzz=4m+xdxf^%xq*b=-fzly00i+priz4tl$we#3y*q%'
+SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY', 'django-insecure-_@p9bh$hzz=4m+xdxf^%xq*b=-fzly00i+priz4tl$we#3y*q%')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = os.environ.get('DJANGO_DEBUG', 'True') == 'True'
 
 # Allow local/dev hosts by default; override via env var if needed
 ALLOWED_HOSTS = os.environ.get(
@@ -49,6 +49,7 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -123,6 +124,8 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/6.0/howto/static-files/
 
 STATIC_URL = 'static/'
+STATIC_ROOT = BASE_DIR / 'staticfiles'
+STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 # M-Pesa Daraja API Config
 MPESA_ENVIRONMENT = 'sandbox'
 
@@ -133,8 +136,18 @@ MPESA_SHORTCODE = '174379'
 MPESA_EXPRESS_SHORTCODE = '174379'
 MPESA_PASSKEY = 'bfb279f9aa9bdbcf158e97dd71a467cd2e0c893059b10f78e6b72ada1ed2c919'
 MPESA_INITIATOR_USERNAME = 'Tasty Bites'
-# Allow all origins in dev/testing
-CORS_ALLOW_ALL_ORIGINS = True  # only for testing
+# CORS Configuration
+CORS_ALLOW_ALL_ORIGINS = os.environ.get('CORS_ALLOW_ALL_ORIGINS', 'False') == 'True'
+
+# Allow frontend domain from environment
+if not CORS_ALLOW_ALL_ORIGINS:
+    frontend_url = os.environ.get('CORS_ALLOWED_ORIGINS', '')
+    CORS_ALLOWED_ORIGINS = [url.strip() for url in frontend_url.split(',') if url.strip()]
+    if not CORS_ALLOWED_ORIGINS:
+        # Default to localhost for development
+        CORS_ALLOWED_ORIGINS = ['http://localhost:5173', 'http://127.0.0.1:5173']
+
+CORS_ALLOW_CREDENTIALS = True
 
 # MPESA callback URL can be overridden via environment variable.
 
@@ -166,3 +179,13 @@ EMAIL_HOST_PASSWORD = 'yunz odpw iolf hwqt'  # Replace with your generated App P
 DEFAULT_FROM_EMAIL = 'Tasty Bites Admin <omollogeorge096@gmail.com>' # Replace with your actual email
 
 MPESA_TO_KES_RATE = float(os.environ.get('MPESA_TO_KES_RATE', '1'))
+
+# Production Security Settings
+if not DEBUG:
+    SECURE_SSL_REDIRECT = True
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+    SECURE_BROWSER_XSS_FILTER = True
+    SECURE_CONTENT_SECURITY_POLICY = {
+        'default-src': ("'self'",),
+    }
