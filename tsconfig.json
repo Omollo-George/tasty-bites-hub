@@ -14,8 +14,8 @@
     "esModuleInterop": true,
     "skipLibCheck": true,
     "allowSyntheticDefaultImports": true,
-    "types": ["node"]
+    "types": ["node", "vitest"]
   },
-  "include": ["**/*.ts", "**/*.tsx", "tailwind.config.ts", "vite.config.ts", "vitest.config.ts", "env.d.ts"],
-  "exclude": ["node_modules", "tastybites", "dist"]
+  "include": ["src/**/*.ts", "src/**/*.tsx", "shared/**/*.ts", "client/**/*.ts", "tailwind.config.ts", "vite.config.ts", "vitest.workspace.ts", "env.d.ts"],
+  "exclude": ["node_modules", "tastybites", "dist", "client/dist"]
 }
