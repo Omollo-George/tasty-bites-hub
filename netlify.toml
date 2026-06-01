@@ -9,7 +9,7 @@
 [[redirects]]
   # Proxy API requests to your Django backend on Render
   from = "/api/*"
-  to = "https://your-django-app.onrender.com/api/:splat"
+  to = "https://tasty-bites-backend.onrender.com/api/:splat"
   status = 200
   force = true
 
