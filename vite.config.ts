@@ -3,13 +3,13 @@ import react from '@vitejs/plugin-react-swc';
 
 // https://vitejs.dev/config/
 export default defineConfig({
-  // Specify the root of your Vite project, where index.html is located.
-  root: 'client',
+  // Set root to project directory where index.html is located
+  root: './',
   plugins: [react()],
   build: {
-    // Output the build artifacts to the 'dist' directory at the project root.
-    outDir: '../dist',
-    // Required when outDir is outside of the root directory
+    // Output the build artifacts to 'dist'
+    outDir: 'dist',
+    // Ensure the output directory is cleared before building
     emptyOutDir: true,
   },
 });
