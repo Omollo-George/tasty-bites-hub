@@ -29,6 +29,9 @@ export default defineConfig(({ mode }) => ({
     },
   },
   build: {
-    outDir: "dist",
+    outDir: "dist", // Ensure this is correct for your client's output
+    // Increase chunk size warning limit to 1500 KB (1.5 MB)
+    // Adjust this value as needed based on your application's size
+    chunkSizeWarningLimit: 1500, 
   },
 }));
