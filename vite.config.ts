@@ -29,4 +29,8 @@ export default defineConfig(({ mode }) => ({
       "@tasty-bites-hub/shared": path.resolve(__dirname, "./shared/index.ts"),
     },
   },
+  build: {
+    // Ensure the build output is in the standard directory for Netlify
+    outDir: "dist",
+  },
 }));
