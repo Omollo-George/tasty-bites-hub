@@ -6,7 +6,7 @@
     "shared"
   ],
   "scripts": {
-    "install:all": "npm install && pip install -r tastybites/requirements.txt",
+    "install:all": "npm install",
     "build": "npm run build --workspace=client",
     "dev:client": "npm run dev --workspace=client",
     "dev:server": "python tastybites/manage.py runserver 0.0.0.0:8000",
