@@ -2,7 +2,7 @@
   "compilerOptions": {
     "ignoreDeprecations": "6.0",
     "paths": {
-      "@tasty-bites-hub/shared": ["./shared/index.ts"]
+      "@tasty-bites-hub/shared": ["./shared/index.ts", "./index.ts"]
     },
     "module": "ESNext",
     "moduleResolution": "bundler",
