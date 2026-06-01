@@ -1,0 +1,5 @@
+# Proxy API requests to the Django backend (Update the URL after deploying Django)
+/api/*  https://your-django-app.onrender.com/api/:splat  200
+
+# Routes all other requests to index.html (Required for React Router)
+/* /index.html 200
