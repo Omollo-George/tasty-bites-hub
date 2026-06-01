@@ -1,37 +1,15 @@
-import { defineConfig } from "vite";
-import react from "@vitejs/plugin-react-swc";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
+import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react-swc';
 
 // https://vitejs.dev/config/
-export default defineConfig(({ mode }) => ({
-  root: ".",
-  server: {
-    host: true, 
-    port: 5174,
-    proxy: {
-      '/api': {
-        target: 'http://localhost:8000',
-        changeOrigin: true,
-        secure: false,
-      },
-    },
-    hmr: {
-      overlay: false,
-    },
-  },
+export default defineConfig({
+  // Specify the root of your Vite project, where index.html is located.
+  root: 'client',
   plugins: [react()],
-  resolve: {
-    alias: {
-      "@": path.resolve(__dirname, "src"),
-    },
-  },
   build: {
-    outDir: "dist", // Ensure this is correct for your client's output
-    // Increase chunk size warning limit to 1500 KB (1.5 MB)
-    // Adjust this value as needed based on your application's size
-    chunkSizeWarningLimit: 1500, 
+    // Output the build artifacts to the 'dist' directory at the project root.
+    outDir: '../dist',
+    // Required when outDir is outside of the root directory
+    emptyOutDir: true,
   },
-}));
+});
