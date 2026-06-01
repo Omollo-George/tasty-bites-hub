@@ -1,12 +1,21 @@
 {
   "compilerOptions": {
+    "baseUrl": ".",
     "ignoreDeprecations": "6.0",
     "paths": {
-      "@tasty-bites-hub/shared": ["./shared/index.ts", "./index.ts"]
+      "@/*": ["./src/*"]
     },
     "module": "ESNext",
     "moduleResolution": "bundler",
     "allowImportingTsExtensions": true,
-    "noEmit": true
-  }
+    "noEmit": true,
+    "allowJs": true,
+    "resolveJsonModule": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "allowSyntheticDefaultImports": true,
+    "types": ["node"]
+  },
+  "include": ["**/*.ts", "**/*.tsx", "tailwind.config.ts", "vite.config.ts", "vitest.config.ts", "env.d.ts"],
+  "exclude": ["node_modules", "tastybites", "dist"]
 }

@@ -1,0 +1,49 @@
+services:
+  - type: web
+    name: tasty-bites-backend
+    env: python
+    region: ohio
+    plan: free
+    buildCommand: |
+      pip install -r tastybites/requirements.txt
+      python tastybites/manage.py collectstatic --noinput
+      python tastybites/manage.py migrate
+    startCommand: >
+      gunicorn tastybites.wsgi:application
+      --bind 0.0.0.0:$PORT
+      --workers 2
+      --timeout 30
+    envVars:
+      - key: DJANGO_SECRET_KEY
+        generateValue: true
+      - key: DJANGO_DEBUG
+        value: "False"
+      - key: ALLOWED_HOSTS
+        value: "*.onrender.com,localhost,127.0.0.1"
+      - key: MPESA_CALLBACK_URL
+        fromService:
+          name: tasty-bites-frontend
+          type: web
+          property: url
+        value: "${RENDER_EXTERNAL_URL}/api/payments/callback/"
+      - key: CORS_ALLOWED_ORIGINS
+        fromService:
+          name: tasty-bites-frontend
+          type: web
+          property: url
+    healthCheckPath: /api/health/
+
+  - type: static_site
+    name: tasty-bites-frontend
+    env: node
+    region: ohio
+    plan: free
+    buildCommand: npm ci && npm run build
+    staticPublishPath: ./dist
+    envVars:
+      - key: VITE_API_URL
+        fromService:
+          name: tasty-bites-backend
+          type: web
+          property: url
+        value: "${RENDER_EXTERNAL_URL}/api"
