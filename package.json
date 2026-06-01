@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "install:all": "npm install && pip install -r tastybites/requirements.txt",
-    "build": "cross-env CI=false vite build",
+    "build": "vite build",
     "dev:client": "vite",
     "dev:server": "python tastybites/manage.py runserver 0.0.0.0:8000",
     "dev": "concurrently \"npm run dev:client\" \"npm run dev:server\"",
