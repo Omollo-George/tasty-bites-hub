@@ -1,5 +1,5 @@
 services:
-  - type: web
+  - type: web_service
     name: tasty-bites-backend
     env: python
     region: ohio
@@ -32,7 +32,7 @@ services:
     region: ohio
     plan: free
     buildCommand: npm ci && npm run build
-    staticPublishPath: dist
+    publishPath: dist
     envVars:
       - key: VITE_API_URL
         value: "https://tasty-bites-backend.onrender.com/api"
