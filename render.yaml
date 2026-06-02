@@ -1,38 +1,35 @@
 services:
-  - type: web
-    name: tasty-bites-backend
-    env: python
-    region: ohio
-    plan: free
-    root: tastybites
-    buildCommand: pip install -r requirements.txt && python manage.py collectstatic --noinput && python manage.py migrate
-    startCommand: gunicorn tastybites.wsgi:application --bind 0.0.0.0:$PORT --workers 2
-    healthCheckPath: /api/health/
-    envVars:
-      - key: DJANGO_SECRET_KEY
-        generateValue: true
-      - key: DJANGO_DEBUG
-        value: "False"
-      - key: ALLOWED_HOSTS
-        value: "*.onrender.com"
-      - key: CORS_ALLOWED_ORIGINS
-        value: "https://tasty-bites-hub.onrender.com"
-      - key: MPESA_CALLBACK_URL
-        value: "https://tasty-bites-backend.onrender.com/api/payments/callback/"
-      - key: MPESA_ADMIN_TOKEN
-        value: "temp-token"
-      - key: EMAIL_HOST_USER
-        value: "temp@email.com"
-      - key: EMAIL_HOST_PASSWORD
-        value: "temp-password"
-
+  # Frontend: Static Site
   - type: static
-    name: tasty-bites-hub
-    env: node
-    region: ohio
-    plan: free
-    buildCommand: npm install && npm run build
+    name: tasty-bites-frontend
+    env: static
+    buildCommand: npm install --legacy-peer-deps && npm run build
     publishPath: dist
     envVars:
       - key: VITE_API_URL
-        value: "https://tasty-bites-backend.onrender.com/api"
+        fromService:
+          type: web
+          name: tasty-bites-backend
+          property: host
+
+  # Backend: Web Service (Django)
+  - type: web
+    name: tasty-bites-backend
+    env: python
+    buildCommand: pip install -r tastybites/requirements.txt && python tastybites/manage.py collectstatic --noinput && python tastybites/manage.py migrate
+    startCommand: gunicorn tastybites.wsgi:application --bind 0.0.0.0:$PORT --workers 2
+    envVars:
+      - key: DJANGO_DEBUG
+        value: "False"
+      - key: ALLOWED_HOSTS
+        value: "*"
+      - key: CORS_ALLOWED_ORIGINS
+        value: "https://tasty-bites-frontend.onrender.com"
+      - key: NODE_VERSION
+        value: "20"
+      - key: NPM_FLAGS
+        value: "--legacy-peer-deps"
+
+databases:
+  - name: tasty-bites-db
+    plan: free

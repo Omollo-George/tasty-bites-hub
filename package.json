@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "install:all": "npm install --legacy-peer-deps && pip install -r tastybites/requirements.txt",
-    "build": "cross-env CI=false vite build",
+    "build": "vite build",
     "dev:client": "vite",
     "dev:server": "python tastybites/manage.py runserver 0.0.0.0:8000",
     "dev": "concurrently \"npm run dev:client\" \"npm run dev:server\"",
@@ -19,9 +19,8 @@
   },
   "devDependencies": {
     "@types/node": "^20.11.0",
-    "@types/react": "^19.2.15",
-    "@types/react-dom": "^19.2.3",
-    "@types/react-router-dom": "^5.3.3",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
     "@vitejs/plugin-react-swc": "^3.5.0",
     "autoprefixer": "^10.4.16",
     "concurrently": "^8.2.2",
@@ -31,7 +30,7 @@
     "tailwindcss-animate": "^1.0.7",
     "typescript": "^5.2.2",
     "vite": "^6.0.0",
-    "vitest": "^4.1.8"
+    "vitest": "^3.0.0"
   },
   "dependencies": {
     "@radix-ui/react-accordion": "^1.2.3",
@@ -68,11 +67,11 @@
     "embla-carousel-react": "^8.6.0",
     "lucide-react": "^0.475.0",
     "next-themes": "^0.4.6",
-    "react": "^19.2.6",
+    "react": "^19.0.0",
     "react-day-picker": "^10.0.1",
-    "react-dom": "^19.2.6",
+    "react-dom": "^19.0.0",
     "react-resizable-panels": "^4.11.2",
-    "react-router-dom": "^7.16.0",
+    "react-router-dom": "^7.1.0",
     "recharts": "^3.8.1",
     "sonner": "^2.0.7",
     "tailwind-merge": "^3.6.0"
