@@ -1,15 +1,16 @@
 services:
-  # Frontend: Static Site
-  - type: static_site
+  # Frontend: Node Web Service
+  - type: web
     name: tasty-bites-frontend
+    env: node
     buildCommand: npm install --legacy-peer-deps && npm run build
-    publishPath: dist
+    startCommand: npx serve -s dist
     envVars:
       - key: VITE_API_URL
         fromService:
           type: web
           name: tasty-bites-backend
-          property: host
+          property: url
 
   # Backend: Web Service (Django)
   - type: web
