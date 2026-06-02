@@ -31,8 +31,12 @@ services:
     env: node
     region: ohio
     plan: free
-    buildCommand: npm ci && npm run build
+    buildCommand: npm install && npm run build
     publishPath: dist
+    redirects:
+      - source: /*
+        destination: /index.html
+        status: 200
     envVars:
       - key: VITE_API_URL
         value: "https://tasty-bites-backend.onrender.com/api"
