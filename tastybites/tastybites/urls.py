@@ -16,13 +16,22 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import path, include
-from django.http import JsonResponse
+from django.http import JsonResponse, HttpResponse
 
 def health_check(request):
     """Health check endpoint for Render deployment monitoring."""
     return JsonResponse({'status': 'ok', 'service': 'tasty-bites-backend'})
 
+
+def homepage(request):
+    return HttpResponse(
+        '<h1>Tasty Bites Backend</h1>'
+        '<p>API is available at <a href="/api/health/">/api/health/</a> and <a href="/api/payments/">/api/payments/</a>.</p>',
+        content_type='text/html'
+    )
+
 urlpatterns = [
+    path('', homepage, name='homepage'),
     path('admin/', admin.site.urls),
     path('api/health/', health_check, name='health_check'),
     path('api/payments/', include('payments.urls')),
