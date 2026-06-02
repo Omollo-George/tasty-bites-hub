@@ -1,8 +1,7 @@
 services:
   # Frontend: Static Site
-  - type: static
+  - type: static_site
     name: tasty-bites-frontend
-    env: static
     buildCommand: npm install --legacy-peer-deps && npm run build
     publishPath: dist
     envVars:
