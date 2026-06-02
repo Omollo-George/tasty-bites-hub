@@ -10,7 +10,7 @@ services:
         fromService:
           type: web
           name: tasty-bites-backend
-          property: url
+          property: host
 
   # Backend: Web Service (Django)
   - type: web
