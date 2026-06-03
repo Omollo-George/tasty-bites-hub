@@ -12,7 +12,7 @@ const Contact = () => {
           <div className="bg-slate-900 rounded-xl p-8 text-center shadow-card border border-slate-800">
             <MapPin className="w-8 h-8 text-primary mx-auto mb-4" />
             <h3 className="font-display text-xl text-slate-100 mb-2 text-[#d69e2e]">LOCATION</h3>
-            <p className="text-slate-400 text-sm">123 Flavor Street<br />Downtown Food District<br />New York, NY 10001</p>
+            <p className="text-slate-400 text-sm">Next to Kisii University Main Gate<br />Kisii, Kenya</p>
           </div>
           <div className="bg-slate-900 rounded-xl p-8 text-center shadow-card border border-slate-800">
             <Clock className="w-8 h-8 text-primary mx-auto mb-4" />

@@ -170,6 +170,14 @@ const Reports: React.FC = () => {
           </select>
           <button
             type="button"
+            onClick={fetchReport}
+            disabled={loading}
+            className="rounded-full border border-slate-700 bg-slate-800 px-5 py-2 text-sm font-semibold text-slate-100 hover:bg-slate-700 transition-transform disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {loading ? 'Refreshing…' : 'Refresh Report'}
+          </button>
+          <button
+            type="button"
             onClick={downloadReport}
             className="rounded-full bg-hero-gradient px-5 py-2 text-sm font-semibold text-primary-foreground hover:scale-105 transition-transform"
           >
