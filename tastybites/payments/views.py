@@ -288,11 +288,13 @@ def payment_status(request):
 
 def config(request):
     app_settings = AppSettings.current()
-    # Default phone and conversion rate are no longer exposed via this endpoint
-    # as per the request.
+    # Conversion rate is still returned for frontend pricing calculations.
     return JsonResponse({
         'base_currency': 'KES',
         'display_currency': 'KES',
+        'conversion_rate': float(app_settings.conversion_rate),
+        'delivery_rate_per_km': float(app_settings.delivery_rate_per_km),
+        'min_delivery_fee': float(app_settings.min_delivery_fee),
     })
 
 
@@ -473,11 +475,27 @@ def admin_settings(request):
     app_settings.base_currency = 'KES'
     app_settings.display_currency = 'KES'
 
+    delivery_rate_val = payload.get('delivery_rate_per_km')
+    if delivery_rate_val is not None:
+        try:
+            app_settings.delivery_rate_per_km = Decimal(str(delivery_rate_val))
+        except (TypeError, InvalidOperation):
+            pass
+
+    min_delivery_fee_val = payload.get('min_delivery_fee')
+    if min_delivery_fee_val is not None:
+        try:
+            app_settings.min_delivery_fee = Decimal(str(min_delivery_fee_val))
+        except (TypeError, InvalidOperation):
+            pass
+
     app_settings.save()
 
     return JsonResponse({
         'base_currency': app_settings.base_currency,
         'display_currency': app_settings.display_currency,
+        'delivery_rate_per_km': float(app_settings.delivery_rate_per_km),
+        'min_delivery_fee': float(app_settings.min_delivery_fee),
     })
 
 
@@ -1068,15 +1086,19 @@ def admin_clear(request):
 
 def _serialize_order(order):
     total_food_cost = sum((item.food_cost or Decimal('0.00')) * item.quantity for item in order.items.all())
+    has_delivery = bool(order.delivery_address)
     return {
         'order_id': order.order_id,
-        'table': order.table.number if order.table else 'Takeaway', # Ensure table is a string for KDS
+        'table': order.table.number if order.table else ('Delivery' if has_delivery else 'Takeaway'),
         'table_details': { # Keep full table details for other uses
             'id': order.table.id,
             'number': order.table.number,
             'name': order.table.name,
         } if order.table else None,
         'phone': order.phone,
+        'delivery_address': order.delivery_address,
+        'delivery_distance_km': float(order.delivery_distance_km) if order.delivery_distance_km is not None else None,
+        'delivery_cost': float(order.delivery_cost),
         'status': order.status,
         'split_count': order.split_count,
         'total_amount': float(order.total_amount),
@@ -1085,11 +1107,13 @@ def _serialize_order(order):
         'created_at': order.created_at.isoformat() if order.created_at else None,
         'items': [
             {
+                'id': item.id,
                 'name': item.name,
                 'price': float(item.price),
                 'food_cost': float(item.food_cost or Decimal('0.00')),
                 'quantity': item.quantity,
                 'modifiers': item.modifiers or [],
+                'seat_number': item.seat_number,
                 'subtotal': float(item.price * item.quantity),
             }
             for item in order.items.all().order_by('id')
@@ -1193,9 +1217,16 @@ def create_order(request):
     if table_number:
         table, _ = Table.objects.get_or_create(number=table_number, defaults={'name': table_number})
 
+    delivery_address = (payload.get('delivery_address') or '').strip()
+    delivery_distance_km = payload.get('delivery_distance_km')
+    delivery_cost = Decimal(str(payload.get('delivery_cost') or '0') or '0')
+
     order = Order.objects.create(
         table=table,
         phone=phone,
+        delivery_address=delivery_address,
+        delivery_distance_km=Decimal(str(delivery_distance_km)) if delivery_distance_km not in (None, '') else None,
+        delivery_cost=delivery_cost,
         split_count=max(1, split_count),
         status='pending',
         total_amount=Decimal('0.00'),
@@ -1223,6 +1254,7 @@ def create_order(request):
         )
         total += price * quantity
 
+    total += delivery_cost
     order.total_amount = total
     order.save()
 
@@ -1327,8 +1359,11 @@ def orders_list(request):
     data = [
         {
             'order_id': order.order_id,
-            'table': order.table.number if order.table else 'Takeaway',
+            'table': order.table.number if order.table else ('Delivery' if order.delivery_address else 'Takeaway'),
             'phone': order.phone,
+            'delivery_address': order.delivery_address,
+            'delivery_distance_km': float(order.delivery_distance_km) if order.delivery_distance_km is not None else None,
+            'delivery_cost': float(order.delivery_cost),
             'status': order.status,
             'total_amount': float(order.total_amount),
             'item_count': order.items.count(),
@@ -1346,28 +1381,7 @@ def order_detail(request, order_id: str):
     if not order:
         return JsonResponse({'error': 'not_found'}, status=404)
 
-    return JsonResponse({
-        'order_id': order.order_id,
-        'table': order.table.number if order.table else 'Takeaway',
-        'phone': order.phone,
-        'status': order.status,
-        'total_amount': float(order.total_amount),
-        'split_count': order.split_count,
-        'is_paid': order.is_paid,
-        'created_at': order.created_at.isoformat() if order.created_at else None,
-        'items': [
-            {
-                'id': item.id,
-                'name': item.name,
-                'quantity': item.quantity,
-                'price': float(item.price),
-                'modifiers': item.modifiers or [],
-                'seat_number': item.seat_number,
-                'subtotal': float(item.subtotal),
-            }
-            for item in order.items.all().order_by('id')
-        ],
-    })
+    return JsonResponse(_serialize_order(order))
 
 
 def _normalize_report_range(range_label: str):

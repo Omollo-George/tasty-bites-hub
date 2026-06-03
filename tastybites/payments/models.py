@@ -58,6 +58,9 @@ class Order(models.Model):
     order_id = models.CharField(max_length=64, unique=True, default=generate_uuid_hex, editable=False)
     table = models.ForeignKey(Table, on_delete=models.SET_NULL, null=True, blank=True, related_name='orders')
     phone = models.CharField(max_length=32, blank=True)
+    delivery_address = models.CharField(max_length=512, blank=True, default='')
+    delivery_distance_km = models.DecimalField(max_digits=8, decimal_places=2, null=True, blank=True)
+    delivery_cost = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     status = models.CharField(max_length=32, default='pending')
     split_count = models.PositiveIntegerField(default=1)
     total_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
@@ -179,6 +182,8 @@ class AdminToken(models.Model):
 class AppSettings(models.Model):
     default_phone = models.CharField(max_length=32, blank=True, default='')
     conversion_rate = models.DecimalField(max_digits=8, decimal_places=2, default=1)
+    delivery_rate_per_km = models.DecimalField(max_digits=10, decimal_places=2, default=100)
+    min_delivery_fee = models.DecimalField(max_digits=10, decimal_places=2, default=50)
     base_currency = models.CharField(max_length=8, default='KES')
     display_currency = models.CharField(max_length=8, default='KES')
     updated_at = models.DateTimeField(auto_now=True)

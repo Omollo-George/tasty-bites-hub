@@ -72,6 +72,6 @@ class AdminTokenAdmin(admin.ModelAdmin):
 
 @admin.register(AppSettings)
 class AppSettingsAdmin(admin.ModelAdmin):
-    list_display = ('default_phone', 'conversion_rate', 'base_currency', 'display_currency', 'updated_at')
+    list_display = ('default_phone', 'conversion_rate', 'delivery_rate_per_km', 'min_delivery_fee', 'base_currency', 'display_currency', 'updated_at')
     def has_add_permission(self, request):
         return not AppSettings.objects.exists()

@@ -17,6 +17,8 @@ interface SessionLog {
 const AdminSettings: React.FC = () => {
   const [baseCurrency] = useState('KES')
   const [displayCurrency] = useState('KES')
+  const [deliveryRatePerKm, setDeliveryRatePerKm] = useState<number>(100)
+  const [minDeliveryFee, setMinDeliveryFee] = useState<number>(50)
   const [users, setUsers] = useState<AdminUser[]>([])
   const [logs, setLogs] = useState<SessionLog[]>([])
   const [newUsername, setNewUsername] = useState('')
@@ -37,7 +39,8 @@ const AdminSettings: React.FC = () => {
     const loadConfig = fetch(getApiUrl('/payments/config/'))
       .then((res) => res.headers.get("content-type")?.includes("application/json") ? res.json() : Promise.reject("Invalid format"))
       .then((data) => {
-        // No longer loading default_phone or conversion_rate
+        if (data?.delivery_rate_per_km != null) setDeliveryRatePerKm(Number(data.delivery_rate_per_km))
+        if (data?.min_delivery_fee != null) setMinDeliveryFee(Number(data.min_delivery_fee))
       })
 
     const loadUsers = fetch(getApiUrl('/payments/admin/users/'), {
@@ -78,6 +81,8 @@ const AdminSettings: React.FC = () => {
         body: JSON.stringify({
           base_currency: 'KES',
           display_currency: 'KES',
+          delivery_rate_per_km: deliveryRatePerKm,
+          min_delivery_fee: minDeliveryFee,
         }),
       })
 
@@ -204,6 +209,28 @@ const AdminSettings: React.FC = () => {
                 value={baseCurrency}
                 disabled
                 className="w-full rounded-xl border border-slate-700 bg-slate-900/50 px-4 py-3 text-slate-500"
+              />
+            </label>
+            <label className="grid gap-2">
+              <span className="text-sm text-slate-400">Delivery rate (KES per km)</span>
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={deliveryRatePerKm}
+                onChange={(e) => setDeliveryRatePerKm(Number(e.target.value))}
+                className="w-full rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-slate-100"
+              />
+            </label>
+            <label className="grid gap-2">
+              <span className="text-sm text-slate-400">Minimum delivery fee (KES)</span>
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={minDeliveryFee}
+                onChange={(e) => setMinDeliveryFee(Number(e.target.value))}
+                className="w-full rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-slate-100"
               />
             </label>
           </div>
