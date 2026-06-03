@@ -30,7 +30,7 @@ DEBUG = os.environ.get('DJANGO_DEBUG', 'True') == 'True'
 # Allow local/dev hosts by default; override via env var if needed
 ALLOWED_HOSTS = os.environ.get(
     'ALLOWED_HOSTS',
-    '127.0.0.1,localhost,[::1]'
+    '127.0.0.1,localhost,[::1],.onrender.com'
 ).split(',')
 
 
@@ -141,7 +141,8 @@ CORS_ALLOW_ALL_ORIGINS = os.environ.get('CORS_ALLOW_ALL_ORIGINS', 'False') == 'T
 # Allow frontend domain from environment
 if not CORS_ALLOW_ALL_ORIGINS:
     frontend_url = os.environ.get('CORS_ALLOWED_ORIGINS', '')
-    CORS_ALLOWED_ORIGINS = [url.strip() for url in frontend_url.split(',') if url.strip()]
+    # Ensure we handle multiple origins and trim whitespace
+    CORS_ALLOWED_ORIGINS = [url.strip().rstrip('/') for url in frontend_url.split(',') if url.strip()]
     if not CORS_ALLOWED_ORIGINS:
         # Default to localhost:5173 for development (Vite's default port)
         CORS_ALLOWED_ORIGINS = ['http://localhost:5173', 'http://127.0.0.1:5173']
