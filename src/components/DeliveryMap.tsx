@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import { Clock3, MapPin, Navigation } from "lucide-react";
 
 const DESTINATION_NAME = "Kisii University Main Gate";
@@ -39,6 +39,8 @@ interface DeliveryMapProps {
 const DeliveryMap = ({ onDistanceChange, enabled = true }: DeliveryMapProps) => {
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [geoError, setGeoError] = useState<string | null>(null);
+  const lastCallbackDistanceRef = useRef<number | null>(null);
+  const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     if (typeof window === "undefined" || !navigator?.geolocation) {
@@ -58,14 +60,15 @@ const DeliveryMap = ({ onDistanceChange, enabled = true }: DeliveryMapProps) => 
         setGeoError("Please allow location access to see the real-time route and arrival estimate.");
       },
       {
-        enableHighAccuracy: true,
+        enableHighAccuracy: false,
         timeout: 20000,
-        maximumAge: 10000,
+        maximumAge: 30000, // Increased to 30s to reduce update frequency
       },
     );
 
     return () => {
       navigator.geolocation.clearWatch(watcher);
+      if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
     };
   }, []);
 
@@ -79,8 +82,27 @@ const DeliveryMap = ({ onDistanceChange, enabled = true }: DeliveryMapProps) => 
     );
   }, [userLocation]);
 
+  // Debounce distance change callback to avoid excessive re-renders
   useEffect(() => {
-    onDistanceChange?.(distanceKm);
+    if (distanceKm === null) {
+      if (lastCallbackDistanceRef.current !== null) {
+        onDistanceChange?.(null);
+        lastCallbackDistanceRef.current = null;
+      }
+      return;
+    }
+
+    // Only trigger callback if distance changed significantly (> 0.01 km or ~10m)
+    const shouldUpdate = lastCallbackDistanceRef.current === null || 
+      Math.abs(distanceKm - lastCallbackDistanceRef.current) > 0.01;
+    
+    if (shouldUpdate) {
+      if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+      debounceTimerRef.current = setTimeout(() => {
+        onDistanceChange?.(distanceKm);
+        lastCallbackDistanceRef.current = distanceKm;
+      }, 500); // 500ms debounce
+    }
   }, [distanceKm, onDistanceChange]);
 
   const estimatedMinutes = useMemo(() => {
