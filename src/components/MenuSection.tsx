@@ -65,6 +65,7 @@ const MenuSection = () => {
   const [deliveryAddress, setDeliveryAddress] = useState("");
   const [isQrFlow, setIsQrFlow] = useState(false);
   const [processing, setProcessing] = useState(false);
+  const [awaitingMpesaConfirm, setAwaitingMpesaConfirm] = useState(false);
   const [lastOrder, setLastOrder] = useState<any>(null);
   const [currentOrderId, setCurrentOrderId] = useState<string | null>(null);
   const [deliveryDistanceKm, setDeliveryDistanceKm] = useState<number | null>(null);
@@ -142,6 +143,7 @@ const MenuSection = () => {
 
     setProcessing(false);
     setCurrentOrderId(null);
+    setAwaitingMpesaConfirm(false);
     
     toast({
       title: "Transaction Cancelled",
@@ -708,11 +710,22 @@ const MenuSection = () => {
 
                 <button
                   type="button"
-                  onClick={handleCreateOrder}
+                  onClick={async () => {
+                    // Two-step confirm for M-Pesa to avoid accidental STK triggers
+                    if (paymentMethod === 'mpesa' && !awaitingMpesaConfirm && !processing) {
+                      setAwaitingMpesaConfirm(true);
+                      // reset the confirmation after 6 seconds
+                      window.setTimeout(() => setAwaitingMpesaConfirm(false), 6000);
+                      return;
+                    }
+
+                    // proceed with payment (either second click for mpesa or single click for cash)
+                    await handleCreateOrder();
+                  }}
                   disabled={processing || (orderType === "delivery" && deliveryDistanceKm === null)}
                   className="w-full rounded-full bg-[#1a365d] text-[#d69e2e] border border-[#d69e2e]/30 px-5 py-3 text-sm font-semibold transition-all hover:scale-105 disabled:cursor-wait disabled:opacity-70"
                 >
-                  {processing ? "Processing consolidated payment..." : `Pay ${formatCurrency(totalBeforePayment)}`}
+                  {processing ? "Processing consolidated payment..." : awaitingMpesaConfirm && paymentMethod === 'mpesa' ? 'Confirm Pay (M-Pesa)' : `Pay ${formatCurrency(totalBeforePayment)}`}
                 </button>
 
                 {processing && paymentMethod === "mpesa" && (
