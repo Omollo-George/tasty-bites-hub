@@ -33,6 +33,8 @@ def homepage(request):
 urlpatterns = [
     path('', homepage, name='homepage'),
     path('admin/', admin.site.urls),
+    path('api/', health_check, name='api_root'),
     path('api/health/', health_check, name='health_check'),
+    path('api/health', health_check), # No slash for compatibility
     path('api/payments/', include('payments.urls')),
 ]
