@@ -14,7 +14,7 @@ services:
       - key: NODE_VERSION
         value: 20.0.0
       - key: VITE_API_URL
-        value: https://tasty-bites-backend.sevalla.app/api # Replace with actual backend URL
+        value: https://tastybites-backend-oj7lu.sevalla.page/api
 
   # Backend: Web Service (Django)
   - type: web
@@ -33,19 +33,19 @@ services:
       - key: DJANGO_DEBUG
         value: "False"
       - key: ALLOWED_HOSTS
-        value: "localhost,127.0.0.1,.sevalla.app"
+        value: "localhost,127.0.0.1,.sevalla.app,.sevalla.page"
       - key: DJANGO_SECRET_KEY
         generateValue: true
       - key: MPESA_ADMIN_TOKEN
         generateValue: true
       - key: CSRF_TRUSTED_ORIGINS # Added for cross-origin CSRF protection
-        value: https://tasty-bites-frontend.sevalla.app,https://tasty-bites-backend.sevalla.app
+        value: https://tastybites-oj7lu.sevalla.page,https://tastybites-backend-oj7lu.sevalla.page
       - key: MPESA_CALLBACK_URL
-        value: https://tasty-bites-backend.sevalla.app/api/payments/callback/
+        value: https://tastybites-backend-oj7lu.sevalla.page/api/payments/callback/
       - key: DJANGO_SETTINGS_MODULE
         value: tastybites.settings
       - key: CORS_ALLOWED_ORIGINS
-        value: https://tasty-bites-frontend.sevalla.app
+        value: https://tastybites-oj7lu.sevalla.page
 
 databases:
   - name: tasty-bites-db
