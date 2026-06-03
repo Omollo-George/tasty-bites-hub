@@ -30,7 +30,7 @@ DEBUG = os.environ.get('DJANGO_DEBUG', 'True') == 'True'
 # Allow local/dev hosts by default; override via env var if needed
 ALLOWED_HOSTS = os.environ.get(
     'ALLOWED_HOSTS',
-    '127.0.0.1,localhost,[::1],.sevalla.app,.sevalla.page,.onrender.com,tastybites-backend-oj7lu-uibup.sevalla.app'
+    '127.0.0.1,localhost,[::1],.sevalla.app,.sevalla.page,.onrender.com,tastybites-backend-oj7lu-8yrvf.sevalla.app'
 ).replace(' ', '').replace(';', ',').split(',')
 
 
@@ -198,7 +198,7 @@ if not DEBUG:
     CSRF_COOKIE_SECURE = True
     SECURE_BROWSER_XSS_FILTER = True
     SECURE_CONTENT_SECURITY_POLICY = {
-        'default-src': ("'self'", "https://tastybites-oj7lu.sevalla.page"),
+        'default-src': ("'self'", "https://tastybites-oj7lu.sevalla.app"),
         'img-src': ("'self'", "data:", "https:"),
-        'connect-src': ("'self'", "https://tastybites-backend-oj7lu.sevalla.page", "https://tastybites-oj7lu.sevalla.page"),
+        'connect-src': ("'self'", "https://tastybites-backend-oj7lu-8yrvf.sevalla.app", "https://tastybites-oj7lu.sevalla.app"),
     }
