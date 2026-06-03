@@ -3,19 +3,28 @@ services:
   - type: static
     name: tasty-bites-frontend
     env: static
-    buildCommand: npm install && npm run build
-    publishPath: ./dist
+    buildCommand: npm install --legacy-peer-deps && npm run build
+    publishPath: dist
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
     envVars:
+      - key: NODE_VERSION
+        value: 20.0.0
       - key: VITE_API_URL
         value: https://tasty-bites-backend.onrender.com/api
 
   # Backend: Web Service (Django)
   - type: web
     name: tasty-bites-backend
+    rootDir: tastybites
     env: python
     buildCommand: pip install -r requirements.txt && python manage.py migrate && python manage.py collectstatic --no-input
-    startCommand: gunicorn tasty_bites.wsgi:application
+    startCommand: gunicorn tastybites.wsgi:application --bind 0.0.0.0:$PORT
     envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.0
       - key: DATABASE_URL
         fromDatabase:
           name: tasty-bites-db
@@ -29,7 +38,9 @@ services:
       - key: MPESA_ADMIN_TOKEN
         generateValue: true
       - key: DJANGO_SETTINGS_MODULE
-        value: backend.settings
+        value: tastybites.settings
+      - key: CORS_ALLOWED_ORIGINS
+        value: https://tasty-bites-frontend.onrender.com
 
 databases:
   - name: tasty-bites-db
