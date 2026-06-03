@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react'
+import { getApiUrl } from '@/lib/api'
 
 const Badge: React.FC<{status:string}> = ({status}) => {
   const normalized = (status || '').toLowerCase()
@@ -23,9 +24,13 @@ const OrdersTable: React.FC = () => {
     }
     try {
       const [r, c] = await Promise.all([
-        fetch('/api/payments/orders/'),
-        fetch('/api/payments/config/'),
+        fetch(getApiUrl('/payments/orders/')),
+        fetch(getApiUrl('/payments/config/')),
       ])
+
+      if (!r.ok || !c.ok) return;
+      if (!r.headers.get("content-type")?.includes("application/json") || !c.headers.get("content-type")?.includes("application/json")) return;
+
       const j = await r.json()
       const cfg = await c.json()
       setOrders(j.results || [])
@@ -54,7 +59,7 @@ const OrdersTable: React.FC = () => {
     ));
 
     try {
-      const r = await fetch(`/api/payments/orders/${encodeURIComponent(order_id)}/update/`, {
+      const r = await fetch(getApiUrl(`/payments/orders/${encodeURIComponent(order_id)}/update/`), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ status }),

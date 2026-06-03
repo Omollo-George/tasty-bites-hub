@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useMemo } from 'react'; // Removed Fragment import
 import { Search, Filter, AlertTriangle, CheckCircle, XCircle, Trash2, Edit2, Plus } from 'lucide-react'; // Removed Fragment import
+import { getApiUrl } from '@/lib/api';
 
 type MenuItemType = {
   id: number;
@@ -32,12 +33,17 @@ const AdminStock: React.FC = () => {
     created_at: new Date().toISOString().slice(0, 16)
   });
 
-  const adminToken = typeof window !== 'undefined' ? localStorage.getItem('admin_token') : '';
+  const adminToken = typeof window !== 'undefined' ? localStorage.getItem('admin_token') : ''; // Moved adminToken declaration here
 
   const fetchMenuItems = async () => {
     setLoading(true);
     try {
-      const response = await fetch('/api/payments/menu-items/');
+      const response = await fetch(getApiUrl('/payments/menu-items/'));
+      
+      if (!response.headers.get("content-type")?.includes("application/json")) {
+        throw new Error(`Invalid server response (${response.status})`);
+      }
+      
       const data = await response.json();
       if (response.ok && Array.isArray(data.menu_items)) {
         const enrichedItems = data.menu_items.map((item: MenuItemType) => ({ // Use MenuItemType for item
@@ -58,7 +64,10 @@ const AdminStock: React.FC = () => {
 
   const fetchMostConsumed = async () => {
     try {
-      const response = await fetch('/api/payments/stock/most-consumed/');
+      const response = await fetch(getApiUrl('/payments/stock/most-consumed/'));
+      
+      if (!response.headers.get("content-type")?.includes("application/json")) return;
+      
       const data = await response.json();
       if (response.ok) setMostConsumed(data.results || []);
     } catch (error) {
@@ -98,7 +107,7 @@ const AdminStock: React.FC = () => {
 
     try {
       // 1. Update basic item metadata (Name, Price, etc.)
-      const metaRes = await fetch(`/api/payments/menu-items/${editingItem.id}/update-price/`, {
+      const metaRes = await fetch(getApiUrl(`/payments/menu-items/${editingItem.id}/update-price/`), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -116,7 +125,7 @@ const AdminStock: React.FC = () => {
       });
 
       // 2. Update stock levels
-      const stockRes = await fetch(`/api/payments/menu-items/${editingItem.id}/update-stock/`, {
+      const stockRes = await fetch(getApiUrl(`/payments/menu-items/${editingItem.id}/update-stock/`), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -143,7 +152,7 @@ const AdminStock: React.FC = () => {
   const handleDeleteItem = async (id: number) => {
     if (!window.confirm('Are you sure you want to remove this item entirely? This cannot be undone.')) return;
     try {
-      const response = await fetch(`/api/payments/menu-items/${id}/delete/`, {
+      const response = await fetch(getApiUrl(`/payments/menu-items/${id}/delete/`), {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${adminToken}` },
       });
@@ -161,7 +170,7 @@ const AdminStock: React.FC = () => {
   const handleAddStock = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const response = await fetch('/api/payments/admin/stock/add/', {
+      const response = await fetch(getApiUrl('/payments/admin/stock/add/'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

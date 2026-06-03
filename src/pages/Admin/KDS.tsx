@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import AdminHeader from '@/components/AdminHeader';
 import { getAdminToken } from '@/lib/admin-session';
 import { useToast } from '@/hooks/use-toast';
+import { getApiUrl } from '@/lib/api';
 
 interface OrderItem {
   name: string;
@@ -32,13 +33,17 @@ const AdminKDS: React.FC = () => {
       setLoading(true);
     }
     try {
-      const res = await fetch('/api/payments/kds/queue/', {
+      const res = await fetch(getApiUrl('/payments/kds/queue/'), {
         headers: {
           'Authorization': `Bearer ${adminToken}`,
           'Content-Type': 'application/json'
         }
       });
-      if (!res.ok) throw new Error('Failed to fetch KDS queue');
+      if (!res.ok) {
+        if (!res.headers.get("content-type")?.includes("application/json")) throw new Error(`Server Error (${res.status}): Invalid response format.`);
+        const errorData = await res.json();
+        throw new Error(errorData.error || 'Failed to fetch KDS queue');
+      }
       const data = await res.json();
       setQueue(data.queue || []);
     } catch (error) {
@@ -61,7 +66,7 @@ const AdminKDS: React.FC = () => {
 
   const updateOrderStatus = async (orderId: string, newStatus: string) => {
     try {
-      const res = await fetch(`/api/payments/orders/${encodeURIComponent(orderId)}/update/`, {
+      const res = await fetch(getApiUrl(`/payments/orders/${encodeURIComponent(orderId)}/update/`), {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${adminToken}`,
@@ -69,7 +74,11 @@ const AdminKDS: React.FC = () => {
         },
         body: JSON.stringify({ status: newStatus })
       });
-      if (!res.ok) throw new Error('Failed to update order status');
+      if (!res.ok) {
+        if (!res.headers.get("content-type")?.includes("application/json")) throw new Error(`Server Error (${res.status}): Invalid response format.`);
+        const errorData = await res.json();
+        throw new Error(errorData.error || 'Failed to update order status');
+      }
       toast({
         title: "Order Updated",
         description: `Order ${orderId} status changed to ${newStatus}.`,

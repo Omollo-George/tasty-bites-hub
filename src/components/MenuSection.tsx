@@ -1,7 +1,10 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Flame, BadgeCheck } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import Receipt from "./Receipt";
+import { getApiUrl } from "@/lib/api";
+import Restaurant3DBackground from "../../Restaurant3DBackground";
+
 
 type MenuItem = {
   name: string;
@@ -60,6 +63,9 @@ const MenuSection = () => {
   const [phoneNumber, setPhoneNumber] = useState("");
   const [processing, setProcessing] = useState(false);
   const [lastOrder, setLastOrder] = useState<any>(null);
+  const [currentOrderId, setCurrentOrderId] = useState<string | null>(null);
+  const pollTimerRef = useRef<any>(null);
+  const safetyTimeoutRef = useRef<any>(null);
 
   const { toast } = useToast();
 
@@ -69,16 +75,18 @@ const MenuSection = () => {
     const load = async () => {
       try {
         const [configRes, menuRes] = await Promise.all([
-          fetch("/api/payments/config/"),
-          fetch("/api/payments/menu-items/"),
+          fetch(getApiUrl("/payments/config/")),
+          fetch(getApiUrl("/payments/menu-items/")),
         ]);
 
         if (configRes.ok) {
+          if (!configRes.headers.get("content-type")?.includes("application/json")) return;
           const d = await configRes.json();
           if (d?.conversion_rate) setRate(d.conversion_rate);
         }
 
         if (menuRes.ok) {
+          if (!menuRes.headers.get("content-type")?.includes("application/json")) return;
           const md = await menuRes.json();
           const fetchedItems = Array.isArray(md?.menu_items) ? md.menu_items : [];
           if (fetchedItems.length > 0) {
@@ -93,6 +101,39 @@ const MenuSection = () => {
     load();
   }, []);
 
+  // Cleanup timers on component unmount
+  useEffect(() => {
+    return () => {
+      if (pollTimerRef.current) window.clearTimeout(pollTimerRef.current);
+      if (safetyTimeoutRef.current) window.clearTimeout(safetyTimeoutRef.current);
+    };
+  }, []);
+
+  const handleCancelTransaction = async () => {
+    if (pollTimerRef.current) {
+      window.clearTimeout(pollTimerRef.current);
+      pollTimerRef.current = null;
+    }
+
+    if (safetyTimeoutRef.current) {
+      window.clearTimeout(safetyTimeoutRef.current);
+      safetyTimeoutRef.current = null;
+    }
+    
+    if (currentOrderId) {
+      fetch(getApiUrl(`/payments/orders/${encodeURIComponent(currentOrderId)}/discard/`), { method: 'DELETE' }).catch(() => {});
+    }
+
+    setProcessing(false);
+    setCurrentOrderId(null);
+    
+    toast({
+      title: "Transaction Cancelled",
+      description: "The payment process has been stopped and the order discarded.",
+      variant: "destructive",
+    });
+  };
+
   const openAddItem = (itemName: string) => {
     setActiveItem(itemName);
     setActiveQuantity(1);
@@ -104,6 +145,7 @@ const MenuSection = () => {
     setSessionOrders([]);
     setTableNumber("");
     setPhoneNumber("");
+    setCurrentOrderId(null);
   };
 
   const addItemToCart = (itemName: string) => {
@@ -188,7 +230,7 @@ const MenuSection = () => {
     const allItems = [...sessionOrders.flatMap(o => o), ...cart];
 
     try {
-      const response = await fetch("/api/payments/pos/create-order/", {
+      const response = await fetch(getApiUrl("/payments/pos/create-order/"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -208,6 +250,11 @@ const MenuSection = () => {
         }),
       });
 
+      if (!response.headers.get("content-type")?.includes("application/json")) {
+        toast({ title: "Server Error", description: "Invalid response from server during order creation.", variant: "destructive" });
+        return;
+      }
+
       const data = await response.json().catch(() => null);
 
       if (!response.ok) {
@@ -216,19 +263,20 @@ const MenuSection = () => {
         return;
       }
 
+      setCurrentOrderId(data.order_id);
       const receiptData = { ...data, items: allItems, total_amount: subtotal * rate };
 
       if (paymentMethod === "mpesa") {
         if (!data.stk_response?.CheckoutRequestID) {
           toast({ title: "System Busy", description: "The payment gateway is currently handling high traffic. Please try again.", variant: "destructive" });
           setProcessing(false);
-          fetch(`/api/payments/orders/${encodeURIComponent(data.order_id)}/discard/`, { method: 'DELETE' }).catch(() => {});
+          setCurrentOrderId(null);
+          fetch(getApiUrl(`/payments/orders/${encodeURIComponent(data.order_id)}/discard/`), { method: 'DELETE' }).catch(() => {});
           return;
         }
 
         const checkoutId = data.stk_response.CheckoutRequestID;
         let transactionSettled = false;
-        let pollTimeout: number | undefined;
 
         toast({
           title: "Awaiting Confirmation",
@@ -236,16 +284,24 @@ const MenuSection = () => {
         });
 
         const checkPaymentStatus = async () => {
-          if (transactionSettled) return;
+          if (transactionSettled || !pollTimerRef.current) return;
 
           try {
-            const statusRes = await fetch(`/api/payments/status/?checkout_id=${checkoutId}`);
+            const statusRes = await fetch(getApiUrl(`/payments/status/?checkout_id=${checkoutId}`));
             if (statusRes.ok) {
               const statusData = await statusRes.json();
               if (statusData.status === "success") {
                 transactionSettled = true;
-                if (pollTimeout) window.clearTimeout(pollTimeout);
+                if (pollTimerRef.current) window.clearTimeout(pollTimerRef.current);
+                pollTimerRef.current = null;
+                
+                if (safetyTimeoutRef.current) {
+                  window.clearTimeout(safetyTimeoutRef.current);
+                  safetyTimeoutRef.current = null;
+                }
+                
                 setProcessing(false);
+                setCurrentOrderId(null);
                 setLastOrder(receiptData);
                 toast({ title: "Payment Confirmed", description: "Receipt generated successfully." });
                 resetForm();
@@ -254,8 +310,16 @@ const MenuSection = () => {
 
               if (statusData.status === "failed" || statusData.status === "error") {
                 transactionSettled = true;
-                if (pollTimeout) window.clearTimeout(pollTimeout);
+                if (pollTimerRef.current) window.clearTimeout(pollTimerRef.current);
+                pollTimerRef.current = null;
+
+                if (safetyTimeoutRef.current) {
+                  window.clearTimeout(safetyTimeoutRef.current);
+                  safetyTimeoutRef.current = null;
+                }
+
                 setProcessing(false);
+                setCurrentOrderId(null);
                 toast({
                   title: "Payment Failed",
                   description: `Transaction for order ${data.order_id} was unsuccessful. The order has been discarded.`,
@@ -269,19 +333,22 @@ const MenuSection = () => {
             // ignore transient polling errors and retry quickly
           }
 
-          if (!transactionSettled) {
-            pollTimeout = window.setTimeout(checkPaymentStatus, 800);
+          if (!transactionSettled && pollTimerRef.current) {
+            pollTimerRef.current = window.setTimeout(checkPaymentStatus, 800);
           }
         };
 
         // Start polling quickly to catch the callback as soon as it arrives.
-        pollTimeout = window.setTimeout(checkPaymentStatus, 500);
+        pollTimerRef.current = window.setTimeout(checkPaymentStatus, 500);
 
         // 1-minute safety timeout to stop polling and discard uncompleted transaction
-        setTimeout(() => {
+        safetyTimeoutRef.current = window.setTimeout(() => {
           if (!transactionSettled) {
-            if (pollTimeout) window.clearTimeout(pollTimeout);
+            if (pollTimerRef.current) window.clearTimeout(pollTimerRef.current);
+            pollTimerRef.current = null;
+            safetyTimeoutRef.current = null;
             setProcessing(false);
+            setCurrentOrderId(null);
             toast({
               title: "Payment Timeout",
               description: "The payment window has expired. The order has been cancelled.",
@@ -298,6 +365,7 @@ const MenuSection = () => {
           description: `Order ${data.order_id} created and marked as paid via Cash.`,
         });
         resetForm();
+        setCurrentOrderId(null);
         setProcessing(false);
       }
 
@@ -311,10 +379,14 @@ const MenuSection = () => {
   };
 
   return (
-    <section id="menu" className="py-24 bg-slate-950 text-slate-200">
+    <section id="menu" className="py-24 bg-slate-950 text-slate-200 relative overflow-hidden">
+      <div className="absolute inset-0 -z-10">
+        <Restaurant3DBackground />
+      </div>
       {lastOrder && (
         <Receipt order={lastOrder} onClose={() => setLastOrder(null)} />
       )}
+
       <div className="container mx-auto px-4">
         <div className="text-center mb-12">
           <p className="font-body text-primary text-sm font-semibold uppercase tracking-[0.2em] mb-2">Our Menu</p>
@@ -563,6 +635,16 @@ const MenuSection = () => {
                 >
                   {processing ? "Processing consolidated payment..." : "Pay All Orders Now"}
                 </button>
+
+                {processing && paymentMethod === "mpesa" && (
+                  <button
+                    type="button"
+                    onClick={handleCancelTransaction}
+                    className="w-full mt-2 rounded-full border border-red-500/50 text-red-500 py-2 text-xs font-bold hover:bg-red-500 hover:text-white transition-all"
+                  >
+                    Cancel Transaction
+                  </button>
+                )}
               </div>
             )}
           </aside>
@@ -572,4 +654,4 @@ const MenuSection = () => {
   );
 };
 
-export default MenuSection;
+export default MenuSection

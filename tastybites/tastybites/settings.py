@@ -12,6 +12,7 @@ https://docs.djangoproject.com/en/6.0/ref/settings/
 
 import os
 from pathlib import Path
+import dj_database_url
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -82,13 +83,11 @@ WSGI_APPLICATION = 'tastybites.wsgi.application'
 # https://docs.djangoproject.com/en/6.0/ref/settings/#databases
 
 DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
-    }
+    'default': dj_database_url.config(
+        default=f"sqlite:///{BASE_DIR / 'db.sqlite3'}",
+        conn_max_age=600
+    )
 }
-
-
 # Password validation
 # https://docs.djangoproject.com/en/6.0/ref/settings/#auth-password-validators
 
@@ -129,8 +128,8 @@ STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 # M-Pesa Daraja API Config
 MPESA_ENVIRONMENT = 'sandbox'
 
-MPESA_CONSUMER_KEY = 'kwCn9sG1ySJ6NWcHduKaXOAnNu6DkbwI9v096WTmsHG8XMVq'
-MPESA_CONSUMER_SECRET = '6PcwyDSoN8R4V4VxVUAP9uGCGYi9Cm67xDRUtiUCA0RzXvXIE8FtCEc1zYPOnZXu'
+MPESA_CONSUMER_KEY = os.environ.get('MPESA_CONSUMER_KEY', 'kwCn9sG1ySJ6NWcHduKaXOAnNu6DkbwI9v096WTmsHG8XMVq')
+MPESA_CONSUMER_SECRET = os.environ.get('MPESA_CONSUMER_SECRET', '6PcwyDSoN8R4V4VxVUAP9uGCGYi9Cm67xDRUtiUCA0RzXvXIE8FtCEc1zYPOnZXu')
 
 MPESA_SHORTCODE = '174379'
 MPESA_EXPRESS_SHORTCODE = '174379'
@@ -144,8 +143,8 @@ if not CORS_ALLOW_ALL_ORIGINS:
     frontend_url = os.environ.get('CORS_ALLOWED_ORIGINS', '')
     CORS_ALLOWED_ORIGINS = [url.strip() for url in frontend_url.split(',') if url.strip()]
     if not CORS_ALLOWED_ORIGINS:
-        # Default to localhost for development
-        CORS_ALLOWED_ORIGINS = ['http://localhost:5174', 'http://127.0.0.1:5174']
+        # Default to localhost:5173 for development (Vite's default port)
+        CORS_ALLOWED_ORIGINS = ['http://localhost:5173', 'http://127.0.0.1:5173']
 
 CORS_ALLOW_CREDENTIALS = True
 
@@ -174,15 +173,18 @@ EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
 EMAIL_HOST = 'smtp.gmail.com'  # Or your SMTP server
 EMAIL_PORT = 587
 EMAIL_USE_TLS = True
-EMAIL_HOST_USER = 'omollogeorge096@gmail.com'  # Replace with your actual email
-EMAIL_HOST_PASSWORD = 'yunz odpw iolf hwqt'  # Replace with your generated App Password
-DEFAULT_FROM_EMAIL = 'Tasty Bites Admin <omollogeorge096@gmail.com>' # Replace with your actual email
+EMAIL_HOST_USER = os.environ.get('EMAIL_HOST_USER', 'omollogeorge096@gmail.com')
+EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD')
+DEFAULT_FROM_EMAIL = f"Tasty Bites Admin <{EMAIL_HOST_USER}>"
 
 MPESA_TO_KES_RATE = float(os.environ.get('MPESA_TO_KES_RATE', '1'))
 
 # Production Security Settings
 if not DEBUG:
-    SECURE_SSL_REDIRECT = True
+    # Only redirect to HTTPS if we are not on localhost/127.0.0.1
+    # This prevents ERR_SSL_PROTOCOL_ERROR during local testing with DEBUG=False
+    SECURE_SSL_REDIRECT = os.environ.get('SECURE_SSL_REDIRECT', 'True') == 'True'
+    
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
     SECURE_BROWSER_XSS_FILTER = True

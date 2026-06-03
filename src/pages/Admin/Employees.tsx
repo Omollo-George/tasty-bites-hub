@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react'
+import { getApiUrl } from '@/lib/api'
 
 type Employee = {
   id: number
@@ -19,15 +20,15 @@ const AdminEmployees: React.FC = () => {
   const [newEmp, setNewEmp] = useState({ name: '', role: 'Waiter', phone: '', email: '', salary: 0, account_number: '' })
   const [selectedIds, setSelectedIds] = useState<number[]>([])
   const [searchQuery, setSearchQuery] = useState('')
-  
-  const adminToken = localStorage.getItem('admin_token') || ''
+  const adminToken = localStorage.getItem('admin_token') || '';
 
   const fetchEmployees = async () => {
     setLoading(true)
     try {
-      const res = await fetch('/api/payments/admin/employees/', {
+      const res = await fetch(getApiUrl('/payments/admin/employees/'), {
         headers: { Authorization: `Bearer ${adminToken}` }
       })
+      if (!res.headers.get("content-type")?.includes("application/json")) throw new Error("Invalid response");
       const data = await res.json()
       if (res.ok) setEmployees(data.employees || [])
     } catch (err) {
@@ -42,7 +43,7 @@ const AdminEmployees: React.FC = () => {
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault()
     try {
-      const res = await fetch('/api/payments/admin/employees/', {
+      const res = await fetch(getApiUrl('/payments/admin/employees/'), {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
@@ -50,6 +51,10 @@ const AdminEmployees: React.FC = () => {
         },
         body: JSON.stringify(newEmp)
       })
+
+      if (!res.headers.get("content-type")?.includes("application/json")) {
+        throw new Error(`Server Error (${res.status}): Invalid response format.`);
+      }
 
       const data = await res.json()
       if (res.ok) {
@@ -67,13 +72,16 @@ const AdminEmployees: React.FC = () => {
   const deleteEmployee = async (id: number) => {
     if (!window.confirm('Remove this employee?')) return
     try {
-      const res = await fetch(`/api/payments/admin/employees/${id}/`, {
+      const res = await fetch(getApiUrl(`/payments/admin/employees/${id}/`), {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${adminToken}` }
       })
       if (res.ok) {
         fetchEmployees()
       } else {
+        if (!res.headers.get("content-type")?.includes("application/json")) {
+          throw new Error("Server returned non-JSON error page.");
+        }
         const data = await res.json()
         alert(data.error || 'Delete failed')
       }
@@ -92,7 +100,7 @@ const AdminEmployees: React.FC = () => {
     if (!message) return
 
     try {
-      const res = await fetch(`/api/payments/admin/employees/${emp.id}/email/`, {
+      const res = await fetch(getApiUrl(`/payments/admin/employees/${emp.id}/email/`), {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
@@ -100,6 +108,11 @@ const AdminEmployees: React.FC = () => {
         },
         body: JSON.stringify({ message })
       })
+
+      if (!res.headers.get("content-type")?.includes("application/json")) {
+        throw new Error("Invalid response from server.");
+      }
+
       const data = await res.json()
       if (res.ok) {
         alert('Email sent successfully!')
@@ -178,7 +191,7 @@ const AdminEmployees: React.FC = () => {
     if (!message) return
 
     try {
-      const res = await fetch(`/api/payments/admin/employees/bulk-email/`, {
+      const res = await fetch(getApiUrl(`/payments/admin/employees/bulk-email/`), {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
@@ -186,6 +199,11 @@ const AdminEmployees: React.FC = () => {
         },
         body: JSON.stringify({ employee_ids: selectedIds, message })
       })
+
+      if (!res.headers.get("content-type")?.includes("application/json")) {
+        throw new Error("Invalid response from server.");
+      }
+
       const data = await res.json()
       if (res.ok) {
         alert(`Email sent successfully to ${data.count} employees!`)

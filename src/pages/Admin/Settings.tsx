@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getAdminToken } from '@/lib/admin-session'
+import { getApiUrl } from '@/lib/api'
 
 interface AdminUser {
   username: string
@@ -33,23 +34,23 @@ const AdminSettings: React.FC = () => {
       return
     }
 
-    const loadConfig = fetch('/api/payments/config/')
-      .then((res) => res.json())
+    const loadConfig = fetch(getApiUrl('/payments/config/'))
+      .then((res) => res.headers.get("content-type")?.includes("application/json") ? res.json() : Promise.reject("Invalid format"))
       .then((data) => {
         // No longer loading default_phone or conversion_rate
       })
 
-    const loadUsers = fetch('/api/payments/admin/users/', {
+    const loadUsers = fetch(getApiUrl('/payments/admin/users/'), {
       headers: { Authorization: `Bearer ${token}` },
     })
-      .then((res) => res.json())
+      .then((res) => res.headers.get("content-type")?.includes("application/json") ? res.json() : Promise.reject("Invalid format"))
       .then((data) => setUsers(data.users || []))
       .catch((err) => console.error('Failed to load admin users', err))
 
-    const loadLogs = fetch('/api/payments/admin/session-logs/', {
+    const loadLogs = fetch(getApiUrl('/payments/admin/session-logs/'), {
       headers: { Authorization: `Bearer ${token}` },
     })
-      .then((res) => res.json())
+      .then((res) => res.headers.get("content-type")?.includes("application/json") ? res.json() : Promise.reject("Invalid format"))
       .then((data) => setLogs(data.logs || []))
 
     Promise.all([loadConfig, loadUsers, loadLogs])
@@ -68,7 +69,7 @@ const AdminSettings: React.FC = () => {
     setMessage('')
 
     try {
-      const response = await fetch('/api/payments/admin/settings/', {
+      const response = await fetch(getApiUrl('/payments/admin/settings/'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -79,6 +80,11 @@ const AdminSettings: React.FC = () => {
           display_currency: 'KES',
         }),
       })
+
+      if (!response.headers.get("content-type")?.includes("application/json")) {
+        throw new Error("Invalid server response.");
+      }
+
       const data = await response.json()
       if (!response.ok) {
         setMessage(data.error || 'Failed to save settings')
@@ -104,7 +110,7 @@ const AdminSettings: React.FC = () => {
     setSaving(true)
 
     try {
-      const response = await fetch('/api/payments/admin/users/', {
+      const response = await fetch(getApiUrl('/payments/admin/users/'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -112,6 +118,11 @@ const AdminSettings: React.FC = () => {
         },
         body: JSON.stringify({ username: newUsername, password: newPassword }),
       })
+
+      if (!response.headers.get("content-type")?.includes("application/json")) {
+        throw new Error("Invalid server response.");
+      }
+
       const data = await response.json()
       if (!response.ok) {
         setUserMessage(data.error || 'Failed to create user')
@@ -140,12 +151,17 @@ const AdminSettings: React.FC = () => {
     setSaving(true)
 
     try {
-      const response = await fetch(`/api/payments/admin/users/${encodeURIComponent(username)}/`, {
+      const response = await fetch(getApiUrl(`/payments/admin/users/${encodeURIComponent(username)}/`), {
         method: 'DELETE',
         headers: {
           Authorization: `Bearer ${token}`,
         },
       })
+
+      if (!response.headers.get("content-type")?.includes("application/json")) {
+        throw new Error("Invalid server response.");
+      }
+
       const data = await response.json()
       if (!response.ok) {
         setUserMessage(data.error || 'Failed to remove user')

@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { DEFAULT_MENU_ITEMS as CUSTOMER_DEFAULT_MENU_ITEMS } from '@/components/MenuSection'
+import { getApiUrl } from '@/lib/api'
 
 type TableItem = {
   id: number
@@ -50,12 +51,12 @@ const AdminMenu: React.FC = () => {
   const [selectedReceipt, setSelectedReceipt] = useState<string | null>(null)
   const [receiptText, setReceiptText] = useState<string | null>(null)
   const [menuSearch, setMenuSearch] = useState('')
-
-  const adminToken = typeof window !== 'undefined' ? localStorage.getItem('admin_token') : ''
+  const adminToken = typeof window !== 'undefined' ? localStorage.getItem('admin_token') : '';
 
   const fetchTables = async () => {
     try {
-      const response = await fetch('/api/payments/pos/tables/')
+      const response = await fetch(getApiUrl('/payments/pos/tables/'))
+      if (!response.headers.get("content-type")?.includes("application/json")) return;
       const data = await response.json()
       setTables(data.tables || [])
     } catch (error) {
@@ -65,7 +66,8 @@ const AdminMenu: React.FC = () => {
 
   const fetchQueue = async () => {
     try {
-      const response = await fetch('/api/payments/kds/queue/')
+      const response = await fetch(getApiUrl('/payments/kds/queue/'))
+      if (!response.headers.get("content-type")?.includes("application/json")) return;
       const data = await response.json()
       setQueue(data.queue || [])
     } catch (error) {
@@ -75,7 +77,8 @@ const AdminMenu: React.FC = () => {
 
   const fetchMenuItems = async () => {
     try {
-      const response = await fetch('/api/payments/menu-items/')
+      const response = await fetch(getApiUrl('/payments/menu-items/'))
+      if (!response.headers.get("content-type")?.includes("application/json")) return;
       const data = await response.json()
       if (response.ok && Array.isArray(data.menu_items)) {
         setMenuItems(data.menu_items)
@@ -95,7 +98,7 @@ const AdminMenu: React.FC = () => {
     if (!tableNumber.trim()) return
 
     try {
-      const response = await fetch('/api/payments/pos/tables/', {
+      const response = await fetch(getApiUrl('/payments/pos/tables/'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -103,6 +106,11 @@ const AdminMenu: React.FC = () => {
         },
         body: JSON.stringify({ number: tableNumber.trim(), name: tableName.trim() }),
       })
+
+      if (!response.headers.get("content-type")?.includes("application/json")) {
+        throw new Error("Server returned invalid format.");
+      }
+
       const data = await response.json()
       if (response.ok) {
         setTableNumber('')
@@ -121,12 +129,17 @@ const AdminMenu: React.FC = () => {
     if (!window.confirm('Delete this table?')) return
 
     try {
-      const response = await fetch(`/api/payments/pos/tables/${id}/`, {
+      const response = await fetch(getApiUrl(`/payments/pos/tables/${id}/`), {
         method: 'DELETE',
         headers: {
           Authorization: `Bearer ${adminToken}`,
         },
       })
+
+      if (!response.headers.get("content-type")?.includes("application/json")) {
+        throw new Error("Server returned invalid format.");
+      }
+
       const data = await response.json()
       if (response.ok) {
         fetchTables()
@@ -141,9 +154,14 @@ const AdminMenu: React.FC = () => {
 
   const markReady = async (orderId: string) => {
     try {
-      const response = await fetch(`/api/payments/kds/complete/${encodeURIComponent(orderId)}/`, {
+      const response = await fetch(getApiUrl(`/payments/kds/complete/${encodeURIComponent(orderId)}/`), {
         method: 'POST',
       })
+
+      if (!response.headers.get("content-type")?.includes("application/json")) {
+        throw new Error("Server returned invalid format.");
+      }
+
       const data = await response.json()
       if (response.ok) {
         fetchQueue()
@@ -162,7 +180,7 @@ const AdminMenu: React.FC = () => {
       return
     }
     try {
-      const response = await fetch('/api/payments/menu-items/create/', {
+      const response = await fetch(getApiUrl('/payments/menu-items/create/'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -174,6 +192,11 @@ const AdminMenu: React.FC = () => {
           food_cost: Number(newItem.food_cost || 0),
         }),
       })
+
+      if (!response.headers.get("content-type")?.includes("application/json")) {
+        throw new Error("Server returned invalid format.");
+      }
+
       const data = await response.json()
       if (response.ok) {
         setNewItem({ name: '', price: '', category: '', description: '', food_cost: '', popular: false, spicy: false })
@@ -189,7 +212,7 @@ const AdminMenu: React.FC = () => {
   const handleUpdateItem = async () => {
     if (!editingItem) return
     try {
-      const response = await fetch(`/api/payments/menu-items/${editingItem.id}/update-price/`, {
+      const response = await fetch(getApiUrl(`/payments/menu-items/${editingItem.id}/update-price/`), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -201,6 +224,11 @@ const AdminMenu: React.FC = () => {
           food_cost: Number(editingItem.food_cost),
         }),
       })
+
+      if (!response.headers.get("content-type")?.includes("application/json")) {
+        throw new Error("Server returned invalid format.");
+      }
+
       if (response.ok) {
         setEditingItem(null)
         fetchMenuItems()
@@ -217,12 +245,17 @@ const AdminMenu: React.FC = () => {
     if (!window.confirm('Are you sure you want to delete this menu item? This cannot be undone.')) return
 
     try {
-      const response = await fetch(`/api/payments/menu-items/${id}/delete/`, {
+      const response = await fetch(getApiUrl(`/payments/menu-items/${id}/delete/`), {
         method: 'DELETE',
         headers: {
           Authorization: `Bearer ${adminToken}`,
         },
       })
+
+      if (!response.headers.get("content-type")?.includes("application/json") && !response.ok) {
+        throw new Error("Server returned invalid format.");
+      }
+
       if (response.ok) {
         fetchMenuItems()
       } else {
@@ -241,7 +274,7 @@ const AdminMenu: React.FC = () => {
 
     setLoading(true)
     try {
-      const response = await fetch('/api/payments/admin/clear/', {
+      const response = await fetch(getApiUrl('/payments/admin/clear/'), {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${adminToken}`,
@@ -250,7 +283,12 @@ const AdminMenu: React.FC = () => {
       if (response.ok) {
         alert('All operational data has been cleared.')
         // Refresh with seed=0 to see a truly empty menu
-        const menuRes = await fetch('/api/payments/menu-items/?seed=0')
+        const menuRes = await fetch(getApiUrl('/payments/menu-items/?seed=0'))
+
+        if (!menuRes.headers.get("content-type")?.includes("application/json")) {
+          throw new Error("Invalid response from server.");
+        }
+
         const menuData = await menuRes.json()
         setMenuItems(menuData.menu_items || [])
         fetchTables()
@@ -267,7 +305,12 @@ const AdminMenu: React.FC = () => {
 
   const printReceipt = async (orderId: string) => {
     try {
-      const response = await fetch(`/api/payments/pos/receipt/${encodeURIComponent(orderId)}/`)
+      const response = await fetch(getApiUrl(`/payments/pos/receipt/${encodeURIComponent(orderId)}/`))
+
+      if (!response.headers.get("content-type")?.includes("application/json")) {
+        throw new Error("Invalid response from server.");
+      }
+
       const data = await response.json()
       if (response.ok) {
         setSelectedReceipt(orderId)
@@ -305,7 +348,7 @@ const AdminMenu: React.FC = () => {
     setLoading(true)
     try {
       for (const item of CUSTOMER_DEFAULT_MENU_ITEMS) {
-        const response = await fetch('/api/payments/menu-items/create/', {
+        const response = await fetch(getApiUrl('/payments/menu-items/create/'), {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -322,6 +365,10 @@ const AdminMenu: React.FC = () => {
           }),
         })
         if (!response.ok) {
+          if (!response.headers.get("content-type")?.includes("application/json")) {
+            alert("Server error while loading defaults.");
+            break;
+          }
           const data = await response.json()
           console.error(`Failed to add default item ${item.name}:`, data.error || 'Unknown error')
           alert(`Failed to add some default menu items. Check console for details.`)

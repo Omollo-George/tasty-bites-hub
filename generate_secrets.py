@@ -6,11 +6,16 @@ Run this once and copy the output to your Render dashboard environment variables
 
 import secrets
 import string
-from django.core.management.utils import get_random_secret_key
 
 def generate_django_secret():
     """Generate a secure Django SECRET_KEY"""
-    return get_random_secret_key()
+    try:
+        from django.core.management.utils import get_random_secret_key
+        return get_random_secret_key()
+    except ImportError:
+        # Fallback if django isn't installed
+        chars = 'abcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*(-_=+)'
+        return ''.join(secrets.choice(chars) for _ in range(50))
 
 def generate_admin_token():
     """Generate a secure admin token"""

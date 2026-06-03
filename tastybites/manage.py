@@ -2,7 +2,6 @@
 """Django's command-line utility for administrative tasks."""
 import os
 import sys
-os.environ['DJANGO_SETTINGS_MODULE'] = 'tastybites.settings'
 
 
 def main():
