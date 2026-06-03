@@ -379,15 +379,15 @@ const MenuSection = () => {
   };
 
   return (
-    <section id="menu" className="py-24 bg-slate-950 text-slate-200 relative overflow-hidden">
-      <div className="absolute inset-0 -z-10">
+    <section id="menu" className="py-24 bg-gradient-to-br from-gray-900 to-slate-800 text-slate-200 relative overflow-hidden">
+      <div className="absolute inset-0 z-0 pointer-events-none">
         <Restaurant3DBackground />
       </div>
       {lastOrder && (
         <Receipt order={lastOrder} onClose={() => setLastOrder(null)} />
       )}
 
-      <div className="container mx-auto px-4">
+      <div className="container mx-auto px-4 relative z-10">
         <div className="text-center mb-12">
           <p className="font-body text-primary text-sm font-semibold uppercase tracking-[0.2em] mb-2">Our Menu</p>
           <h2 className="font-display text-5xl md:text-6xl text-slate-100">TABLE-BASED POS</h2>

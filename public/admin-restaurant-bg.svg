@@ -1,0 +1,75 @@
+<svg width="1920" height="1080" viewBox="0 0 1920 1080" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid slice">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0b1220" />
+      <stop offset="100%" stop-color="#151d30" />
+    </linearGradient>
+    <radialGradient id="warmLight" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#fb923c" stop-opacity="0.45" />
+      <stop offset="100%" stop-color="#fb923c" stop-opacity="0" />
+    </radialGradient>
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="40" result="blur" />
+      <feMerge>
+        <feMergeNode in="blur" />
+        <feMergeNode in="SourceGraphic" />
+      </feMerge>
+    </filter>
+  </defs>
+
+  <rect width="1920" height="1080" fill="url(#bg)" />
+  <rect x="120" y="100" width="1680" height="820" rx="40" fill="#111827" opacity="0.92" />
+
+  <!-- Windows -->
+  <g opacity="0.9" stroke="#2c3f56" stroke-width="14">
+    <rect x="180" y="140" width="480" height="760" rx="28" fill="rgba(13,25,42,0.7)" />
+    <line x1="180" y1="360" x2="660" y2="360" />
+    <line x1="420" y1="140" x2="420" y2="900" />
+
+    <rect x="760" y="140" width="440" height="760" rx="28" fill="rgba(13,25,42,0.65)" />
+    <line x1="760" y1="360" x2="1200" y2="360" />
+    <line x1="980" y1="140" x2="980" y2="900" />
+
+    <rect x="1250" y="140" width="480" height="760" rx="28" fill="rgba(13,25,42,0.7)" />
+    <line x1="1250" y1="360" x2="1730" y2="360" />
+    <line x1="1490" y1="140" x2="1490" y2="900" />
+  </g>
+
+  <!-- Tables -->
+  <g fill="#131c2d" opacity="0.95">
+    <rect x="260" y="620" width="460" height="120" rx="30" />
+    <rect x="770" y="660" width="320" height="90" rx="24" />
+    <rect x="1230" y="640" width="420" height="100" rx="28" />
+  </g>
+  <g fill="#1e293b" opacity="0.85">
+    <rect x="240" y="600" width="500" height="18" rx="9" />
+    <rect x="760" y="640" width="360" height="18" rx="9" />
+    <rect x="1210" y="620" width="460" height="18" rx="9" />
+  </g>
+
+  <!-- Chair silhouettes -->
+  <g fill="#0f172a" opacity="0.88">
+    <rect x="200" y="720" width="80" height="100" rx="20" />
+    <rect x="520" y="720" width="80" height="100" rx="20" />
+    <rect x="1130" y="740" width="80" height="100" rx="20" />
+    <rect x="1550" y="740" width="80" height="100" rx="20" />
+  </g>
+
+  <!-- Warm hanging lights -->
+  <g filter="url(#glow)" opacity="0.8">
+    <circle cx="410" cy="220" r="80" fill="url(#warmLight)" />
+    <circle cx="760" cy="190" r="60" fill="url(#warmLight)" />
+    <circle cx="1460" cy="230" r="90" fill="url(#warmLight)" />
+  </g>
+
+  <!-- Table highlights -->
+  <g opacity="0.75" fill="#f97316">
+    <circle cx="310" cy="690" r="16" />
+    <circle cx="840" cy="710" r="12" />
+    <circle cx="1310" cy="690" r="18" />
+  </g>
+
+  <!-- Subtle floor reflection and depth -->
+  <ellipse cx="960" cy="980" rx="740" ry="60" fill="#040714" opacity="0.55" />
+  <ellipse cx="960" cy="940" rx="840" ry="35" fill="#0a1320" opacity="0.6" />
+</svg>
