@@ -14,7 +14,7 @@ services:
       - key: NODE_VERSION
         value: 20.0.0
       - key: VITE_API_URL
-        value: https://tastybites-backend-oj7lu-8yrvf.sevalla.app/api
+        value: https://tastybites-backend-oj7lu-hdnu8.sevalla.app/api
 
   # Backend: Web Service (Django)
   - type: web
@@ -40,13 +40,13 @@ services:
         # IMPORTANT: If Sevalla doesn't support 'generateValue', you must manually set this token
         # value: your-mpesa-admin-token
       - key: CSRF_TRUSTED_ORIGINS # Added for cross-origin CSRF protection
-        value: https://tastybites-oj7lu.sevalla.app,https://tastybites-backend-oj7lu-8yrvf.sevalla.app
+        value: https://tastybites-oj7lu-hdnu8.sevalla.app,https://tastybites-backend-oj7lu-hdnu8.sevalla.app
       - key: MPESA_CALLBACK_URL
-        value: https://tastybites-backend-oj7lu-8yrvf.sevalla.app/api/payments/callback/
+        value: https://tastybites-backend-oj7lu-hdnu8.sevalla.app/api/payments/callback/
       - key: DJANGO_SETTINGS_MODULE
         value: tastybites.settings
       - key: CORS_ALLOWED_ORIGINS
-        value: https://tastybites-oj7lu.sevalla.app
+        value: https://tastybites-oj7lu-hdnu8.sevalla.app
 
 databases:
   - name: tasty-bites-db

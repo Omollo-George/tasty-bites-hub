@@ -108,8 +108,25 @@ const AdminLogin: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4">
-      <div className="w-full max-w-md bg-slate-900 p-8 rounded-3xl shadow-xl border border-slate-800">
+    <div 
+      className="min-h-screen flex items-center justify-center p-4 relative"
+    >
+      {/* Background image with JPG fallback and SVG fallback */}
+      <div 
+        className="absolute inset-0 -z-10"
+        style={{
+          backgroundImage: 'url(/admin-restaurant-bg.jpg), url(/admin-restaurant-bg.svg)',
+          backgroundSize: 'cover, cover',
+          backgroundPosition: 'center, center',
+          backgroundRepeat: 'no-repeat, no-repeat',
+          backgroundAttachment: 'fixed, fixed',
+        }}
+      />
+      {/* Subtle overlay for contrast */}
+      <div className="absolute inset-0 -z-10 bg-black/20" />
+      
+      
+      <div className="w-full max-w-md bg-slate-900/95 p-8 rounded-3xl shadow-xl border border-slate-800 relative z-10">
         <h1 className="font-display text-3xl mb-4 text-slate-100">Admin Sign In</h1>
         <p className="text-sm text-slate-400 mb-6">Enter your admin credentials to manage orders and settings.</p>
         <form className="space-y-4" onSubmit={handleSubmit}>

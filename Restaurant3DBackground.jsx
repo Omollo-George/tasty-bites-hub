@@ -6,7 +6,8 @@ import * as THREE from "three";
 
 /**
  * Restaurant 3D animated interior background for POS.
- * - Transparent background: designed to sit behind UI.
+        // allow parent wrapper to control stacking (z-0 / z-10)
+        zIndex: 0,
  * - Procedural materials only (no external textures).
  * - Performance: uses instancing + low mesh counts to target < 30 draw calls.
  */
@@ -41,14 +42,8 @@ function useCameraDrift({ ampRad = 0.08, zoomMin = 0.98, zoomMax = 1.02 }) {
 function WarmBokehLights({ count = 26 }) {
   const points = useMemo(() => {
     const arr = new Array(count).fill(0).map((_, i) => {
-      // Warm orange/yellow range
-      const hue = 28 + (i % 5) * 3;
-      const sat = 92;
-      const lightness = 56 + (i % 7);
-
-      const color = new THREE.Color(
-        `hsl(${hue} ${sat}% ${lightness}%)`
-      );
+      // Warm orange/yellow range close to Tailwind text-orange-400
+      const color = new THREE.Color("#fb923c");
 
       return {
         position: new THREE.Vector3(
@@ -60,7 +55,7 @@ function WarmBokehLights({ count = 26 }) {
         // twinkle speed + amplitude
         phase: Math.random() * Math.PI * 2,
         tw: 0.6 + Math.random() * 1.2,
-        size: 0.05 + Math.random() * 0.09,
+        size: 0.04 + Math.random() * 0.08,
       };
     });
     return arr;
@@ -96,9 +91,9 @@ function WarmBokehLights({ count = 26 }) {
     // Use additive blending for bokeh-like glow
     const m = new THREE.PointsMaterial({
       vertexColors: true,
-      size: 0.18,
+      size: 0.16,
       transparent: true,
-      opacity: 0.95,
+      opacity: 0.9,
       blending: THREE.AdditiveBlending,
       depthWrite: false,
     });
@@ -143,7 +138,7 @@ function ProceduralRestaurant() {
   const seatMat = useMemo(
     () =>
       new THREE.MeshStandardMaterial({
-        color: new THREE.Color("#1a1110"),
+        color: new THREE.Color("#171717"),
         roughness: 0.9,
         metalness: 0.02,
       }),
@@ -180,7 +175,7 @@ function ProceduralRestaurant() {
         receiveShadow={false}
       >
         <planeGeometry args={[18, 12, 1, 1]} />
-        <meshStandardMaterial color={"#140c0a"} roughness={1} />
+        <meshStandardMaterial color={"#0b0a09"} roughness={1} />
       </mesh>
 
       {/* Tables (2) */}
@@ -243,15 +238,16 @@ function ProceduralRestaurant() {
       </group>
 
       {/* Background wall haze blob (cheap atmosphere silhouette) */}
-      <Float speed={0.5} floatIntensity={0.15}>
+      <Float speed={0.5} floatIntensity={0.12}>
         <mesh position={[0, 1.8, -4.8]}>
           <sphereGeometry args={[3.8, 24, 24]} />
           <meshStandardMaterial
-            color={"#0b1326"}
+            color={"#1e293b"}
             roughness={1}
             metalness={0}
             transparent
-            opacity={0.25}
+            opacity={0.2}
+            depthWrite={false}
           />
         </mesh>
       </Float>
@@ -259,7 +255,7 @@ function ProceduralRestaurant() {
   );
 }
 
-function DustParticles({ amount = 600 }) {
+function DustParticles({ amount = 300 }) {
   const count = amount;
 
   const pointsRef = useRef(null);
@@ -299,9 +295,9 @@ function DustParticles({ amount = 600 }) {
 
     const material = new THREE.PointsMaterial({
       vertexColors: true,
-      size: 0.06,
+      size: 0.04,
       transparent: true,
-      opacity: 0.35,
+      opacity: 0.18,
       blending: THREE.AdditiveBlending,
       depthWrite: false,
     });
@@ -341,43 +337,57 @@ function RestaurantScene() {
 
   return (
     <group ref={groupRef}>
-      {/* Dark navy/charcoal base */}
-      <color attach="background" args={["#0b1326"]} />
-
-      {/* Lightweight atmosphere (fog) */}
-      <fog attach="fog" args={["#0b1326", 2.5, 9.5]} />
+      {/* Lightweight atmosphere (fog) and subtle volumetric layer */}
+      {/* Keep canvas transparent by NOT setting scene background color */}
+      <fog attach="fog" args={["#1e293b", 2.8, 12]} />
 
       <ProceduralRestaurant />
-      <WarmBokehLights count={24} />
-      <DustParticles amount={600} />
+      <WarmBokehLights count={18} />
+      <DustParticles amount={300} />
+
+      {/* Large soft volumetric fog sphere (transparent) to keep fog opacity ~0.2 */}
+      <mesh position={[0, 1.2, -2]}>
+        <sphereGeometry args={[6.5, 24, 24]} />
+        <meshStandardMaterial
+          color={"#1e293b"}
+          transparent
+          opacity={0.2}
+          depthWrite={false}
+          roughness={1}
+        />
+      </mesh>
     </group>
   );
 }
 
-export default function Restaurant3DBackground({ className = "", style = {} }) {
+function RestaurantBackgroundComponent({ className = "", style = {} }) {
   return (
     <div
       className={className}
       style={{
         position: "absolute",
         inset: 0,
-        zIndex: -1,
+        zIndex: 0,
         pointerEvents: "none",
+        // Transparent background so the page/app can provide the gradient
         background: "transparent",
         ...style,
       }}
     >
       <Canvas
+        dpr={[1, 1.5]}
         style={{ width: "100%", height: "100%" }}
         camera={{ position: [0, 1.6, 3.9], fov: 45, near: 0.1, far: 30, zoom: 1 }}
         gl={{ alpha: true, antialias: true, powerPreference: "high-performance" }}
       >
         <RestaurantScene />
 
-        {/* Subtle tone + ensure UI readability */}
-        <ambientLight intensity={0.55} color="#f59e0b" />
-        <directionalLight position={[2, 4, 3]} intensity={0.35} color="#f59e0b" />
+        {/* Warm accent lights matching Tailwind `text-orange-400` (#fb923c) */}
+        <ambientLight intensity={0.45} color="#fb923c" />
+        <directionalLight position={[2, 4, 3]} intensity={0.28} color="#fb923c" />
       </Canvas>
     </div>
   );
 }
+
+export default React.memo(RestaurantBackgroundComponent);

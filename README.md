@@ -75,6 +75,19 @@ This project is pre-configured for automated deployment on **Render** (as indica
 2.  Vercel will automatically detect the **Vite** framework and configure the build settings.
 3.  Set the `VITE_API_URL` environment variable in the Vercel dashboard to point to your live backend API.
 
+## Deploying to Sevalla (Docker)
+
+This repository includes a multi-stage `Dockerfile` that builds the frontend with Node and then builds the Python/Django backend. The frontend `dist` output is copied into Django's `staticfiles` folder so Whitenoise can serve assets in production.
+
+Quick local test (build and run):
+
+```bash
+docker build -t tastybites:latest .
+docker run -e DJANGO_DEBUG=False -e DJANGO_SECRET_KEY=changeme -p 8000:8000 tastybites:latest
+```
+
+For Sevalla you'll typically push an image to a container registry (Docker Hub, GHCR, or a private registry) and then configure your Sevalla service to pull and run that image. If you'd like, I can add a GitHub Actions workflow to build and push images to your registry.
+
 ## Can I connect a custom domain to my Lovable project?
 
 Yes, you can!
