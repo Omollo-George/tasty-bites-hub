@@ -1,7 +1,8 @@
 import React, { useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { setAdminToken } from '@/lib/admin-session'
-
+import { getApiUrl } from '@/lib/api'
+ 
 const AdminSignup: React.FC = () => {
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
@@ -23,11 +24,22 @@ const AdminSignup: React.FC = () => {
 
     setLoading(true)
     try {
-      const response = await fetch('/api/payments/admin/signup/', {
+      const endpoint = getApiUrl('/payments/admin/signup/');
+
+      const response = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username, password }),
       })
+
+      // Safely validate JSON response to prevent "Unexpected end of JSON input"
+      const contentType = response.headers.get("content-type");
+      if (!contentType || !contentType.includes("application/json")) {
+        const errorBody = await response.text();
+        console.error('[AdminSignup] Expected JSON but received:', response.status, errorBody.substring(0, 200));
+        throw new Error(`Connection Error (${response.status}): The server returned an invalid format. Check if the backend is running.`);
+      }
+
       const data = await response.json()
       if (!response.ok) {
         setError(data.error || 'Failed to create account')
@@ -36,7 +48,8 @@ const AdminSignup: React.FC = () => {
         navigate(from, { replace: true })
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e))
+      const msg = e instanceof Error ? e.message : String(e);
+      setError(msg === 'Failed to fetch' ? 'Connection Error: Backend server unreachable or CORS blocked.' : msg);
     } finally {
       setLoading(false)
     }

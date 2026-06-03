@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Zap, Users, MessageSquare, TrendingUp, Bell, ShieldCheck } from 'lucide-react';
 import AdminHeader from './AdminHeader';
 import { getAdminToken } from '@/lib/admin-session';
+import { getApiUrl } from '@/lib/api';
 
 const AdminAutomation: React.FC = () => {
   const [insights, setInsights] = useState<any>(null);
@@ -12,7 +13,7 @@ const AdminAutomation: React.FC = () => {
     const fetchInsights = async () => {
       const token = getAdminToken();
       try {
-        const res = await fetch('/api/payments/automation/insights/', {
+        const res = await fetch(getApiUrl('/payments/automation/insights/'), {
           headers: {
             'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json'

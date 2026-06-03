@@ -60,9 +60,20 @@ This project is built with:
 - shadcn-ui
 - Tailwind CSS
 
-## How can I deploy this project?
+## Deployment
 
-Simply open [Lovable](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and click on Share -> Publish.
+This project is pre-configured for automated deployment on **Render** (as indicated by your secrets script) and **Vercel**.
+
+### Deploying to Render (Full Stack)
+1.  **Generate Secrets**: Run `python generate_secrets.py` locally and save the output.
+2.  **Create Blueprint**: Go to the Render Dashboard, click **New > Blueprint**, and connect this repository.
+3.  **Automatic Provisioning**: Render will detect `render.yaml` and automatically set up the static frontend, the Python backend, and the PostgreSQL database.
+4.  **Configuration**: Use the secrets generated in step 1 to fill in the required environment variables in the Render dashboard.
+
+### Deploying to Vercel (Frontend Only)
+1.  Connect your repository to Vercel.
+2.  Vercel will automatically detect the **Vite** framework and configure the build settings.
+3.  Set the `VITE_API_URL` environment variable in the Vercel dashboard to point to your live backend API.
 
 ## Can I connect a custom domain to my Lovable project?
 

@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react'
+import { getApiUrl } from '@/lib/api'
 
 const Totals: React.FC = () => {
   const [orders, setOrders] = useState<any[]>([])
@@ -7,7 +8,20 @@ const Totals: React.FC = () => {
   useEffect(() => {
     const load = async () => {
       try {
-        const [o, c] = await Promise.all([fetch('/api/payments/orders/'), fetch('/api/payments/config/')])
+        const [o, c] = await Promise.all([
+          fetch(getApiUrl('/payments/orders/')),
+          fetch(getApiUrl('/payments/config/'))
+        ])
+
+        if (!o.ok || !c.ok) {
+          console.error("Dashboard failed to load data:", o.status, c.status);
+          return;
+        }
+
+        if (!o.headers.get("content-type")?.includes("application/json") || !c.headers.get("content-type")?.includes("application/json")) {
+          throw new Error("Invalid response format");
+        }
+
         const oj = await o.json()
         const cj = await c.json()
         setOrders(oj.results || [])

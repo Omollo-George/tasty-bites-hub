@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { clearAdminSession, getAdminToken } from '@/lib/admin-session'
+import { getApiUrl } from '@/lib/api'
 
 const AdminHeader: React.FC<{title?:string}> = ({title}) => {
   const navigate = useNavigate()
@@ -8,7 +9,7 @@ const AdminHeader: React.FC<{title?:string}> = ({title}) => {
 
   const clearToken = async () => {
     if (token) {
-      await fetch('/api/payments/admin/signout/', {
+      await fetch(getApiUrl('/payments/admin/signout/'), {
         headers: { Authorization: `Bearer ${token}` }
       }).catch(() => {})
     }

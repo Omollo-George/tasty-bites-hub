@@ -10,6 +10,7 @@ import {
   Line,
   Legend,
 } from 'recharts'
+import { getApiUrl } from '@/lib/api'
 
 type ReportData = {
   range_days: number
@@ -47,7 +48,8 @@ const Reports: React.FC = () => {
   const fetchReport = async () => {
     setLoading(true)
     try {
-      const res = await fetch(`/api/payments/reports/summary/?range=${range}`)
+      const res = await fetch(getApiUrl(`/payments/reports/summary/?range=${range}`))
+      if (!res.headers.get("content-type")?.includes("application/json")) throw new Error("Invalid response");
       const json = await res.json()
       if (res.ok) setData(json)
       else console.error(json)
@@ -60,10 +62,10 @@ const Reports: React.FC = () => {
 
   const downloadReport = async () => {
     try {
-      const url = `/api/payments/reports/download/?range=${range}`
+      const url = getApiUrl(`/payments/reports/download/?range=${range}`)
       const res = await fetch(url)
       if (!res.ok) {
-        const errorJson = await res.json().catch(() => ({ error: 'Download failed' }))
+        const errorJson = await res.text().catch(() => 'Download failed')
         console.error(errorJson)
         return
       }
@@ -85,7 +87,8 @@ const Reports: React.FC = () => {
 
   const fetchWastage = async () => {
     try {
-      const res = await fetch('/api/payments/reports/wastage/')
+      const res = await fetch(getApiUrl('/payments/reports/wastage/'))
+      if (!res.headers.get("content-type")?.includes("application/json")) return;
       const json = await res.json()
       if (res.ok) setWastageLogs(json.wastage || [])
     } catch (error) {
@@ -125,7 +128,7 @@ const Reports: React.FC = () => {
     setSavingWastage(true)
     try {
       const adminToken = localStorage.getItem('admin_token')
-      const res = await fetch('/api/payments/reports/wastage/', {
+      const res = await fetch(getApiUrl('/payments/reports/wastage/'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -197,7 +200,7 @@ const Reports: React.FC = () => {
                     <XAxis dataKey="label" tick={{ fontSize: 11, fill: '#cbd5e1' }} interval={2} minTickGap={10} /> {/* Added fill color */}
                     <YAxis yAxisId="left" orientation="left" tick={{ fontSize: 11, fill: '#cbd5e1' }} /> {/* Added fill color */}
                     <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 11, fill: '#cbd5e1' }} /> {/* Added fill color */}
-                    <Tooltip formatter={(value: number) => typeof value === 'number' ? new Intl.NumberFormat('en-KE', { style: 'currency', currency: 'KES' }).format(value) : value} />
+                    <Tooltip formatter={(value: any) => typeof value === 'number' ? new Intl.NumberFormat('en-KE', { style: 'currency', currency: 'KES' }).format(value) : value} />
                     <Legend />
                     <Bar yAxisId="left" dataKey="revenue" name="Revenue" fill="#fb923c" radius={[6, 6, 0, 0]} />
                     <Line yAxisId="right" type="monotone" dataKey="orders" name="Orders" stroke="#2563eb" strokeWidth={3} dot={{ r: 3 }} />

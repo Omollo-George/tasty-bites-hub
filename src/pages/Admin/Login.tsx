@@ -2,12 +2,13 @@ import React, { useEffect, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { Eye, EyeOff } from 'lucide-react'
 import { setAdminSessionExpiry, setAdminToken, getAdminToken, isAdminSessionValid } from '@/lib/admin-session'
+import { getApiUrl } from '@/lib/api'
 
 const AdminLogin: React.FC = () => {
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
-  const [lockoutSeconds, setLockoutSeconds] = useState(0)
+  const [lockoutSeconds, setLockoutSeconds] = useState(0);
   const [loading, setLoading] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
   const navigate = useNavigate()
@@ -67,11 +68,23 @@ const AdminLogin: React.FC = () => {
       const payload = { username: username.trim(), password: password.trim() }
       console.debug('[AdminLogin] signin payload', payload)
 
-      const response = await fetch('/api/payments/admin/signin/', {
+      const endpoint = getApiUrl('/payments/admin/signin/');      console.debug('[AdminLogin] Fetching from:', endpoint);
+
+      const response = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       })
+
+      // Safely validate that the response is JSON before parsing.
+      // This prevents the "Unexpected end of JSON input" crash when receiving HTML error pages.
+      const contentType = response.headers.get("content-type");
+      if (!contentType || !contentType.includes("application/json")) {
+        const errorBody = await response.text();
+        console.error('[AdminLogin] Expected JSON but received:', response.status, errorBody.substring(0, 200));
+        throw new Error(`Connection Error (${response.status}): The server returned an invalid format. The backend service may be starting up or misconfigured.`);
+      }
+
       const data = await response.json()
       console.debug('[AdminLogin] signin response', response.status, data)
 
@@ -87,7 +100,8 @@ const AdminLogin: React.FC = () => {
         navigate(from, { replace: true })
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
+      const msg = err instanceof Error ? err.message : String(err);
+      setError(msg === 'Failed to fetch' ? 'Connection Refused: Ensure the Django server is running on port 8000 and CORS is configured.' : msg);
     } finally {
       setLoading(false)
     }

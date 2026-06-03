@@ -1,0 +1,13 @@
+{
+    "python.analysis.extraPaths": [
+        "./tastybites"
+    ],
+    "python.analysis.autoSearchPaths": true,
+    "python.analysis.useLibraryCodeForTypes": true,
+    "python.analysis.indexing": true,
+    "python.analysis.diagnosticMode": "workspace",
+    "python.terminal.activateEnvInSelectedTerminal": true,
+    "python.analysis.autoImportCompletions": true,
+    "python.analysis.typeCheckingMode": "basic",
+    "python.analysis.diagnosticSeverityOverrides": { "reportMissingImports": "error" }
+}
