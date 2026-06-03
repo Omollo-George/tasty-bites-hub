@@ -11,7 +11,6 @@ import * as THREE from "three";
  * - Procedural materials only (no external textures).
  * - Performance: uses instancing + low mesh counts to target < 30 draw calls.
  */
-
 function useCameraDrift({ ampRad = 0.08, zoomMin = 0.98, zoomMax = 1.02 }) {
   const groupRef = useRef();
 
