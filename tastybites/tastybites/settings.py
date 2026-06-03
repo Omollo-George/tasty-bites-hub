@@ -30,7 +30,7 @@ DEBUG = os.environ.get('DJANGO_DEBUG', 'True') == 'True'
 # Allow local/dev hosts by default; override via env var if needed
 ALLOWED_HOSTS = os.environ.get(
     'ALLOWED_HOSTS',
-    '127.0.0.1,localhost,[::1],.onrender.com'
+    '127.0.0.1,localhost,[::1],.sevalla.app'
 ).split(',')
 
 
@@ -141,14 +141,19 @@ CORS_ALLOW_ALL_ORIGINS = os.environ.get('CORS_ALLOW_ALL_ORIGINS', 'False') == 'T
 # Allow frontend domain from environment
 if not CORS_ALLOW_ALL_ORIGINS:
     frontend_url = os.environ.get('CORS_ALLOWED_ORIGINS', '')
-    # Ensure we handle multiple origins and trim whitespace
-    CORS_ALLOWED_ORIGINS = [url.strip().rstrip('/') for url in frontend_url.split(',') if url.strip()]
+    # Ensure we handle multiple origins, trim whitespace, and remove trailing slashes
+    CORS_ALLOWED_ORIGINS = [url.strip().rstrip('/') for url in frontend_url.split(',') if url.strip()] 
     if not CORS_ALLOWED_ORIGINS:
         # Default to localhost:5173 for development (Vite's default port)
         CORS_ALLOWED_ORIGINS = ['http://localhost:5173', 'http://127.0.0.1:5173']
 
 CORS_ALLOW_CREDENTIALS = True
 
+# CSRF Trusted Origins for production
+CSRF_TRUSTED_ORIGINS = os.environ.get(
+    'CSRF_TRUSTED_ORIGINS',
+    'http://localhost:5173,http://127.0.0.1:5173'
+).split(',')
 # MPESA callback URL can be overridden via environment variable.
 
 
@@ -186,7 +191,7 @@ if not DEBUG:
     # This prevents ERR_SSL_PROTOCOL_ERROR during local testing with DEBUG=False
     SECURE_SSL_REDIRECT = os.environ.get('SECURE_SSL_REDIRECT', 'True') == 'True'
     
-    # Trust the X-Forwarded-Proto header from the Render/Sevalla proxy
+    # Trust the X-Forwarded-Proto header from the Sevalla proxy
     SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
     
     SESSION_COOKIE_SECURE = True
