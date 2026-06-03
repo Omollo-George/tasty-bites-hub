@@ -30,7 +30,7 @@ DEBUG = os.environ.get('DJANGO_DEBUG', 'True') == 'True'
 # Allow local/dev hosts by default; override via env var if needed
 ALLOWED_HOSTS = os.environ.get(
     'ALLOWED_HOSTS',
-    '127.0.0.1,localhost,[::1],.sevalla.app'
+    '127.0.0.1,localhost,[::1],.sevalla.app,.sevalla.page'
 ).split(',')
 
 
@@ -153,7 +153,7 @@ CORS_ALLOW_CREDENTIALS = True
 CSRF_TRUSTED_ORIGINS = os.environ.get(
     'CSRF_TRUSTED_ORIGINS',
     'http://localhost:5173,http://127.0.0.1:5173'
-).split(',')
+).replace(' ', '').split(',')
 # MPESA callback URL can be overridden via environment variable.
 
 
