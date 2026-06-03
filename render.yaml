@@ -40,13 +40,13 @@ services:
         # IMPORTANT: If Sevalla doesn't support 'generateValue', you must manually set this token
         # value: your-mpesa-admin-token
       - key: CSRF_TRUSTED_ORIGINS # Added for cross-origin CSRF protection
-        value: https://YOUR-FRONTEND-SERVICE-NAME.sevalla.page,https://YOUR-BACKEND-SERVICE-NAME.sevalla.page # IMPORTANT: Replace with your actual Sevalla URLs
+        value: https://tastybites-oj7lu.sevalla.page,https://tastybites-backend-oj7lu.sevalla.page
       - key: MPESA_CALLBACK_URL
-        value: https://YOUR-BACKEND-SERVICE-NAME.sevalla.page/api/payments/callback/ # IMPORTANT: Replace with your actual Sevalla backend URL
+        value: https://tastybites-backend-oj7lu.sevalla.page/api/payments/callback/
       - key: DJANGO_SETTINGS_MODULE
         value: tastybites.settings
       - key: CORS_ALLOWED_ORIGINS
-        value: https://YOUR-FRONTEND-SERVICE-NAME.sevalla.page # IMPORTANT: Replace with your actual Sevalla frontend URL
+        value: https://tastybites-oj7lu.sevalla.page
 
 databases:
   - name: tasty-bites-db

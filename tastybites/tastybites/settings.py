@@ -198,5 +198,6 @@ if not DEBUG:
     CSRF_COOKIE_SECURE = True
     SECURE_BROWSER_XSS_FILTER = True
     SECURE_CONTENT_SECURITY_POLICY = {
-        'default-src': ("'self'",),
+        'default-src': ("'self'", "https://tastybites-oj7lu.sevalla.page"),
+        'connect-src': ("'self'", "https://tastybites-backend-oj7lu.sevalla.page", "https://tastybites-oj7lu.sevalla.page"),
     }
