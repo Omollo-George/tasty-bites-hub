@@ -1,23 +1,13 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useState, useRef } from 'react'
 import { DEFAULT_MENU_ITEMS as CUSTOMER_DEFAULT_MENU_ITEMS } from '@/components/MenuSection'
 import { getApiUrl } from '@/lib/api'
+import { getAdminToken } from '@/lib/admin-session'
 
 type TableItem = {
   id: number
   number: string
   name: string
   status: string
-}
-
-type QueueItem = {
-  order_id: string
-  table: string
-  items: Array<{ name: string; quantity: number; modifiers: string[] }>
-  created_at: string
-  status: string
-  phone: string
-  total_amount: number
-  split_count: number
 }
 
 type MenuItemType = {
@@ -27,13 +17,13 @@ type MenuItemType = {
   category: string
   description: string
   food_cost: number
+  image_url?: string
   popular: boolean
   spicy: boolean
 }
 
 const AdminMenu: React.FC = () => {
   const [tables, setTables] = useState<TableItem[]>([])
-  const [queue, setQueue] = useState<QueueItem[]>([])
   const [menuItems, setMenuItems] = useState<MenuItemType[]>([])
   const [tableNumber, setTableNumber] = useState('')
   const [tableName, setTableName] = useState('')
@@ -43,19 +33,22 @@ const AdminMenu: React.FC = () => {
     category: '',
     description: '',
     food_cost: '',
+    image_url: '',
     popular: false,
     spicy: false,
   })
   const [editingItem, setEditingItem] = useState<MenuItemType | null>(null)
   const [loading, setLoading] = useState(false)
-  const [selectedReceipt, setSelectedReceipt] = useState<string | null>(null)
-  const [receiptText, setReceiptText] = useState<string | null>(null)
+  const [uploading, setUploading] = useState(false)
   const [menuSearch, setMenuSearch] = useState('')
-  const adminToken = typeof window !== 'undefined' ? localStorage.getItem('admin_token') : '';
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const adminToken = getAdminToken() || '';
 
   const fetchTables = async () => {
     try {
-      const response = await fetch(getApiUrl('/payments/pos/tables/'))
+      const response = await fetch(getApiUrl('/payments/pos/tables/'), {
+        headers: { Authorization: `Bearer ${adminToken}` }
+      })
       if (!response.headers.get("content-type")?.includes("application/json")) return;
       const data = await response.json()
       setTables(data.tables || [])
@@ -64,20 +57,11 @@ const AdminMenu: React.FC = () => {
     }
   }
 
-  const fetchQueue = async () => {
-    try {
-      const response = await fetch(getApiUrl('/payments/kds/queue/'))
-      if (!response.headers.get("content-type")?.includes("application/json")) return;
-      const data = await response.json()
-      setQueue(data.queue || [])
-    } catch (error) {
-      console.error(error)
-    }
-  }
-
   const fetchMenuItems = async () => {
     try {
-      const response = await fetch(getApiUrl('/payments/menu-items/'))
+      const response = await fetch(getApiUrl('/payments/menu-items/'), {
+        headers: { Authorization: `Bearer ${adminToken}` }
+      })
       if (!response.headers.get("content-type")?.includes("application/json")) return;
       const data = await response.json()
       if (response.ok && Array.isArray(data.menu_items)) {
@@ -90,7 +74,6 @@ const AdminMenu: React.FC = () => {
 
   useEffect(() => {
     fetchTables()
-    fetchQueue()
     fetchMenuItems()
   }, [])
 
@@ -152,25 +135,34 @@ const AdminMenu: React.FC = () => {
     }
   }
 
-  const markReady = async (orderId: string) => {
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>, isEditing: boolean) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    setUploading(true)
+    const formData = new FormData()
+    formData.append('image', file)
+
     try {
-      const response = await fetch(getApiUrl(`/payments/kds/complete/${encodeURIComponent(orderId)}/`), {
+      const response = await fetch(getApiUrl('/payments/admin/upload-image/'), {
         method: 'POST',
+        headers: { Authorization: `Bearer ${adminToken}` },
+        body: formData,
       })
-
-      if (!response.headers.get("content-type")?.includes("application/json")) {
-        throw new Error("Server returned invalid format.");
-      }
-
       const data = await response.json()
       if (response.ok) {
-        fetchQueue()
+        if (isEditing && editingItem) {
+          setEditingItem({ ...editingItem, image_url: data.url })
+        } else {
+          setNewItem({ ...newItem, image_url: data.url })
+        }
       } else {
-        alert(data.error || 'Failed to update order status')
+        alert(data.error || 'Upload failed')
       }
-    } catch (error) {
-      console.error(error)
-      alert('Unable to update order status')
+    } catch (err) {
+      alert('Error uploading image')
+    } finally {
+      setUploading(false)
     }
   }
 
@@ -199,7 +191,7 @@ const AdminMenu: React.FC = () => {
 
       const data = await response.json()
       if (response.ok) {
-        setNewItem({ name: '', price: '', category: '', description: '', food_cost: '', popular: false, spicy: false })
+        setNewItem({ name: '', price: '', category: '', description: '', food_cost: '', image_url: '', popular: false, spicy: false })
         fetchMenuItems()
       } else {
         alert(data.error || 'Failed to create menu item')
@@ -267,79 +259,6 @@ const AdminMenu: React.FC = () => {
     }
   }
 
-  const clearAllData = async () => {
-    if (!window.confirm('WARNING: This will delete ALL orders, transactions, wastage logs, tables, and menu items. This cannot be undone. Proceed?')) {
-      return
-    }
-
-    setLoading(true)
-    try {
-      const response = await fetch(getApiUrl('/payments/admin/clear/'), {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${adminToken}`,
-        },
-      })
-      if (response.ok) {
-        alert('All operational data has been cleared.')
-        // Refresh with seed=0 to see a truly empty menu
-        const menuRes = await fetch(getApiUrl('/payments/menu-items/?seed=0'))
-
-        if (!menuRes.headers.get("content-type")?.includes("application/json")) {
-          throw new Error("Invalid response from server.");
-        }
-
-        const menuData = await menuRes.json()
-        setMenuItems(menuData.menu_items || [])
-        fetchTables()
-        fetchQueue()
-      } else {
-        alert('Failed to clear data.')
-      }
-    } catch (error) {
-      alert('Error clearing data.')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const printReceipt = async (orderId: string) => {
-    try {
-      const response = await fetch(getApiUrl(`/payments/pos/receipt/${encodeURIComponent(orderId)}/`))
-
-      if (!response.headers.get("content-type")?.includes("application/json")) {
-        throw new Error("Invalid response from server.");
-      }
-
-      const data = await response.json()
-      if (response.ok) {
-        setSelectedReceipt(orderId)
-        const lines = [
-          data.header,
-          `Order: ${data.order_no}`,
-          `Table: ${data.table}`,
-          `Phone: ${data.phone || 'N/A'}`,
-          `Status: ${data.is_paid ? 'Paid' : 'Pending'}`,
-          `Created: ${data.timestamp}`,
-          '',
-          'Items:',
-          ...data.items.map((item: any) => {
-            const line = `${item.quantity}x ${item.name} @ ${item.price.toFixed(2)} = ${item.subtotal.toFixed(2)}`
-            return item.modifiers?.length ? `${line}\n  Modifiers: ${item.modifiers.join(', ')}` : line
-          }).flat(),
-          '',
-          `Total: ${data.total.toFixed(2)}`,
-          `Split: ${data.split_count} → ${data.per_person.toFixed(2)} each`,
-          data.footer,
-        ]
-        setReceiptText(lines.join('\n'))
-      }
-    } catch (error) {
-      console.error(error)
-      alert('Failed to load receipt')
-    }
-  }
-
   const loadDefaultMenuItems = async () => {
     if (!window.confirm('This will add the default menu items to your menu. Proceed?')) {
       return
@@ -347,7 +266,7 @@ const AdminMenu: React.FC = () => {
 
     setLoading(true)
     try {
-      for (const item of CUSTOMER_DEFAULT_MENU_ITEMS) {
+      for (const item of (CUSTOMER_DEFAULT_MENU_ITEMS as any)) {
         const response = await fetch(getApiUrl('/payments/menu-items/create/'), {
           method: 'POST',
           headers: {
@@ -359,6 +278,7 @@ const AdminMenu: React.FC = () => {
             price: item.price,
             category: item.category,
             description: item.description,
+            image_url: (item as any).image_url,
             food_cost: 0, // Default food_cost as it's not in CUSTOMER_DEFAULT_MENU_ITEMS
             popular: item.popular,
             spicy: item.spicy || false, // Default spicy to false if not present
@@ -402,13 +322,6 @@ const AdminMenu: React.FC = () => {
               {loading ? 'Loading Defaults...' : 'Load Default Menu'}
             </button>
           )}
-          <button
-            onClick={clearAllData}
-            disabled={loading}
-            className="rounded-xl border border-red-900/50 bg-slate-900 px-4 py-2.5 text-sm font-semibold text-red-400 transition-all hover:bg-red-950/30 disabled:opacity-50"
-          >
-            {loading ? 'Clearing...' : 'Clear All Operational Data'}
-          </button>
         </div>
       </div>
 
@@ -510,6 +423,40 @@ const AdminMenu: React.FC = () => {
                 value={newItem.description}
                 onChange={e => setNewItem({...newItem, description: e.target.value})}
               />
+              <div className="sm:col-span-2 lg:col-span-3 flex flex-col gap-2">
+                <label className="text-xs font-semibold text-slate-400">Food Image (Cloud URL or Local Upload)</label>
+                <div className="flex gap-2">
+                  <input
+                    placeholder="https://example.com/image.jpg"
+                    className="flex-1 rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-slate-100"
+                    value={newItem.image_url}
+                    onChange={e => setNewItem({...newItem, image_url: e.target.value})}
+                  />
+                  <input 
+                    type="file" 
+                    className="hidden" 
+                    ref={fileInputRef} 
+                    accept="image/*"
+                    onChange={(e) => handleImageUpload(e, false)}
+                  />
+                  <button 
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={uploading}
+                    className="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-xs font-bold transition-colors disabled:opacity-50"
+                  >
+                    {uploading ? '...' : 'Upload'}
+                  </button>
+                </div>
+                {newItem.image_url && (
+                  <img 
+                    src={newItem.image_url} 
+                    crossOrigin="anonymous"
+                    className="h-20 w-32 object-cover rounded-lg mt-2 border border-slate-700" 
+                    alt="Preview" 
+                  />
+                )}
+              </div>
             </div>
             <div className="flex items-center gap-4 mb-4">
               <label className="flex items-center gap-2 text-sm text-slate-200">
@@ -606,6 +553,38 @@ const AdminMenu: React.FC = () => {
                 <label className="text-xs font-medium text-slate-400">Description</label>
                 <textarea className="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-slate-100" value={editingItem.description} onChange={e => setEditingItem({...editingItem, description: e.target.value})} />
               </div>
+              <div className="sm:col-span-2 space-y-1">
+                <label className="text-xs font-medium text-slate-400">Image URL</label>
+                <div className="flex gap-2">
+                  <input 
+                    className="flex-1 rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-slate-100" 
+                    value={editingItem.image_url || ''} 
+                    onChange={e => setEditingItem({...editingItem, image_url: e.target.value})} 
+                  />
+                  <input 
+                    type="file" 
+                    className="hidden" 
+                    id="edit-file-input"
+                    accept="image/*"
+                    onChange={(e) => handleImageUpload(e, true)}
+                  />
+                  <button 
+                    type="button"
+                    onClick={() => document.getElementById('edit-file-input')?.click()}
+                    className="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-xs font-bold transition-colors"
+                  >
+                    {uploading ? '...' : 'Replace'}
+                  </button>
+                </div>
+                {editingItem.image_url && (
+                  <img 
+                    src={editingItem.image_url} 
+                    crossOrigin="anonymous"
+                    className="h-20 w-32 object-cover rounded-lg mt-2 border border-slate-700" 
+                    alt="Preview" 
+                  />
+                )}
+              </div>
               <div className="flex gap-4">
                 <label className="flex items-center gap-2 text-sm">
                   <input type="checkbox" checked={editingItem.popular} onChange={e => setEditingItem({...editingItem, popular: e.target.checked})} /> Popular
@@ -621,59 +600,7 @@ const AdminMenu: React.FC = () => {
             </div>
           </section>
         )}
-
-        <section className="bg-slate-900 p-6 rounded-xl shadow-card border border-slate-800">
-          <div className="mb-4">
-            <p className="text-sm text-slate-400">Kitchen Queue</p>
-            <h3 className="font-semibold text-xl text-slate-100">Live Orders</h3>
-          </div>
-
-          {queue.length === 0 ? (
-            <p className="text-slate-400">No active orders in the queue.</p>
-          ) : (
-            <div className="space-y-4">
-              {queue.map((order) => (
-                <div key={order.order_id} className="rounded-xl border border-slate-800 bg-slate-950 p-4">
-                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                    <div>
-                      <p className="font-semibold text-slate-100">Order {order.order_id}</p>
-                      <p className="text-sm text-slate-400">Table {order.table}</p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => markReady(order.order_id)}
-                        className="rounded-full bg-green-600 px-3 py-1 text-sm text-white"
-                      >
-                        Mark Ready
-                      </button>
-                      <button
-                        onClick={() => printReceipt(order.order_id)}
-                        className="rounded-full border border-slate-700 px-3 py-1 text-sm text-slate-300"
-                      >
-                        Print Receipt
-                      </button>
-                    </div>
-                  </div>
-                  <div className="mt-3 text-sm text-slate-400">
-                    <p>{order.items.length} items • {order.status} • KES {order.total_amount.toFixed(2)}</p>
-                    {order.phone && <p>Phone: {order.phone}</p>}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </section>
       </div>
-
-      {receiptText && (
-        <section className="bg-slate-900 rounded-xl p-6 shadow-card border border-slate-800">
-          <div className="mb-4">
-            <p className="text-sm text-slate-400">Receipt Preview</p>
-            <h3 className="font-semibold text-xl text-slate-100">Order {selectedReceipt}</h3>
-          </div>
-          <pre className="whitespace-pre-wrap break-words text-sm text-slate-200 bg-slate-950 p-4 rounded-xl border border-slate-800">{receiptText}</pre>
-        </section>
-      )}
     </div>
   )
 }

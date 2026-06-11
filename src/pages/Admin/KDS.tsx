@@ -1,13 +1,18 @@
 import React, { useEffect, useState } from 'react';
+import { Link, Navigate } from 'react-router-dom';
 import AdminHeader from '@/components/AdminHeader';
-import { getAdminToken } from '@/lib/admin-session';
-import { useToast } from '@/hooks/use-toast';
+import { getAdminToken, isAdminSessionValid } from '@/lib/admin-session';
+import { getStaffRole } from '@/lib/staff-session';
 import { getApiUrl } from '@/lib/api';
+import { getAuthToken, getAuthHeaders } from '@/lib/auth'; // Import the new getAuthToken and getAuthHeaders
+import { useToast } from '@/hooks/use-toast';
+import { ArrowLeft } from 'lucide-react';
 
 interface OrderItem {
   name: string;
   quantity: number;
   modifiers: string[];
+  is_served?: boolean; // Added for item-level status
   seat: number;
 }
 
@@ -27,6 +32,11 @@ const AdminKDS: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
   const adminToken = getAdminToken();
+  const isAdmin = adminToken && isAdminSessionValid(); // Check if admin is logged in
+  const staffRole = getStaffRole()?.toLowerCase();
+  const authToken = getAuthToken(); // Get the appropriate token
+  
+  const canAccess = isAdmin || ['chef', 'manager'].includes(staffRole || '');
 
   const fetchQueue = async (initial = false) => {
     if (initial) {
@@ -64,6 +74,11 @@ const AdminKDS: React.FC = () => {
     return () => clearInterval(interval);
   }, []);
 
+  if (!canAccess && !loading) {
+    toast({ title: "Access Denied", description: "You don't have permission to view the Kitchen Display System.", variant: "destructive" });
+    return <Navigate to="/staff" replace />;
+  }
+
   const updateOrderStatus = async (orderId: string, newStatus: string) => {
     try {
       const res = await fetch(getApiUrl(`/payments/orders/${encodeURIComponent(orderId)}/update/`), {
@@ -98,7 +113,14 @@ const AdminKDS: React.FC = () => {
 
   return (
     <div className="p-8 bg-slate-950 min-h-screen text-slate-100">
-      <AdminHeader title="Kitchen Display System" />
+      <div className="flex items-center gap-4 mb-8">
+        <Link to="/staff" className="p-2 rounded-xl bg-slate-900 border border-slate-800 text-slate-400 hover:text-white transition-all">
+          <ArrowLeft size={24} />
+        </Link>
+        <div>
+          <h1 className="font-display text-3xl text-slate-100">Kitchen Display System</h1>
+        </div>
+      </div>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {queue.length === 0 ? (
           <div className="lg:col-span-3 text-center text-slate-500 py-12">
@@ -112,7 +134,7 @@ const AdminKDS: React.FC = () => {
                 <div className="flex justify-between items-center mb-4">
                   <h3 className="font-display text-2xl text-[#d69e2e]">Order #{order.order_id.substring(0, 6)}</h3>
                   <span className={`px-3 py-1 rounded-full text-xs font-semibold uppercase ${
-                    order.status === 'preparing' ? 'bg-amber-900/30 text-amber-400' :
+                    order.status === 'preparing' || order.status === 'sent_kitchen' ? 'bg-amber-900/30 text-amber-400' : // KDS should show 'sent_kitchen' as preparing
                     order.status === 'ready' ? 'bg-blue-900/30 text-blue-400' :
                     'bg-emerald-900/30 text-emerald-400'
                   }`}>
@@ -124,7 +146,10 @@ const AdminKDS: React.FC = () => {
                   {order.items.map((item, idx) => (
                     <li key={idx} className="flex justify-between items-center text-slate-200">
                       <span className="font-semibold">{item.quantity}x {item.name}</span>
-                      {item.modifiers && item.modifiers.length > 0 && (
+                      {item.is_served && (
+                        <span className="text-xs text-emerald-400 ml-2">(Served)</span>
+                      )}
+                      {item.modifiers && item.modifiers.length > 0 && !item.is_served && (
                         <span className="text-xs text-slate-500 ml-2">({item.modifiers.join(', ')})</span>
                       )}
                     </li>

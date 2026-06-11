@@ -8,12 +8,11 @@ interface ReceiptProps {
     items: any[];
     table_number: string;
     delivery_address?: string;
-    delivery_distance_km?: number;
-    delivery_cost?: number;
     total_amount: number;
     payment_method: string;
     order_type: string;
     phone?: string;
+    delivery_distance_km?: number; // Added for delivery orders
   };
   onClose: () => void;
 }
@@ -67,12 +66,6 @@ const Receipt: React.FC<ReceiptProps> = ({ order, onClose }) => {
                 <span className="font-bold">{order.delivery_address}</span>
               </div>
             )}
-            {order.delivery_distance_km && (
-              <div className="flex justify-between">
-                <span>DISTANCE:</span>
-                <span className="font-bold">{order.delivery_distance_km.toFixed(1)} km</span>
-              </div>
-            )}
             <div className="flex justify-between">
               <span>PAYMENT:</span>
               <span className="font-bold uppercase">{order.payment_method}</span>
@@ -104,12 +97,6 @@ const Receipt: React.FC<ReceiptProps> = ({ order, onClose }) => {
               <span>TOTAL</span>
               <span>{formatCurrency(order.total_amount)}</span>
             </div>
-            {order.delivery_cost && order.delivery_cost > 0 && (
-              <div className="flex justify-between text-xs text-slate-600 italic">
-                <span>(incl. delivery fee)</span>
-                <span>{formatCurrency(order.delivery_cost)}</span>
-              </div>
-            )}
           </div>
 
           {/* Dynamic QR Code for Ordering */}

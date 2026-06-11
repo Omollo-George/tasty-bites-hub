@@ -1,8 +1,7 @@
-import { useState, useEffect, useRef, useMemo } from "react";
-import { Flame, BadgeCheck } from "lucide-react";
+import { useState, useEffect, useRef, useMemo, useCallback } from "react";
+import { Flame, BadgeCheck, Sparkles, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import Receipt from "./Receipt";
-import DeliveryMap from "./DeliveryMap";
 import { getApiUrl } from "@/lib/api";
 import Restaurant3DBackground from "../../Restaurant3DBackground";
 
@@ -14,6 +13,7 @@ type MenuItem = {
   popular: boolean;
   spicy?: boolean;
   description: string;
+  image_url?: string; // Added image_url for consistency
 };
 
 type CartItem = {
@@ -62,15 +62,12 @@ const MenuSection = () => {
   const [orderType, setOrderType] = useState<"table" | "takeaway" | "delivery">("table");
   const [paymentMethod, setPaymentMethod] = useState<"mpesa" | "cash">("mpesa");
   const [phoneNumber, setPhoneNumber] = useState("");
-  const [deliveryAddress, setDeliveryAddress] = useState("");
   const [isQrFlow, setIsQrFlow] = useState(false);
+  const [deliveryAddress, setDeliveryAddress] = useState("");
   const [processing, setProcessing] = useState(false);
   const [awaitingMpesaConfirm, setAwaitingMpesaConfirm] = useState(false);
   const [lastOrder, setLastOrder] = useState<any>(null);
   const [currentOrderId, setCurrentOrderId] = useState<string | null>(null);
-  const [deliveryDistanceKm, setDeliveryDistanceKm] = useState<number | null>(null);
-  const [deliveryRatePerKm, setDeliveryRatePerKm] = useState<number>(100);
-  const [minDeliveryFee, setMinDeliveryFee] = useState<number>(50);
   const pollTimerRef = useRef<any>(null);
   const safetyTimeoutRef = useRef<any>(null);
 
@@ -88,18 +85,15 @@ const MenuSection = () => {
 
     const load = async () => {
       try {
-        const [configRes, menuRes, deliveryRes] = await Promise.all([
+        const [configRes, menuRes] = await Promise.all([
           fetch(getApiUrl("/payments/config/")),
           fetch(getApiUrl("/payments/menu-items/")),
-          fetch(getApiUrl("/payments/config/")).catch(() => null),
         ]);
 
         if (configRes.ok) {
           if (!configRes.headers.get("content-type")?.includes("application/json")) return;
           const d = await configRes.json();
           if (d?.conversion_rate) setRate(d.conversion_rate);
-          if (d?.delivery_rate_per_km) setDeliveryRatePerKm(d.delivery_rate_per_km);
-          if (d?.min_delivery_fee) setMinDeliveryFee(d.min_delivery_fee);
         }
 
         if (menuRes.ok) {
@@ -162,6 +156,7 @@ const MenuSection = () => {
     setCart([]);
     setSessionOrders([]);
     setTableNumber("");
+    setDeliveryAddress("");
     setPhoneNumber("");
     setCurrentOrderId(null);
   };
@@ -219,15 +214,10 @@ const MenuSection = () => {
   const sessionSubtotal = sessionOrders.reduce((sum, order) => 
     sum + order.reduce((s, i) => s + (i.price * i.quantity), 0), 0);
   const cartSubtotal = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
-  const subtotal = sessionSubtotal + cartSubtotal;
+  const foodSubtotal = sessionSubtotal + cartSubtotal;
 
-  const deliveryCost = useMemo(() => {
-    if (orderType !== "delivery" || deliveryDistanceKm === null) return 0;
-    const calculatedCost = Math.max(deliveryDistanceKm * deliveryRatePerKm, minDeliveryFee);
-    return calculatedCost;
-  }, [orderType, deliveryDistanceKm, deliveryRatePerKm, minDeliveryFee]);
+  const totalBeforePayment = foodSubtotal * rate;
 
-  const totalBeforePayment = (subtotal + deliveryCost) * rate;
   const handleCreateOrder = async () => {
     if (cart.length === 0 && sessionOrders.length === 0) {
       toast({ title: "Add items first", description: "Build a cart before creating an order." });
@@ -240,7 +230,7 @@ const MenuSection = () => {
     }
 
     if (orderType === "delivery" && !deliveryAddress.trim()) {
-      toast({ title: "Delivery address required", description: "Enter your delivery address." });
+      toast({ title: "Delivery address required", description: "Enter the address for this order." });
       return;
     }
 
@@ -254,6 +244,8 @@ const MenuSection = () => {
       toast({ title: "Invalid phone number", description: "Enter a valid phone number (e.g., 2547XXXXXXXX)." });
       return;
     }
+
+    setLastOrder(null);
 
     setProcessing(true);
 
@@ -273,8 +265,6 @@ const MenuSection = () => {
           })),
           table_number: orderType === "table" ? tableNumber.trim() : "",
           delivery_address: orderType === "delivery" ? deliveryAddress.trim() : "",
-          delivery_distance_km: orderType === "delivery" ? deliveryDistanceKm : null,
-          delivery_cost: orderType === "delivery" ? deliveryCost : 0,
           split_count: 1,
           phone: cleanedPhone,
           split_phones: [],
@@ -300,9 +290,7 @@ const MenuSection = () => {
       const receiptData = { 
         ...data, 
         items: allItems, 
-        total_amount: totalBeforePayment,
-        delivery_cost: deliveryCost,
-        delivery_distance_km: deliveryDistanceKm,
+        total_amount: data.total_amount || totalBeforePayment,
       };
 
       if (paymentMethod === "mpesa") {
@@ -315,6 +303,9 @@ const MenuSection = () => {
         }
 
         const checkoutId = data.stk_response.CheckoutRequestID;
+        setProcessing(false);
+        setAwaitingMpesaConfirm(true);
+
         let transactionSettled = false;
 
         toast({
@@ -340,6 +331,7 @@ const MenuSection = () => {
                 }
                 
                 setProcessing(false);
+                setAwaitingMpesaConfirm(false);
                 setCurrentOrderId(null);
                 setLastOrder(receiptData);
                 toast({ title: "Payment Confirmed", description: "Receipt generated successfully." });
@@ -358,6 +350,7 @@ const MenuSection = () => {
                 }
 
                 setProcessing(false);
+                setAwaitingMpesaConfirm(false);
                 setCurrentOrderId(null);
                 toast({
                   title: "Payment Failed",
@@ -373,12 +366,12 @@ const MenuSection = () => {
           }
 
           if (!transactionSettled && pollTimerRef.current) {
-            pollTimerRef.current = window.setTimeout(checkPaymentStatus, 800);
+            pollTimerRef.current = window.setTimeout(checkPaymentStatus, 500);
           }
         };
 
         // Start polling quickly to catch the callback as soon as it arrives.
-        pollTimerRef.current = window.setTimeout(checkPaymentStatus, 500);
+        pollTimerRef.current = window.setTimeout(checkPaymentStatus, 200);
 
         // 1-minute safety timeout to stop polling and discard uncompleted transaction
         safetyTimeoutRef.current = window.setTimeout(() => {
@@ -387,6 +380,7 @@ const MenuSection = () => {
             pollTimerRef.current = null;
             safetyTimeoutRef.current = null;
             setProcessing(false);
+            setAwaitingMpesaConfirm(false);
             setCurrentOrderId(null);
             toast({
               title: "Payment Timeout",
@@ -398,6 +392,7 @@ const MenuSection = () => {
 
       } else {
         // Cash payment - generate immediately as it is considered settled
+        setAwaitingMpesaConfirm(false);
         setLastOrder(receiptData);
         toast({
           title: "Order created",
@@ -412,26 +407,25 @@ const MenuSection = () => {
       const message = error instanceof Error ? error.message : String(error);
       toast({ title: "Order error", description: `Unable to reach backend: ${message}` });
       setProcessing(false);
+      setAwaitingMpesaConfirm(false);
     } finally {
       // Processing state is now handled manually in all logic paths above
     }
   };
 
   return (
-    <section id="menu" className="py-24 bg-gradient-to-br from-gray-900 to-slate-800 text-slate-200 relative overflow-hidden">
+    <section id="menu" className="py-24 bg-gradient-to-br from-gray-900 to-slate-800 text-slate-200 relative overflow-hidden scroll-mt-20">
       <div className="absolute inset-0 z-0 pointer-events-none">
         <Restaurant3DBackground />
       </div>
       {lastOrder && (
         <Receipt order={lastOrder} onClose={() => setLastOrder(null)} />
       )}
-
       <div className="container mx-auto px-4 relative z-10">
         <div className="text-center mb-12">
           <p className="font-body text-primary text-sm font-semibold uppercase tracking-[0.2em] mb-2">Our Menu</p>
           <h2 className="font-display text-5xl md:text-6xl text-slate-100">TABLE-BASED POS</h2>
         </div>
-
         <div className="flex flex-wrap justify-center gap-3 mb-12">
           {categories.map((cat) => (
             <button
@@ -464,7 +458,6 @@ const MenuSection = () => {
                     {item.popular && <BadgeCheck className="w-4 h-4 text-secondary" />}
                   </div>
                 </div>
-
                 <p className="text-slate-400 text-sm mb-4">{item.description}</p>
 
                 <div className="flex items-center justify-between">
@@ -483,7 +476,6 @@ const MenuSection = () => {
                             className="w-20 rounded-full border border-slate-700 bg-slate-800 px-4 py-1.5 text-sm text-slate-100 outline-none focus:ring-2 focus:ring-primary"
                           />
                         </div>
-                        
                         <div className="flex flex-wrap gap-1.5">
                           {COMMON_MODIFIERS.map((mod) => {
                             const isSelected = activeModifiers.split(",").map(m => m.trim()).filter(Boolean).includes(mod);
@@ -508,14 +500,14 @@ const MenuSection = () => {
                         <button
                           type="button"
                           onClick={() => addItemToCart(item.name)}
-                          className="bg-[#1a365d] text-[#d69e2e] border border-[#d69e2e]/30 px-4 py-2 rounded-full text-sm font-semibold hover:scale-105 transition-transform"
+                          className="bg-[#0A1A2F] text-[#C9A961] border border-[#C9A961]/30 px-4 py-2 rounded-full text-sm font-semibold hover:scale-105 transition-transform"
                         >
                           Add to Cart
                         </button>
                         <button
                           type="button"
                           onClick={() => setActiveItem(null)}
-                          className="rounded-full border border-slate-700 bg-slate-800 px-4 py-2 text-sm font-semibold text-slate-300 hover:bg-slate-700 transition-colors"
+                          className="rounded-full border border-[#1F2937] bg-[#1F2937] px-4 py-2 text-sm font-semibold text-[#E5E7EB] hover:bg-[#0A1A2F] transition-colors"
                         >
                           Cancel
                         </button>
@@ -525,7 +517,7 @@ const MenuSection = () => {
                     <button
                       type="button"
                       onClick={() => openAddItem(item.name)}
-                      className="bg-[#1a365d] text-[#d69e2e] border border-[#d69e2e]/30 px-5 py-2 rounded-full text-sm font-semibold transition-all hover:scale-105"
+                      className="bg-[#0A1A2F] text-[#C9A961] border border-[#C9A961]/30 px-5 py-2 rounded-full text-sm font-semibold transition-all hover:scale-105"
                     >
                       Add to Cart
                     </button>
@@ -534,21 +526,19 @@ const MenuSection = () => {
               </div>
             ))}
           </div>
-
-          <aside className="bg-slate-900 rounded-xl p-6 shadow-card border border-slate-800">
+          <aside className="bg-[#1F2937] rounded-xl p-6 shadow-card border border-[#1F2937]">
             <div className="mb-6">
-              <p className="text-sm text-slate-400">Session Management</p>
-              <h3 className="font-display text-2xl text-slate-100">Table Billing</h3>
+              <p className="text-sm text-[#E5E7EB]">Session Management</p>
+              <h3 className="font-display text-2xl text-[#E5E7EB]">Table Billing</h3>
             </div>
-
             {cart.length === 0 && sessionOrders.length === 0 ? (
-              <p className="text-slate-400">Select items and build a multi-order session.</p>
+              <p className="text-[#E5E7EB]">Select items and build a multi-order session.</p>
             ) : (
               <div className="space-y-4">
                 {sessionOrders.map((orderItems, oIdx) => (
-                  <div key={oIdx} className="rounded-xl border-l-4 border-[#d69e2e] p-4 bg-slate-950/50 mb-2">
+                  <div key={oIdx} className="rounded-xl border-l-4 border-[#C9A961] p-4 bg-[#0A1A2F]/50 mb-2">
                     <div className="flex justify-between items-center mb-2">
-                      <p className="text-[10px] font-bold text-[#d69e2e] uppercase tracking-tighter">Saved Group #{oIdx + 1}</p>
+                      <p className="text-[10px] font-bold text-[#C9A961] uppercase tracking-tighter">Saved Group #{oIdx + 1}</p>
                       <button onClick={() => removeSessionOrder(oIdx)} className="text-[10px] text-destructive hover:underline">Discard Group</button>
                     </div>
                     {orderItems.map((item, iIdx) => (
@@ -559,20 +549,19 @@ const MenuSection = () => {
                     ))}
                   </div>
                 ))}
-
                 {cart.length > 0 && (
                   <div className="space-y-3">
-                    <p className="text-[10px] font-bold text-slate-500 uppercase">Active Selection</p>
+                    <p className="text-[10px] font-bold text-[#E5E7EB] uppercase">Active Selection</p>
                     {cart.map((item, index) => (
-                      <div key={`${item.name}-${index}`} className="rounded-xl border border-slate-800 p-4 bg-slate-950">
+                      <div key={`${item.name}-${index}`} className="rounded-xl border border-[#1F2937] p-4 bg-[#0A1A2F]">
                         <div className="flex items-center justify-between gap-3">
                           <div>
-                            <p className="font-semibold text-slate-100">{item.name}</p>
-                            <p className="text-sm text-slate-400">
+                            <p className="font-semibold text-[#E5E7EB]">{item.name}</p>
+                            <p className="text-sm text-[#E5E7EB]">
                               {item.quantity} x {formatCurrency(item.price)}
                             </p>
                             {item.modifiers.length > 0 && (
-                              <p className="text-xs text-slate-500 mt-1">Modifiers: {item.modifiers.join(", ")}</p>
+                              <p className="text-xs text-[#E5E7EB] mt-1">Modifiers: {item.modifiers.join(", ")}</p>
                             )}
                           </div>
                           <button type="button" onClick={() => removeCartItem(index)} className="text-sm text-destructive">
@@ -584,32 +573,23 @@ const MenuSection = () => {
                     <button
                       type="button"
                       onClick={addCartToSession}
-                      className="w-full rounded-full border border-[#d69e2e] text-[#d69e2e] py-2 text-xs font-bold hover:bg-[#d69e2e] hover:text-white transition-all"
+                      className="w-full rounded-full border border-[#C9A961] text-[#C9A961] py-2 text-xs font-bold hover:bg-[#C9A961] hover:text-[#0A1A2F] transition-all"
                     >
                       Add to Grouped Bill
                     </button>
                   </div>
                 )}
-
                 <div className="grid gap-3">
                   <div className="space-y-2">
-                    <label className="text-sm font-semibold text-slate-300">Order Type</label>
+                    <label className="text-sm font-semibold text-[#E5E7EB]">Order Type</label>
                     <div className="flex gap-2 flex-wrap">
                       {(["table", "takeaway", "delivery"] as const).map((type) => (
                         <button
                           key={type}
                           type="button"
-                          onClick={() => {
-                            setOrderType(type);
-                            if (type === "delivery") {
-                              setDeliveryAddress("");
-                              setDeliveryDistanceKm(null);
-                            }
-                          }}
+                          onClick={() => setOrderType(type)}
                           className={`flex-1 min-w-[80px] rounded-full px-4 py-2 text-xs font-semibold border transition-all ${
-                            orderType === type
-                              ? "bg-primary text-primary-foreground border-primary"
-                              : "bg-slate-800 text-slate-400 border-slate-700 hover:bg-slate-700"
+                            orderType === type ? "bg-[#C9A961] text-[#0A1A2F] border-[#C9A961]" : "bg-[#1F2937] text-[#E5E7EB] border-[#1F2937] hover:bg-[#0A1A2F]"
                           }`}
                         >
                           {type === "table" ? "Dine In" : type === "takeaway" ? "Takeaway" : "Delivery"}
@@ -617,35 +597,32 @@ const MenuSection = () => {
                       ))}
                     </div>
                   </div>
-
                   {orderType === "table" && (
                     <div className="space-y-1">
-                      <label className="text-sm font-semibold text-slate-300">Table Number</label>
+                      <label className="text-sm font-semibold text-[#E5E7EB]">Table Number</label>
                       <input
                         type="text"
                         value={tableNumber}
                         onChange={(event) => setTableNumber(event.target.value)}
                         placeholder="e.g. 3"
-                        className="w-full rounded-full border border-slate-700 bg-slate-800 px-4 py-2 text-sm text-slate-100 outline-none focus:ring-2 focus:ring-primary"
+                        className="w-full rounded-full border border-[#1F2937] bg-[#1F2937] px-4 py-2 text-sm text-[#E5E7EB] outline-none focus:ring-2 focus:ring-[#C9A961]"
                       />
                     </div>
                   )}
-
                   {orderType === "delivery" && (
                     <div className="space-y-1">
-                      <label className="text-sm font-semibold text-slate-300">Delivery Address <span className="text-destructive">*</span></label>
+                      <label className="text-sm font-semibold text-[#E5E7EB]">Delivery Address <span className="text-destructive">*</span></label>
                       <input
                         type="text"
                         value={deliveryAddress}
                         onChange={(event) => setDeliveryAddress(event.target.value)}
-                        placeholder="e.g. 123 Main Street, Kisii"
-                        className="w-full rounded-full border border-slate-700 bg-slate-800 px-4 py-2 text-sm text-slate-100 outline-none focus:ring-2 focus:ring-primary"
+                        placeholder="e.g. Near university gate, yellow house..."
+                        className="w-full rounded-full border border-[#1F2937] bg-[#1F2937] px-4 py-2 text-sm text-[#E5E7EB] outline-none focus:ring-2 focus:ring-[#C9A961]"
                       />
                     </div>
                   )}
-
                   <div className="space-y-2">
-                    <label className="text-sm font-semibold text-slate-300">Payment Method</label>
+                    <label className="text-sm font-semibold text-[#E5E7EB]">Payment Method</label>
                     <div className="flex gap-2">
                       {(isQrFlow ? (["mpesa"] as const) : (["mpesa", "cash"] as const)).map((method) => (
                         <button
@@ -653,9 +630,7 @@ const MenuSection = () => {
                           type="button"
                           onClick={() => setPaymentMethod(method)}
                           className={`flex-1 rounded-full px-4 py-2 text-xs font-semibold border transition-all ${
-                            paymentMethod === method
-                              ? "bg-primary text-primary-foreground border-primary"
-                              : "bg-slate-800 text-slate-400 border-slate-700 hover:bg-slate-700"
+                            paymentMethod === method ? "bg-[#C9A961] text-[#0A1A2F] border-[#C9A961]" : "bg-[#1F2937] text-[#E5E7EB] border-[#1F2937] hover:bg-[#0A1A2F]"
                           }`}
                         >
                           {method === "mpesa" ? "M-Pesa" : "Cash"}
@@ -666,8 +641,7 @@ const MenuSection = () => {
                       <p className="text-xs text-amber-300">QR orders must be paid via M-Pesa only.</p>
                     )}
                   </div>
-
-                  <label className="text-sm font-semibold text-slate-300">
+                  <label className="text-sm font-semibold text-[#E5E7EB]">
                     {paymentMethod === "mpesa" ? "M-Pesa Phone" : "Phone (optional)"}
                     {paymentMethod === "mpesa" && <span className="text-destructive"> *</span>}
                   </label>
@@ -677,57 +651,32 @@ const MenuSection = () => {
                     value={phoneNumber}
                     onChange={(e) => setPhoneNumber(e.target.value)}
                     placeholder="2547XXXXXXXX"
-                    className="w-full rounded-full border border-slate-700 bg-slate-800 px-4 py-2 text-sm text-slate-100 outline-none focus:ring-2 focus:ring-primary"
+                    className="w-full rounded-full border border-[#1F2937] bg-[#1F2937] px-4 py-2 text-sm text-[#E5E7EB] outline-none focus:ring-2 focus:ring-[#C9A961]"
                   />
                 </div>
-
-                <div className={orderType === "delivery" ? "mt-6" : "hidden"}>
-                  <DeliveryMap 
-                    onDistanceChange={setDeliveryDistanceKm}
-                    enabled={orderType === "delivery"}
-                  />
-                </div>
-
-                <div className="space-y-2 pt-4 border-t border-slate-800">
-                  <div className="flex items-center justify-between text-sm text-slate-400">
-                    <span>Subtotal</span>
-                    <span>{formatCurrency(subtotal * rate)}</span>
+                <div className="space-y-2 pt-4 border-t border-[#1F2937]">
+                  <p className="text-[10px] uppercase tracking-widest text-slate-500 font-bold mb-2">Order Review</p>
+                  <div className="flex items-center justify-between text-sm text-[#E5E7EB]">
+                    <span>Food Total</span>
+                    <span>{formatCurrency(foodSubtotal * rate)}</span>
                   </div>
-                  {orderType === "delivery" && deliveryDistanceKm !== null && (
-                    <div className="flex items-center justify-between text-sm text-slate-400">
-                      <span>Delivery ({deliveryDistanceKm.toFixed(1)} km)</span>
-                      <span>{formatCurrency(deliveryCost * rate)}</span>
-                    </div>
-                  )}
-                  {orderType === "delivery" && deliveryDistanceKm === null && (
-                    <p className="text-xs text-amber-300">Enable location to calculate delivery cost.</p>
-                  )}
-                  <div className="flex items-center justify-between text-base font-semibold text-slate-100 pt-2 border-t border-slate-800">
+                  <div className="flex items-center justify-between text-base font-semibold text-[#E5E7EB] pt-2 border-t border-[#1F2937]">
                     <span>Total</span>
-                    <span>{formatCurrency(totalBeforePayment)}</span>
+                      <span className="text-[#C9A961]">
+                      {formatCurrency(totalBeforePayment)}
+                    </span>
                   </div>
                 </div>
-
                 <button
                   type="button"
                   onClick={async () => {
-                    // Two-step confirm for M-Pesa to avoid accidental STK triggers
-                    if (paymentMethod === 'mpesa' && !awaitingMpesaConfirm && !processing) {
-                      setAwaitingMpesaConfirm(true);
-                      // reset the confirmation after 6 seconds
-                      window.setTimeout(() => setAwaitingMpesaConfirm(false), 6000);
-                      return;
-                    }
-
-                    // proceed with payment (either second click for mpesa or single click for cash)
                     await handleCreateOrder();
                   }}
-                  disabled={processing || (orderType === "delivery" && deliveryDistanceKm === null)}
-                  className="w-full rounded-full bg-[#1a365d] text-[#d69e2e] border border-[#d69e2e]/30 px-5 py-3 text-sm font-semibold transition-all hover:scale-105 disabled:cursor-wait disabled:opacity-70"
+                    disabled={processing || awaitingMpesaConfirm}
+                  className="w-full rounded-full bg-[#0A1A2F] text-[#C9A961] border border-[#C9A961]/30 px-5 py-3 text-sm font-semibold transition-all hover:scale-105 disabled:cursor-not-allowed disabled:opacity-70"
                 >
-                  {processing ? "Processing consolidated payment..." : awaitingMpesaConfirm && paymentMethod === 'mpesa' ? 'Confirm Pay (M-Pesa)' : `Pay ${formatCurrency(totalBeforePayment)}`}
+                  {processing ? "Initiating payment..." : awaitingMpesaConfirm ? 'Awaiting M-Pesa confirmation...' : `Pay ${formatCurrency(totalBeforePayment)}`}
                 </button>
-
                 {processing && paymentMethod === "mpesa" && (
                   <button
                     type="button"
@@ -745,5 +694,4 @@ const MenuSection = () => {
     </section>
   );
 };
-
 export default MenuSection

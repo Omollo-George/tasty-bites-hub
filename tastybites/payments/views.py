@@ -3,19 +3,22 @@ import csv
 import datetime
 import json
 import requests
+import re
 import uuid
 from decimal import Decimal, InvalidOperation
 
 from django.conf import settings
 from django.contrib.auth.hashers import check_password, make_password
+from django.core.cache import cache
+from django.core.files.storage import default_storage # type: ignore
 from django.db.models import Q, Sum, F, Count, ExpressionWrapper, DecimalField, Max
-from django.db.models.functions import ExtractHour, ExtractWeekDay
+from django.db.models.functions import ExtractHour, ExtractWeekDay, TruncDate
 from django.http import JsonResponse, HttpResponseBadRequest, HttpResponseServerError, HttpResponse
 from django.utils import timezone
 from django.core.mail import send_mail
 from django.views.decorators.csrf import csrf_exempt
 from datetime import timedelta
-from .models import AdminToken, AdminUser, AppSettings, MenuItem, Transaction, Table, Order, OrderItem, WastageLog, Employee, StockLog, AdminSessionLog
+from .models import AdminToken, AdminUser, AppSettings, MenuItem, Transaction, Table, Order, OrderItem, WastageLog, Employee, StockLog, AdminSessionLog, MiscellaneousExpense, StaffToken, Review
 
 
 def _normalize_phone(ph: str) -> str:
@@ -45,15 +48,30 @@ def _to_display_currency(amount):
 
 
 def _get_oauth_token():
+    access_token = cache.get('mpesa_access_token')
+    if access_token:
+        return access_token
+
     if getattr(settings, 'MPESA_ENVIRONMENT', 'sandbox') == 'sandbox':
         oauth_url = 'https://sandbox.safaricom.co.ke/oauth/v1/generate?grant_type=client_credentials'
     else:
         oauth_url = 'https://api.safaricom.co.ke/oauth/v1/generate?grant_type=client_credentials'
 
+    # Ensure credentials are clean of whitespace
+    key = settings.MPESA_CONSUMER_KEY.strip()
+    secret = settings.MPESA_CONSUMER_SECRET.strip()
+
     try:
-        resp = requests.get(oauth_url, auth=(settings.MPESA_CONSUMER_KEY, settings.MPESA_CONSUMER_SECRET), timeout=10)
+        session = requests.Session()
+        headers = {'Accept': 'application/json', 'User-Agent': 'TastyBites/1.0'}
+        resp = session.get(oauth_url, auth=(key, secret), headers=headers, timeout=15)
         resp.raise_for_status()
-        return resp.json().get('access_token')
+        token_data = resp.json()
+        access_token = token_data.get('access_token')
+        # Safaricom tokens usually expire in 3600s. Cache for slightly less (3540s).
+        expires_in = int(token_data.get('expires_in', 3600))
+        cache.set('mpesa_access_token', access_token, expires_in - 60)
+        return access_token
     except requests.RequestException as e:
         raise Exception(f"M-Pesa API Auth failed: {e}")
     except json.JSONDecodeError:
@@ -90,6 +108,72 @@ def _get_admin_token(request):
 def _is_admin(request):
     return bool(_get_admin_token(request))
 
+def _get_staff_token(request):
+    token = _get_token_from_request(request)
+    if not token:
+        return None
+    # Admin bypass: If it's a valid admin token, allow it as staff
+    if _get_admin_token(request):
+        return True
+    staff_token = StaffToken.objects.filter(token=token).first()
+    if staff_token and staff_token.is_valid():
+        return staff_token
+    return None
+
+def _is_staff(request):
+    return bool(_get_staff_token(request))
+
+def _get_period_dates(period_type: str, date_str: str):
+    """
+    Calculates start and end dates for a report period based on type and a reference date.
+    """
+    today = timezone.localdate() # Use localdate for consistent day boundaries
+    selected_date = None
+    if date_str:
+        try:
+            selected_date = datetime.datetime.strptime(date_str, '%Y-%m-%d').date()
+        except ValueError:
+            pass # Fallback to today if date_str is invalid
+
+    if not selected_date:
+        selected_date = today
+
+    start_date = None
+    end_date = None
+    label = ""
+
+    if period_type == 'day':
+        start_date = timezone.make_aware(datetime.datetime.combine(selected_date, datetime.time.min))
+        end_date = timezone.make_aware(datetime.datetime.combine(selected_date, datetime.time.max))
+        label = selected_date.strftime('%Y-%m-%d')
+    elif period_type == 'week':
+        # Find the Monday of the week containing selected_date
+        # isoweekday() returns 1 for Monday, 7 for Sunday
+        monday_of_week = selected_date - timedelta(days=selected_date.isoweekday() - 1)
+        sunday_of_week = monday_of_week + timedelta(days=6)
+        start_date = timezone.make_aware(datetime.datetime.combine(monday_of_week, datetime.time.min))
+        end_date = timezone.make_aware(datetime.datetime.combine(sunday_of_week, datetime.time.max))
+        label = f"Week of {monday_of_week.strftime('%Y-%m-%d')}"
+    elif period_type == 'month':
+        start_date = timezone.make_aware(datetime.datetime.combine(selected_date.replace(day=1), datetime.time.min))
+        next_month = selected_date.replace(day=28) + timedelta(days=4) # Go to 4th day of next month
+        last_day_of_month = next_month - timedelta(days=next_month.day)
+        end_date = timezone.make_aware(datetime.datetime.combine(last_day_of_month, datetime.time.max))
+        label = selected_date.strftime('%Y-%m')
+    elif period_type == 'year':
+        start_date = timezone.make_aware(datetime.datetime.combine(selected_date.replace(month=1, day=1), datetime.time.min))
+        end_date = timezone.make_aware(datetime.datetime.combine(selected_date.replace(month=12, day=31), datetime.time.max))
+        label = selected_date.strftime('%Y')
+    else: # Default to current week if period_type is unknown
+        # Fallback to current week (Monday-Sunday)
+        monday_of_week = today - timedelta(days=today.isoweekday() - 1)
+        sunday_of_week = monday_of_week + timedelta(days=6)
+        start_date = timezone.make_aware(datetime.datetime.combine(monday_of_week, datetime.time.min))
+        end_date = timezone.make_aware(datetime.datetime.combine(sunday_of_week, datetime.time.max))
+        label = f"Week of {monday_of_week.strftime('%Y-%m-%d')}"
+
+    return start_date, end_date, label
+
 def _execute_stk_push(msisdn, amount, account_ref, tx):
     """Helper to trigger the actual Safaricom API request."""
     shortcode = getattr(settings, 'MPESA_EXPRESS_SHORTCODE', getattr(settings, 'MPESA_SHORTCODE', ''))
@@ -120,16 +204,20 @@ def _execute_stk_push(msisdn, amount, account_ref, tx):
 
     stk_url = 'https://sandbox.safaricom.co.ke/mpesa/stkpush/v1/processrequest' if getattr(settings, 'MPESA_ENVIRONMENT', 'sandbox') == 'sandbox' else 'https://api.safaricom.co.ke/mpesa/stkpush/v1/processrequest'
 
-    headers = {'Authorization': f'Bearer {token}', 'Content-Type': 'application/json'}
-    account_reference = account_ref.replace(' ', '')[:12] or 'TASTYBITES'
-    transaction_desc = f"Tasty Bites {account_ref}"[:20].strip() or 'Payment'
+    session = requests.Session()
+    headers = {'Authorization': f'Bearer {token}', 'Content-Type': 'application/json', 'Accept': 'application/json', 'User-Agent': 'TastyBites/1.0'}
+    
+    # Safaricom strictly requires alphanumeric characters with NO spaces for AccountReference
+    # We use regex to strip everything except letters and numbers
+    account_reference = re.sub(r'[^a-zA-Z0-9]', '', account_ref)[:12] or 'TASTYBITES'
+    transaction_desc = re.sub(r'[^a-zA-Z0-9]', '', f"Pay{account_ref}")[:20] or 'Payment'
 
     body = {
         'BusinessShortCode': shortcode,
         'Password': password,
         'Timestamp': timestamp,
         'TransactionType': 'CustomerPayBillOnline',
-        'Amount': max(1, int(amount)), # Ensure amount is at least 1
+        'Amount': int(float(amount)) if float(amount) >= 1 else 1, # Safaricom requires an integer
         'PartyA': msisdn,
         'PartyB': shortcode,
         'PhoneNumber': msisdn,
@@ -139,7 +227,7 @@ def _execute_stk_push(msisdn, amount, account_ref, tx):
     }
 
     try:
-        r = requests.post(stk_url, json=body, headers=headers, timeout=30)
+        r = session.post(stk_url, json=body, headers=headers, timeout=30)
         # Safaricom often returns 400/401/500 with a JSON body explaining why
         try:
             resp_json = r.json()
@@ -167,7 +255,7 @@ def _execute_stk_push(msisdn, amount, account_ref, tx):
             error_msg = (
                 resp_json.get('errorMessage') or 
                 resp_json.get('ResponseDescription') or 
-                f"M-Pesa rejected request (Status {r.status_code})"
+                f"M-Pesa server error (Status {r.status_code}). Please verify your Daraja App credentials and environment settings."
             )
             return {'error': 'stk_rejected', 'message': error_msg, 'details': resp_json}, 400
     except Exception as e:
@@ -189,9 +277,9 @@ def stk_push(request):
 
     phone = payload.get('phone')
     try:
-        amount = int(float(payload.get('amount') or 1))
+        amount = Decimal(str(payload.get('amount') or '1'))
     except (ValueError, TypeError):
-        amount = 1
+        amount = Decimal('1.00')
 
     account_ref = str(payload.get('item') or 'Order')
     callback_url = getattr(settings, 'MPESA_CALLBACK_URL', '')
@@ -263,7 +351,7 @@ def stk_callback(request):
             merchant_request_id=merchant_id,
             checkout_request_id=checkout_id,
             phone='',
-            amount=0,
+            amount=Decimal('0.00'),
             item='callback',
             status='success' if result_code == 0 else 'failed',
             method=Transaction.METHOD_M_PESA,
@@ -321,19 +409,68 @@ def admin_signup(request):
     if AdminUser.objects.filter(username=username).exists():
         return JsonResponse({'error': 'username already exists'}, status=400)
 
-    user = AdminUser(username=username)
-    user.set_password(password)
-    user.save()
+    try:
+        user = AdminUser(username=username)
+        user.set_password(password)
+        user.save()
 
-    if not users_exist:
-        log = AdminSessionLog.objects.create(user=user)
-        # Set initial expiry to 4 hours
-        expiry = timezone.now() + timedelta(hours=4)
-        token = AdminToken.objects.create(user=user, session_log=log, expires_at=expiry)
-        return JsonResponse({'token': token.token, 'username': user.username})
+        if not users_exist:
+            log = AdminSessionLog.objects.create(user=user)
+            # Set initial expiry to 4 hours
+            expiry = timezone.now() + timedelta(hours=4)
+            token = AdminToken.objects.create(user=user, session_log=log, expires_at=expiry)
+            return JsonResponse({'token': token.token, 'username': user.username})
+    except Exception as e:
+        return JsonResponse({
+            'error': f'Signup failed: {str(e)}. Please ensure migrations are applied with "python manage.py migrate".'
+        }, status=500)
 
     return JsonResponse({'ok': True, 'username': user.username})
 
+
+@csrf_exempt
+def upload_image(request):
+    """Handles image file uploads for menu items."""
+    if request.method != 'POST':
+        return HttpResponseBadRequest('Only POST allowed')
+    if not _is_admin(request):
+        return JsonResponse({'error': 'unauthorized'}, status=403)
+    
+    image_file = request.FILES.get('image')
+    if not image_file:
+        return JsonResponse({'error': 'no_image_provided'}, status=400)
+    
+    path = default_storage.save(f'menu_items/{uuid.uuid4().hex}_{image_file.name}', image_file)
+    url = request.build_absolute_uri(settings.MEDIA_URL + path)
+    return JsonResponse({'url': url})
+
+@csrf_exempt
+def staff_signin(request):
+    if request.method != 'POST':
+        return HttpResponseBadRequest('Only POST allowed')
+    try:
+        payload = json.loads(request.body.decode('utf-8'))
+    except Exception:
+        return JsonResponse({'error': 'Invalid JSON'}, status=400)
+
+    username = (payload.get('username') or '').strip()
+    password = (payload.get('password') or '').strip()
+
+    if not username or not password:
+        return JsonResponse({'error': 'username and password are required'}, status=400)
+
+    emp = Employee.objects.filter(username=username).first()
+    if not emp or not emp.check_password(password):
+        return JsonResponse({'error': 'Invalid credentials.'}, status=401)
+
+    expiry = timezone.now() + timedelta(hours=8)
+    token = StaffToken.objects.create(employee=emp, expires_at=expiry)
+    
+    return JsonResponse({
+        'token': token.token,
+        'name': emp.name,
+        'role': emp.role
+    })
 
 @csrf_exempt
 def admin_signin(request):
@@ -351,56 +488,59 @@ def admin_signin(request):
     if not username or not password:
         return JsonResponse({'error': 'username and password are required'}, status=400)
 
-    user = AdminUser.objects.filter(username=username).first()
-    lockout_length = timedelta(minutes=5)
-    max_attempts = 3
+    try:
+        user = AdminUser.objects.filter(username=username).first()
+        lockout_length = timedelta(minutes=5)
+        max_attempts = 3
 
-    if user:
-        if user.lockout_until and user.lockout_until > timezone.now():
-            remaining = int((user.lockout_until - timezone.now()).total_seconds())
-            return JsonResponse(
-                {
-                    'error': 'Too many failed attempts. Please wait before signing in again.',
-                    'lockout_seconds': remaining,
-                },
-                status=429,
-            )
-
-    if not user or not user.check_password(password):
         if user:
-            user.failed_login_attempts += 1
-            if user.failed_login_attempts >= max_attempts:
-                user.lockout_until = timezone.now() + lockout_length
-                user.failed_login_attempts = 0
-                user.save(update_fields=['failed_login_attempts', 'lockout_until'])
+            if user.lockout_until and user.lockout_until > timezone.now():
+                remaining = int((user.lockout_until - timezone.now()).total_seconds())
                 return JsonResponse(
                     {
-                        'error': f'Too many failed attempts. Try again in {int(lockout_length.total_seconds() // 60)} minutes.',
-                        'lockout_seconds': int(lockout_length.total_seconds()),
+                        'error': 'Too many failed attempts. Please wait before signing in again.',
+                        'lockout_seconds': remaining,
                     },
                     status=429,
                 )
-            else:
-                attempts_left = max_attempts - user.failed_login_attempts
-                user.save(update_fields=['failed_login_attempts'])
-                return JsonResponse(
-                    {
-                        'error': 'Invalid credentials.',
-                        'attempts_left': attempts_left,
-                    },
-                    status=401,
-                )
-        return JsonResponse({'error': 'Invalid credentials.'}, status=401)
 
-    user.failed_login_attempts = 0
-    user.lockout_until = None
-    user.save(update_fields=['failed_login_attempts', 'lockout_until'])
+        if not user or not user.check_password(password):
+            if user:
+                user.failed_login_attempts += 1
+                if user.failed_login_attempts >= max_attempts:
+                    user.lockout_until = timezone.now() + lockout_length
+                    user.failed_login_attempts = 0
+                    user.save()
+                    return JsonResponse(
+                        {
+                            'error': f'Too many failed attempts. Try again in {int(lockout_length.total_seconds() // 60)} minutes.',
+                            'lockout_seconds': int(lockout_length.total_seconds()),
+                        },
+                        status=429,
+                    )
+                else:
+                    attempts_left = max_attempts - user.failed_login_attempts
+                    user.save()
+                    return JsonResponse(
+                        {
+                            'error': 'Invalid credentials.',
+                            'attempts_left': attempts_left,
+                        },
+                        status=401,
+                    )
+            return JsonResponse({'error': 'Invalid credentials.'}, status=401)
 
-    log = AdminSessionLog.objects.create(user=user)
-    # Set initial expiry to 4 hours
-    expiry = timezone.now() + timedelta(hours=4)
-    token = AdminToken.objects.create(user=user, session_log=log, expires_at=expiry)
-    return JsonResponse({'token': token.token, 'username': user.username})
+        user.failed_login_attempts = 0
+        user.lockout_until = None
+        user.save()
+
+        log = AdminSessionLog.objects.create(user=user)
+        # Set initial expiry to 4 hours
+        expiry = timezone.now() + timedelta(hours=4)
+        token = AdminToken.objects.create(user=user, session_log=log, expires_at=expiry)
+        return JsonResponse({'token': token.token, 'username': user.username})
+    except Exception as e:
+        return JsonResponse({'error': f'Login Error: {str(e)}. This usually indicates missing database migrations. Please run "python manage.py migrate".'}, status=500)
 
 
 @csrf_exempt
@@ -576,24 +716,26 @@ def _serialize_menu_item(menu_item):
         'spicy': bool(menu_item.spicy),
         'stock_level': menu_item.stock_level,
         'min_stock_level': menu_item.min_stock_level,
+        'image_url': menu_item.image_url or "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=500&q=80",
+        'is_available': menu_item.is_available and menu_item.stock_level > 0,
     }
 
 
 def _get_default_menu_items():
     return [
-        { 'name': 'Classic Smash Burger', 'price': Decimal('750.00'), 'food_cost': Decimal('250.00'), 'category': 'Burgers', 'description': 'Double patty, cheddar, pickles, special sauce', 'popular': True, 'spicy': False },
-        { 'name': 'Spicy Chicken Burger', 'price': Decimal('780.00'), 'food_cost': Decimal('260.00'), 'category': 'Burgers', 'description': 'Crispy chicken, jalapeños, sriracha mayo', 'popular': False, 'spicy': True },
-        { 'name': 'BBQ Bacon Burger', 'price': Decimal('860.00'), 'food_cost': Decimal('290.00'), 'category': 'Burgers', 'description': 'Smoked bacon, BBQ glaze, onion rings', 'popular': True, 'spicy': False },
-        { 'name': 'Veggie Deluxe', 'price': Decimal('690.00'), 'food_cost': Decimal('230.00'), 'category': 'Burgers', 'description': 'Plant-based patty, avocado, fresh greens', 'popular': False, 'spicy': False },
-        { 'name': 'Loaded Fries', 'price': Decimal('360.00'), 'food_cost': Decimal('120.00'), 'category': 'Sides', 'description': 'Cheese sauce, bacon bits, green onions', 'popular': True, 'spicy': False },
-        { 'name': 'Onion Rings', 'price': Decimal('280.00'), 'food_cost': Decimal('90.00'), 'category': 'Sides', 'description': 'Beer-battered, crispy golden perfection', 'popular': False, 'spicy': False },
-        { 'name': 'Chicken Wings (8pc)', 'price': Decimal('720.00'), 'food_cost': Decimal('240.00'), 'category': 'Sides', 'description': 'Choice of buffalo, BBQ, or garlic parmesan', 'popular': True, 'spicy': False },
-        { 'name': 'Coleslaw', 'price': Decimal('210.00'), 'food_cost': Decimal('70.00'), 'category': 'Sides', 'description': 'Creamy homestyle coleslaw', 'popular': False, 'spicy': False },
-        { 'name': 'Classic Milkshake', 'price': Decimal('420.00'), 'food_cost': Decimal('130.00'), 'category': 'Drinks', 'description': 'Vanilla, chocolate, or strawberry', 'popular': True, 'spicy': False },
-        { 'name': 'Fresh Lemonade', 'price': Decimal('290.00'), 'food_cost': Decimal('90.00'), 'category': 'Drinks', 'description': 'Freshly squeezed with a hint of mint', 'popular': False, 'spicy': False },
-        { 'name': 'Iced Tea', 'price': Decimal('220.00'), 'food_cost': Decimal('70.00'), 'category': 'Drinks', 'description': 'Brewed daily, sweetened or unsweetened', 'popular': False, 'spicy': False },
-        { 'name': 'Brownie Sundae', 'price': Decimal('460.00'), 'food_cost': Decimal('150.00'), 'category': 'Desserts', 'description': 'Warm brownie, vanilla ice cream, hot fudge', 'popular': True, 'spicy': False },
-        { 'name': 'Apple Pie Bites', 'price': Decimal('330.00'), 'food_cost': Decimal('100.00'), 'category': 'Desserts', 'description': 'Cinnamon sugar dusted, served warm', 'popular': False, 'spicy': False },
+        { 'name': 'Classic Smash Burger', 'price': Decimal('750.00'), 'food_cost': Decimal('250.00'), 'category': 'Burgers', 'description': 'Double patty, cheddar, pickles, special sauce', 'popular': True, 'spicy': False, 'image': 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=500&q=80' },
+        { 'name': 'Spicy Chicken Burger', 'price': Decimal('780.00'), 'food_cost': Decimal('260.00'), 'category': 'Burgers', 'description': 'Crispy chicken, jalapeños, sriracha mayo', 'popular': False, 'spicy': True, 'image': 'https://images.unsplash.com/photo-1610614819513-58e34989848b?w=500&q=80' },
+        { 'name': 'BBQ Bacon Burger', 'price': Decimal('860.00'), 'food_cost': Decimal('290.00'), 'category': 'Burgers', 'description': 'Smoked bacon, BBQ glaze, onion rings', 'popular': True, 'spicy': False, 'image': 'https://images.unsplash.com/photo-1553979459-d2229ba7433b?w=500&q=80' },
+        { 'name': 'Veggie Deluxe', 'price': Decimal('690.00'), 'food_cost': Decimal('230.00'), 'category': 'Burgers', 'description': 'Plant-based patty, avocado, fresh greens', 'popular': False, 'spicy': False, 'image': 'https://images.unsplash.com/photo-1520201163981-8cc95007dd2a?w=500&q=80' },
+        { 'name': 'Loaded Fries', 'price': Decimal('360.00'), 'food_cost': Decimal('120.00'), 'category': 'Sides', 'description': 'Cheese sauce, bacon bits, green onions', 'popular': True, 'spicy': False, 'image': 'https://images.unsplash.com/photo-1573015084185-7205ba3d6ea8?w=500&q=80' },
+        { 'name': 'Onion Rings', 'price': Decimal('280.00'), 'food_cost': Decimal('90.00'), 'category': 'Sides', 'description': 'Beer-battered, crispy golden perfection', 'popular': False, 'spicy': False, 'image': 'https://images.unsplash.com/photo-1639024471283-03518883511d?w=500&q=80' },
+        { 'name': 'Chicken Wings (8pc)', 'price': Decimal('720.00'), 'food_cost': Decimal('240.00'), 'category': 'Sides', 'description': 'Choice of buffalo, BBQ, or garlic parmesan', 'popular': True, 'spicy': False, 'image': 'https://images.unsplash.com/photo-1567620832903-9fc6debc209f?w=500&q=80' },
+        { 'name': 'Coleslaw', 'price': Decimal('210.00'), 'food_cost': Decimal('70.00'), 'category': 'Sides', 'description': 'Creamy homestyle coleslaw', 'popular': False, 'spicy': False, 'image': 'https://images.unsplash.com/photo-1550304084-37f40213435c?w=500&q=80' },
+        { 'name': 'Classic Milkshake', 'price': Decimal('420.00'), 'food_cost': Decimal('130.00'), 'category': 'Drinks', 'description': 'Vanilla, chocolate, or strawberry', 'popular': True, 'spicy': False, 'image': 'https://images.unsplash.com/photo-1572490122747-3968b75cc699?w=500&q=80' },
+        { 'name': 'Fresh Lemonade', 'price': Decimal('290.00'), 'food_cost': Decimal('90.00'), 'category': 'Drinks', 'description': 'Freshly squeezed with a hint of mint', 'popular': False, 'spicy': False, 'image': 'https://images.unsplash.com/photo-1523677012304-d02511920150?w=500&q=80' },
+        { 'name': 'Iced Tea', 'price': Decimal('220.00'), 'food_cost': Decimal('70.00'), 'category': 'Drinks', 'description': 'Brewed daily, sweetened or unsweetened', 'popular': False, 'spicy': False, 'image': 'https://images.unsplash.com/photo-1556679343-c7306c1976bc?w=500&q=80' },
+        { 'name': 'Brownie Sundae', 'price': Decimal('460.00'), 'food_cost': Decimal('150.00'), 'category': 'Desserts', 'description': 'Warm brownie, vanilla ice cream, hot fudge', 'popular': True, 'spicy': False, 'image': 'https://images.unsplash.com/photo-1551024506-0bccd828d307?w=500&q=80' },
+        { 'name': 'Apple Pie Bites', 'price': Decimal('330.00'), 'food_cost': Decimal('100.00'), 'category': 'Desserts', 'description': 'Cinnamon sugar dusted, served warm', 'popular': False, 'spicy': False, 'image': 'https://images.unsplash.com/photo-1568571780765-9276ac8b75a2?w=500&q=80' },
     ]
 
 
@@ -601,8 +743,12 @@ def _ensure_menu_items(seed: bool = True):
     # Only seed default menu items when explicitly requested.
     if not seed:
         return
+    
+    default_items = _get_default_menu_items()
+    
+    # 1. If DB is empty, seed everything
     if not MenuItem.objects.exists():
-        for item_data in _get_default_menu_items():
+        for item_data in default_items:
             MenuItem.objects.create(
                 name=item_data['name'],
                 category=item_data['category'],
@@ -611,9 +757,56 @@ def _ensure_menu_items(seed: bool = True):
                 description=item_data['description'],
                 popular=item_data['popular'],
                 spicy=item_data['spicy'],
-                stock_level=50, # Default stock level for new items
-                min_stock_level=10, # Default min stock level for new items
+                image_url=item_data['image'],
+                stock_level=50,
+                min_stock_level=10,
             )
+    else:
+        # 2. If items exist but lack images/stock, update them so they look "pro"
+        image_map = {i['name']: i['image'] for i in default_items}
+        existing_items = MenuItem.objects.all()
+        for item in existing_items:
+            updated = False
+            if (not item.image_url or "placeholder" in item.image_url) and item.name in image_map:
+                item.image_url = image_map[item.name]
+                updated = True
+            if item.stock_level <= 0:
+                item.stock_level = 50
+                updated = True
+            if updated:
+                item.save()
+
+def customer_home(request):
+    """Professional Customer Home View returning grouped data."""
+    if request.method != 'GET':
+        return HttpResponseBadRequest('Only GET allowed')
+
+    _ensure_menu_items(seed=True)
+    # Include items with 0 stock but mark them as unavailable for a pro "catalog" feel
+    items = MenuItem.objects.all()
+    
+    categories = list(items.values_list('category', flat=True).distinct().order_by('category'))
+    featured = items.filter(popular=True).order_by('?')[:5]
+    
+    grouped_menu = {}
+    for cat in categories:
+        grouped_menu[cat] = [_serialize_menu_item(i) for i in items.filter(category=cat)]
+
+    return JsonResponse({
+        'hero': {
+            'title': 'TASTY BITES HUB',
+            'tagline': 'CRAFTED WITH PASSION, DELIVERED WITH PRECISION.',
+            'image_url': 'https://images.unsplash.com/photo-1514356015730-0739d598061f?q=80&w=1600',
+            'accent_color': '#f97316'
+        },
+        'categories': categories,
+        'featured': [_serialize_menu_item(i) for i in featured],
+        'menu_by_category': grouped_menu,
+        'config': {
+            'currency': 'KES',
+            'delivery_min': float(AppSettings.current().min_delivery_fee)
+        }
+    })
 
 
 
@@ -663,6 +856,8 @@ def menu_item_update(request, item_id: int):
         item.popular = bool(payload.get('popular'))
     if 'spicy' in payload:
         item.spicy = bool(payload.get('spicy'))
+    if 'image_url' in payload:
+        item.image_url = str(payload.get('image_url')).strip()
 
     if 'price' in payload:
         try:
@@ -838,6 +1033,7 @@ def menu_item_create(request):
         description=description,
         popular=popular,
         spicy=spicy,
+        image_url=payload.get('image_url', ''),
     )
 
     return JsonResponse({
@@ -914,6 +1110,48 @@ def automation_insights(request):
         ]
     })
 
+
+def _serialize_review(review):
+    return {
+        'id': review.id,
+        'customer_name': review.customer_name or 'Anonymous',
+        'rating': review.rating,
+        'comment': review.comment,
+        'created_at': review.created_at.isoformat() if review.created_at else None,
+    }
+
+
+def reviews_list(request):
+    """Returns a list of all customer reviews."""
+    if request.method != 'GET':
+        return HttpResponseBadRequest('Only GET allowed')
+
+    reviews = Review.objects.all().order_by('-created_at')
+    return JsonResponse({'reviews': [_serialize_review(r) for r in reviews]})
+
+
+@csrf_exempt
+def create_review(request):
+    """Allows customers to submit a new review."""
+    if request.method != 'POST':
+        return HttpResponseBadRequest('Only POST allowed')
+
+    try:
+        payload = json.loads(request.body.decode('utf-8'))
+        rating = int(payload.get('rating'))
+        if not (1 <= rating <= 5):
+            return JsonResponse({'error': 'Rating must be between 1 and 5'}, status=400)
+        
+        review = Review.objects.create(
+            customer_name=payload.get('customer_name', '').strip() or None,
+            rating=rating,
+            comment=payload.get('comment', '').strip() or None,
+        )
+        return JsonResponse(_serialize_review(review), status=201)
+    except (ValueError, TypeError):
+        return JsonResponse({'error': 'Invalid rating or JSON format'}, status=400)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
 @csrf_exempt
 def employees_list(request):
     """Lists all employees and handles creation via POST."""
@@ -923,9 +1161,10 @@ def employees_list(request):
     if request.method == 'GET':
         employees = Employee.objects.all().order_by('-created_at')
         data = [{
-            'id': e.id,
+            'id': e.id,  # type: ignore
             'name': e.name,
             'role': e.role,
+            'username': e.username,
             'phone': e.phone,
             'email': e.email,
             'salary': float(e.salary),
@@ -943,10 +1182,14 @@ def employees_list(request):
                 role=payload.get('role', 'Staff'),
                 phone=payload.get('phone', ''),
                 email=payload.get('email', ''),
+                username=payload.get('username'),
                 salary=Decimal(str(payload.get('salary', 0))),
                 status=payload.get('status', 'active'),
                 account_number=payload.get('account_number', '')
             )
+            if payload.get('password'):
+                emp.set_password(payload['password'])
+                emp.save()
             return JsonResponse({'ok': True, 'id': emp.id})
         except Exception as e:
             return JsonResponse({'error': str(e)}, status=400)
@@ -959,7 +1202,7 @@ def employee_detail(request, employee_id: int):
     if not _is_admin(request):
         return JsonResponse({'error': 'unauthorized'}, status=403)
 
-    emp = Employee.objects.filter(id=employee_id).first()
+    emp = Employee.objects.filter(id=employee_id).first()  # type: ignore
     if not emp:
         return JsonResponse({'error': 'not_found'}, status=404)
 
@@ -970,6 +1213,8 @@ def employee_detail(request, employee_id: int):
             if 'role' in payload: emp.role = payload['role']
             if 'phone' in payload: emp.phone = payload['phone']
             if 'email' in payload: emp.email = payload['email']
+            if 'username' in payload: emp.username = payload['username']
+            if 'password' in payload and payload['password']: emp.set_password(payload['password'])
             if 'salary' in payload: emp.salary = Decimal(str(payload['salary']))
             if 'status' in payload: emp.status = payload['status']
             if 'account_number' in payload: emp.account_number = payload['account_number']
@@ -1007,10 +1252,11 @@ def send_employee_email(request, employee_id: int):
         if not message:
             return JsonResponse({'error': 'Message body is required'}, status=400)
 
+        sender = getattr(settings, 'EMAIL_HOST_USER', getattr(settings, 'DEFAULT_FROM_EMAIL', 'admin@tastybites.com'))
         send_mail(
             subject,
             message,
-            getattr(settings, 'DEFAULT_FROM_EMAIL', 'admin@tastybites.com'),
+            sender,
             [emp.email],
             fail_silently=False,
         )
@@ -1038,15 +1284,18 @@ def send_bulk_employee_email(request):
         if not message:
             return JsonResponse({'error': 'Message body is required'}, status=400)
 
-        employees = Employee.objects.filter(id__in=employee_ids).exclude(email='')
+        # Ensure IDs are integers to prevent lookup failures
+        clean_ids = [int(eid) for eid in employee_ids if str(eid).isdigit()]
+        employees = Employee.objects.filter(id__in=clean_ids).exclude(email='')
         
+        sender = getattr(settings, 'EMAIL_HOST_USER', getattr(settings, 'DEFAULT_FROM_EMAIL', 'admin@tastybites.com'))
         count = 0
         for emp in employees:
             try:
                 send_mail(
                     subject,
                     message,
-                    getattr(settings, 'DEFAULT_FROM_EMAIL', 'admin@tastybites.com'),
+                    sender,
                     [emp.email],
                     fail_silently=False,
                 )
@@ -1084,8 +1333,90 @@ def admin_clear(request):
 
 
 
+@csrf_exempt
+def admin_delete_wastage_log(request, log_id: int):
+    if request.method != 'DELETE':
+        return HttpResponseBadRequest('Only DELETE allowed')
+    if not _is_admin(request):
+        return JsonResponse({'error': 'unauthorized'}, status=403)
+    log = WastageLog.objects.filter(id=log_id).first()
+    if not log:
+        return JsonResponse({'error': 'not_found'}, status=404)
+    log.delete()
+    return JsonResponse({'ok': True})
+
+
+@csrf_exempt
+def miscellaneous_log(request):
+    if not _is_admin(request):
+        return JsonResponse({'error': 'unauthorized'}, status=403)
+
+    if request.method == 'GET':
+        period_type = request.GET.get('period_type', 'week')
+        date_str = request.GET.get('date')
+        start_date, end_date, _ = _get_period_dates(period_type, date_str)
+        logs = MiscellaneousExpense.objects.filter(
+            created_at__gte=start_date, created_at__lte=end_date).order_by('-created_at')[:100]
+        return JsonResponse({'miscellaneous': [
+            {
+                'id': log.id,
+                'item_name': log.item_name,
+                'reason': log.reason,
+                'cost': _to_display_currency(log.cost),
+                'created_at': log.created_at.isoformat() if log.created_at else None,
+            }
+            for log in logs
+        ]})
+
+    if request.method != 'POST':
+        return HttpResponseBadRequest('Only GET and POST allowed')
+
+    if not _is_admin(request):
+        return JsonResponse({'error': 'unauthorized'}, status=403)
+
+    try:
+        payload = json.loads(request.body.decode('utf-8'))
+        item_name = (payload.get('item_name') or '').strip()
+        reason = (payload.get('reason') or '').strip()
+        cost = Decimal(str(payload.get('cost') or '0'))
+        if not item_name: return JsonResponse({'error': 'item_name required'}, status=400)
+        log = MiscellaneousExpense.objects.create(item_name=item_name, reason=reason, cost=cost)
+        return JsonResponse({'id': log.id, 'item_name': log.item_name, 'cost': _to_display_currency(log.cost)})
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=400)
+
+@csrf_exempt
+def admin_delete_misc_log(request, log_id: int):
+    if request.method != 'DELETE': return HttpResponseBadRequest('Only DELETE allowed')
+    if not _is_admin(request): return JsonResponse({'error': 'unauthorized'}, status=403)
+    log = MiscellaneousExpense.objects.filter(id=log_id).first()
+    if not log: return JsonResponse({'error': 'not_found'}, status=404)
+    log.delete()
+    return JsonResponse({'ok': True})
+
+@csrf_exempt
+def admin_clear_misc_logs(request):
+    if request.method != 'POST': return HttpResponseBadRequest('Only POST allowed')
+    if not _is_admin(request): return JsonResponse({'error': 'unauthorized'}, status=403)
+    MiscellaneousExpense.objects.all().delete()
+    return JsonResponse({'ok': True})
+
+
+@csrf_exempt
+def admin_clear_wastage_logs(request):
+    if not _is_admin(request):
+        return JsonResponse({'error': 'unauthorized'}, status=403)
+
+    if request.method != 'POST':
+        return HttpResponseBadRequest('Only POST allowed')
+    if not _is_admin(request):
+        return JsonResponse({'error': 'unauthorized'}, status=403)
+    WastageLog.objects.all().delete()
+    return JsonResponse({'ok': True})
+
+
 def _serialize_order(order):
-    total_food_cost = sum((item.food_cost or Decimal('0.00')) * item.quantity for item in order.items.all())
+    total_food_cost = sum((item.food_cost or Decimal('0.00')) * item.quantity for item in order.items.all())  # type: ignore
     has_delivery = bool(order.delivery_address)
     return {
         'order_id': order.order_id,
@@ -1098,6 +1429,7 @@ def _serialize_order(order):
         'phone': order.phone,
         'delivery_address': order.delivery_address,
         'delivery_distance_km': float(order.delivery_distance_km) if order.delivery_distance_km is not None else None,
+        'delivery_time': order.delivery_time,
         'delivery_cost': float(order.delivery_cost),
         'status': order.status,
         'split_count': order.split_count,
@@ -1116,7 +1448,7 @@ def _serialize_order(order):
                 'seat_number': item.seat_number,
                 'subtotal': float(item.price * item.quantity),
             }
-            for item in order.items.all().order_by('id')
+            for item in order.items.all().order_by('id')  # type: ignore
         ],
     }
 
@@ -1131,7 +1463,7 @@ def _build_receipt_text(order):
         "",
         "Items:",
     ]
-    for item in order.items.all().order_by('id'):
+    for item in order.items.all().order_by('id'):  # type: ignore
         modifiers = ', '.join(item.modifiers or [])
         rows.append(f" - {item.quantity} x {item.name} @ {item.price:.2f} = {(item.price * item.quantity):.2f}")
         if modifiers:
@@ -1219,6 +1551,7 @@ def create_order(request):
 
     delivery_address = (payload.get('delivery_address') or '').strip()
     delivery_distance_km = payload.get('delivery_distance_km')
+    delivery_time = (payload.get('delivery_time') or '').strip()
     delivery_cost = Decimal(str(payload.get('delivery_cost') or '0') or '0')
 
     order = Order.objects.create(
@@ -1226,6 +1559,7 @@ def create_order(request):
         phone=phone,
         delivery_address=delivery_address,
         delivery_distance_km=Decimal(str(delivery_distance_km)) if delivery_distance_km not in (None, '') else None,
+        delivery_time=delivery_time,
         delivery_cost=delivery_cost,
         split_count=max(1, split_count),
         status='pending',
@@ -1266,6 +1600,9 @@ def create_order(request):
 
 
 def queue_list(request):
+    if not _is_admin(request):
+        return JsonResponse({'error': 'unauthorized'}, status=403)
+
     orders = Order.objects.all().order_by('-created_at')[:100]
     return JsonResponse({'results': [_serialize_order(order) for order in orders]})
 
@@ -1320,7 +1657,7 @@ def order_item_price_update(request, order_id: str, item_id: int):
     if not order:
         return JsonResponse({'error': 'not_found'}, status=404)
 
-    item = order.items.filter(id=item_id).first()
+    item = order.items.filter(id=item_id).first()  # type: ignore
     if not item:
         return JsonResponse({'error': 'item_not_found'}, status=404)
 
@@ -1336,7 +1673,7 @@ def order_item_price_update(request, order_id: str, item_id: int):
     item.price = price
     item.save()
 
-    total_amount = sum((i.price or Decimal('0.00')) * i.quantity for i in order.items.all())
+    total_amount = sum(((i.price or Decimal('0.00')) * i.quantity for i in order.items.all()), Decimal('0.00'))
     order.total_amount = total_amount
     order.save()
 
@@ -1344,6 +1681,9 @@ def order_item_price_update(request, order_id: str, item_id: int):
 
 
 def order_receipt(request, order_id: str):
+    if not _is_admin(request):
+        return JsonResponse({'error': 'unauthorized'}, status=403)
+
     order = Order.objects.filter(order_id=order_id).first()
     if not order:
         return JsonResponse({'error': 'not_found'}, status=404)
@@ -1355,6 +1695,9 @@ def order_receipt(request, order_id: str):
 
 
 def orders_list(request):
+    if not _is_admin(request):
+        return JsonResponse({'error': 'unauthorized'}, status=403)
+
     orders = Order.objects.all().order_by('-created_at')[:100]
     data = [
         {
@@ -1363,6 +1706,7 @@ def orders_list(request):
             'phone': order.phone,
             'delivery_address': order.delivery_address,
             'delivery_distance_km': float(order.delivery_distance_km) if order.delivery_distance_km is not None else None,
+        'delivery_time': order.delivery_time,
             'delivery_cost': float(order.delivery_cost),
             'status': order.status,
             'total_amount': float(order.total_amount),
@@ -1377,6 +1721,9 @@ def orders_list(request):
 
 
 def order_detail(request, order_id: str):
+    if not _is_admin(request):
+        return JsonResponse({'error': 'unauthorized'}, status=403)
+
     order = Order.objects.filter(order_id=order_id).first()
     if not order:
         return JsonResponse({'error': 'not_found'}, status=404)
@@ -1384,50 +1731,17 @@ def order_detail(request, order_id: str):
     return JsonResponse(_serialize_order(order))
 
 
-def _normalize_report_range(range_label: str):
-    if not isinstance(range_label, str):
-        return 7
+def _build_report_summary(start_date: datetime.datetime, end_date: datetime.datetime, range_label: str):
 
-    value = range_label.strip().lower()
-    if value in ('daily', 'day', '1'):
-        return 1
-    if value in ('weekly', 'week', '7'):
-        return 7
-    if value in ('monthly', 'month', '30'):
-        return 30
-
-    try:
-        days = int(value)
-    except (TypeError, ValueError):
-        days = 7
-    return min(max(days, 1), 365)
-
-
-def _parse_report_range(range_label: str):
-    days = _normalize_report_range(range_label)
-    return timezone.now() - datetime.timedelta(days=days)
-
-
-def _format_range_label(range_label: str):
-    days = _normalize_report_range(range_label)
-    if days == 1:
-        return 'daily'
-    if days == 7:
-        return 'weekly'
-    if days == 30:
-        return 'monthly'
-    return f'last_{days}_days'
-
-
-def _build_report_summary(range_label: str):
-    start_date = _parse_report_range(range_label)
-
-    # Consider only orders that have completed (successful) transactions in the period
-    paid_order_ids = Transaction.objects.filter(
-        status='success',
-        order__isnull=False,
-        order__created_at__gte=start_date,
-    ).values_list('order', flat=True).distinct()
+    # Identify orders from this period that are fully paid
+    paid_orders = Order.objects.filter(
+        created_at__gte=start_date,
+        created_at__lte=end_date
+    ).annotate(
+        paid_sum=Sum('transactions__amount', filter=Q(transactions__status='success'))
+    ).filter(paid_sum__gte=F('total_amount'), total_amount__gt=0)
+    
+    paid_order_ids = paid_orders.values_list('id', flat=True)
 
     order_items = OrderItem.objects.filter(order__id__in=paid_order_ids).annotate(
         item_revenue=ExpressionWrapper(F('price') * F('quantity'), output_field=DecimalField()),
@@ -1465,31 +1779,45 @@ def _build_report_summary(range_label: str):
     ).order_by('hour')
     for row in hours:
         hourly.append({
-            'hour': row['hour'],
+            'hour': row['hour'], # type: ignore
             'orders': row['orders'],
             'revenue': _to_display_currency(row['revenue'] or 0),
         })
 
     # Revenue is computed from successful transactions within the period
-    total_revenue = float(Transaction.objects.filter(order__created_at__gte=start_date, status='success').aggregate(total=Sum('amount'))['total'] or 0)
-    total_cost = float(order_items.aggregate(total=Sum(F('food_cost') * F('quantity'), output_field=DecimalField()))['total'] or 0)
-    total_profit = total_revenue - total_cost
-    food_cost_ratio = float((Decimal(total_cost) / Decimal(total_revenue) * 100) if total_revenue else 0)
+    # Revenue is computed from successful transactions associated with fully paid orders
+    total_revenue = float(Transaction.objects.filter(
+        order__id__in=paid_order_ids, status='success'
+    ).aggregate(total=Sum('amount'))['total'] or 0)
+    total_food_cost = float(order_items.aggregate(total=Sum(F('food_cost') * F('quantity'), output_field=DecimalField()))['total'] or 0)
+    
+    total_wastage = float(WastageLog.objects.filter(
+        created_at__gte=start_date, created_at__lte=end_date
+    ).aggregate(total=Sum('cost'))['total'] or 0)
+    
+    total_misc = float(MiscellaneousExpense.objects.filter(
+        created_at__gte=start_date, created_at__lte=end_date
+    ).aggregate(total=Sum('cost'))['total'] or 0)
+    
+    # Final Profit = Revenue - Food Cost - Waste Cost - Misc Expenses
+    final_profit = total_revenue - total_food_cost - total_wastage - total_misc
+
+    food_cost_ratio = float((Decimal(total_food_cost) / Decimal(total_revenue) * 100) if total_revenue else 0)
 
     cash_revenue = float(Transaction.objects.filter(
-        order__created_at__gte=start_date,
+        order__id__in=paid_order_ids,
         status='success',
         method=Transaction.METHOD_CASH,
     ).aggregate(total=Sum('amount'))['total'] or 0)
     mpesa_revenue = float(Transaction.objects.filter(
-        order__created_at__gte=start_date,
+        order__id__in=paid_order_ids,
         status='success',
         method=Transaction.METHOD_M_PESA,
     ).aggregate(total=Sum('amount'))['total'] or 0)
 
-    return {
-        'range_days': _normalize_report_range(range_label),
-        'range_label': _format_range_label(range_label),
+    return { # type: ignore
+        'range_days': (end_date - start_date).days + 1,
+        'range_label': range_label,
         'best_items': best_items,
         'worst_items': worst_items,
         'hourly_sales': hourly,
@@ -1497,26 +1825,40 @@ def _build_report_summary(range_label: str):
             'revenue': _to_display_currency(total_revenue),
             'cash_revenue': _to_display_currency(cash_revenue),
             'mpesa_revenue': _to_display_currency(mpesa_revenue),
-            'food_cost': _to_display_currency(total_cost),
-            'profit': _to_display_currency(total_profit),
+            'food_cost': _to_display_currency(total_food_cost),
+            'wastage': _to_display_currency(total_wastage),
+            'miscellaneous': _to_display_currency(total_misc),
+            'profit': _to_display_currency(final_profit),
             'food_cost_ratio': round(food_cost_ratio, 2),
         },
     }
 
 
 def report_summary(request):
-    range_label = request.GET.get('range', '7')
-    data = _build_report_summary(range_label)
+    if not _is_admin(request):
+        return JsonResponse({'error': 'unauthorized'}, status=403)
+
+    period_type = request.GET.get('period_type', 'week') # Default to week
+    date_str = request.GET.get('date') # YYYY-MM-DD
+    
+    start_date, end_date, label = _get_period_dates(period_type, date_str)
+    data = _build_report_summary(start_date, end_date, label)
     return JsonResponse(data)
 
 
 @csrf_exempt
 def download_report(request):
+    if not _is_admin(request):
+        return JsonResponse({'error': 'unauthorized'}, status=403)
+
     if request.method != 'GET':
         return HttpResponseBadRequest('Only GET allowed')
 
-    range_label = request.GET.get('range', '7')
-    report_data = _build_report_summary(range_label)
+    period_type = request.GET.get('period_type', 'week')
+    date_str = request.GET.get('date')
+    
+    start_date, end_date, label = _get_period_dates(period_type, date_str)
+    report_data = _build_report_summary(start_date, end_date, label)
     filename = f"tastybites-report-{report_data['range_label']}.csv"
     response = HttpResponse(content_type='text/csv')
     response['Content-Disposition'] = f'attachment; filename="{filename}"'
@@ -1549,20 +1891,38 @@ def download_report(request):
     for entry in report_data['hourly_sales']:
         writer.writerow([entry['hour'], entry['orders'], entry['revenue']])
 
+    # Add Miscellaneous Expenses
+    miscellaneous_logs = MiscellaneousExpense.objects.filter(
+        created_at__gte=start_date, created_at__lte=end_date).order_by('-created_at')
+    if miscellaneous_logs.exists():
+        writer.writerow([])
+        writer.writerow(['Miscellaneous Expenses'])
+        writer.writerow(['Item', 'Cost', 'Reason', 'Created At'])
+        for log in miscellaneous_logs:
+            writer.writerow([log.item_name, _to_display_currency(log.cost), log.reason, log.created_at.strftime('%Y-%m-%d %H:%M:%S')])
     return response
 
 
 @csrf_exempt
 def wastage_log(request):
+    if not _is_admin(request):
+        return JsonResponse({'error': 'unauthorized'}, status=403)
+
     if request.method == 'GET':
-        logs = WastageLog.objects.all().order_by('-created_at')[:100]
+        period_type = request.GET.get('period_type', 'week') # Default to week
+        date_str = request.GET.get('date') # YYYY-MM-DD
+        
+        start_date, end_date, _ = _get_period_dates(period_type, date_str)
+
+        logs = WastageLog.objects.filter(
+            created_at__gte=start_date, created_at__lte=end_date).order_by('-created_at')[:100]
         return JsonResponse({'wastage': [
             {
                 'id': log.id,
                 'item_name': log.item_name,
                 'quantity': log.quantity,
                 'reason': log.reason,
-                'cost': float(log.cost),
+                'cost': _to_display_currency(log.cost),
                 'created_at': log.created_at.isoformat() if log.created_at else None,
             }
             for log in logs
@@ -1593,7 +1953,7 @@ def wastage_log(request):
         'item_name': log.item_name,
         'quantity': log.quantity,
         'reason': log.reason,
-        'cost': float(log.cost),
+        'cost': _to_display_currency(log.cost),
         'created_at': log.created_at.isoformat() if log.created_at else None,
     })
 
@@ -1682,6 +2042,9 @@ def create_pos_order(request):
     if request.method != 'POST':
         return HttpResponseBadRequest('Only POST allowed')
 
+    # Initialize msisdn at function scope to avoid unbound variable errors
+    msisdn = ""
+
     try:
         payload = json.loads(request.body.decode('utf-8'))
     except Exception:
@@ -1694,6 +2057,12 @@ def create_pos_order(request):
     order_type = str(payload.get('order_type', 'table') or 'table').strip().lower()
     table_number = payload.get('table_number')
     phone = str(payload.get('phone', '') or '').strip()
+    
+    delivery_address = (payload.get('delivery_address') or '').strip()
+    delivery_time = (payload.get('delivery_time') or '').strip()
+    delivery_distance_km = payload.get('delivery_distance_km')
+    delivery_time = (payload.get('delivery_time') or '').strip()
+    delivery_cost = Decimal(str(payload.get('delivery_cost') or '0') or '0')
 
     payment_method = str(payload.get('payment_method') or Transaction.METHOD_M_PESA).lower()
     if payment_method == Transaction.METHOD_M_PESA:
@@ -1706,19 +2075,31 @@ def create_pos_order(request):
 
     try:
         table = None
-        if order_type != 'takeaway' and table_number:
-            table, _ = Table.objects.get_or_create(number=str(table_number), defaults={'name': str(table_number)})
+        # Fix 500 error: Do not attempt to create a Table object for 'Counter' or empty numbers
+        # This prevents database type errors if 'number' is an integer field.
+        clean_table_no = str(table_number or '').strip()
+        if order_type == 'table' and clean_table_no and clean_table_no.lower() != 'counter':
+            table, _ = Table.objects.get_or_create(number=clean_table_no, defaults={'name': clean_table_no})
 
         total_amount = Decimal('0.00')
         for item in items_data:
-            price = Decimal(str(item.get('price') or '0'))
-            quantity = max(1, int(item.get('quantity') or 1))
-            total_amount += price * quantity
+            try:
+                price = Decimal(str(item.get('price') or '0'))
+                quantity = max(1, int(item.get('quantity') or 1))
+                total_amount += price * quantity
+            except (InvalidOperation, ValueError):
+                continue
+
+        total_amount += delivery_cost
 
         split_count = max(1, int(payload.get('split_count', 1)))
         order = Order.objects.create(
             table=table,
             phone=phone,
+            delivery_address=delivery_address,
+            delivery_distance_km=Decimal(str(delivery_distance_km)) if delivery_distance_km not in (None, '') else None,
+            delivery_time=delivery_time,
+            delivery_cost=delivery_cost,
             status='preparing',
             split_count=split_count,
             total_amount=total_amount,
@@ -1782,26 +2163,20 @@ def create_pos_order(request):
             tx = Transaction.objects.create(
                 phone=msisdn,
                 amount=total_amount,
-                item=f"Order {order.order_id}",
+                item="POS Order",
                 order=order,
                 status='pending',
                 method=Transaction.METHOD_M_PESA,
             )
-            stk_data, status_code = _execute_stk_push(msisdn, total_amount, f"Order {order.order_id}", tx)
+            # Use a simple alphanumeric reference to avoid M-Pesa Status 500 errors
+            stk_data, status_code = _execute_stk_push(msisdn, total_amount, "POSOrder", tx)
             
             # If STK Push failed at initiation, return that specific error immediately
             if status_code != 200:
                 return JsonResponse(stk_data, status=status_code)
 
         return JsonResponse({
-            'order_id': order.order_id,
-            'status': order.status,
-            'total_amount': float(order.total_amount),
-            'table': table.number if table else None,
-            'order_type': 'takeaway' if order_type == 'takeaway' else 'table',
-            'is_paid': order.is_paid,
-            'payment_method': payment_method,
-            'stk_response': stk_data,
+            **_serialize_order(order), 'stk_response': stk_data # Include STK response for frontend polling if needed
         })
     except Exception as exc:
         error_message = str(exc)
@@ -1821,7 +2196,7 @@ def kds_queue(request):
             'quantity': i.quantity,
             'seat': i.seat_number,
             'modifiers': i.modifiers
-        } for i in o.items.all()]
+        } for i in o.items.all()]  # type: ignore
         
         results.append({
             'order_id': o.order_id,
@@ -1860,7 +2235,11 @@ def initiate_split_payment(request):
         if not phone:
             return JsonResponse({'error': 'phone_required'}, status=400)
         # If amount isn't provided, we split the total by the split_count
-        amount = payload.get('amount') or (order.total_amount / order.split_count)
+        amount_provided = payload.get('amount')
+        if amount_provided:
+            amount = Decimal(str(amount_provided))
+        else:
+            amount = order.total_amount / order.split_count
     except (Order.DoesNotExist, Exception):
         return JsonResponse({'error': 'invalid_request'}, status=400)
 
@@ -1881,12 +2260,15 @@ def initiate_split_payment(request):
 
 def get_receipt_data(request, order_id):
     """Generates a structured dictionary for thermal printer consumption."""
+    if not _is_admin(request):
+        return JsonResponse({'error': 'unauthorized'}, status=403)
+
     order = Order.objects.filter(order_id=order_id).first()
     if not order:
         return JsonResponse({'error': 'not_found'}, status=404)
 
     items = []
-    for i in order.items.all():
+    for i in order.items.all():  # type: ignore
         items.append({
             'name': i.name,
             'qty': i.quantity,

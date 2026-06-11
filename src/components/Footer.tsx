@@ -1,6 +1,7 @@
 const Footer = () => {
   return (
-    <footer className="bg-foreground py-12">
+
+<footer className="bg-foreground py-12">
       <div className="container mx-auto px-4 text-center">
         <p className="font-display text-3xl text-primary mb-4">TASTY BITES</p>
         <p className="text-background/60 text-sm mb-6">Efficiency. Quality. Reliability. The standard in hotel management.</p>

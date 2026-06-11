@@ -36,7 +36,9 @@ const AdminSettings: React.FC = () => {
       return
     }
 
-    const loadConfig = fetch(getApiUrl('/payments/config/'))
+    const loadConfig = fetch(getApiUrl('/payments/config/'), {
+      headers: { Authorization: `Bearer ${token}` },
+    })
       .then((res) => res.headers.get("content-type")?.includes("application/json") ? res.json() : Promise.reject("Invalid format"))
       .then((data) => {
         if (data?.delivery_rate_per_km != null) setDeliveryRatePerKm(Number(data.delivery_rate_per_km))

@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Transaction, Table, Order, OrderItem, WastageLog, AdminUser, AdminToken, AppSettings
+from .models import Transaction, Table, Order, OrderItem, WastageLog, AdminUser, AdminToken, AppSettings, MiscellaneousExpense, MenuItem
 
 # Register your models here.
 
@@ -36,6 +36,13 @@ class OrderAdmin(admin.ModelAdmin):
     def get_is_paid(self, obj):
         return obj.is_paid
 
+@admin.register(MenuItem)
+class MenuItemAdmin(admin.ModelAdmin):
+    list_display = ('name', 'category', 'price', 'stock_level', 'popular', 'is_available', 'image_url')
+    list_filter = ('category', 'popular', 'is_available')
+    search_fields = ('name', 'description')
+    list_editable = ('price', 'stock_level', 'is_available', 'image_url')
+
 @admin.register(OrderItem)
 class OrderItemAdmin(admin.ModelAdmin):
     list_display = ('order', 'name', 'quantity', 'price', 'seat_number', 'get_subtotal')
@@ -50,6 +57,13 @@ class OrderItemAdmin(admin.ModelAdmin):
 @admin.register(WastageLog)
 class WastageLogAdmin(admin.ModelAdmin):
     list_display = ('item_name', 'quantity', 'cost', 'reason', 'created_at')
+    list_filter = ('created_at',)
+    search_fields = ('item_name', 'reason')
+    readonly_fields = ('created_at',)
+
+@admin.register(MiscellaneousExpense)
+class MiscellaneousExpenseAdmin(admin.ModelAdmin):
+    list_display = ('item_name', 'cost', 'reason', 'created_at')
     list_filter = ('created_at',)
     search_fields = ('item_name', 'reason')
     readonly_fields = ('created_at',)

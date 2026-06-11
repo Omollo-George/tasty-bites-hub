@@ -1,10 +1,13 @@
+/// <reference types="vite/client" />
 import React, { useEffect, useState } from 'react'
 import { getApiUrl } from '@/lib/api'
+import { getAdminToken } from '@/lib/admin-session'
 
 type Employee = {
   id: number
   name: string
   role: string
+  username?: string
   phone: string
   email: string
   salary: number
@@ -17,10 +20,37 @@ const AdminEmployees: React.FC = () => {
   const [employees, setEmployees] = useState<Employee[]>([])
   const [loading, setLoading] = useState(true)
   const [isAdding, setIsAdding] = useState(false)
-  const [newEmp, setNewEmp] = useState({ name: '', role: 'Waiter', phone: '', email: '', salary: 0, account_number: '' })
+  const [editingId, setEditingId] = useState<number | null>(null)
+  const [newEmp, setNewEmp] = useState({ name: '', role: 'Waiter', phone: '', email: '', salary: 0, account_number: '', username: '', password: '' })
   const [selectedIds, setSelectedIds] = useState<number[]>([])
   const [searchQuery, setSearchQuery] = useState('')
-  const adminToken = localStorage.getItem('admin_token') || '';
+  const adminToken = getAdminToken() || '';
+
+  const passwordRequirements = [
+    {
+      label: 'At least 8 characters',
+      validate: (value: string) => value.length >= 8,
+    },
+    {
+      label: 'One uppercase letter',
+      validate: (value: string) => /[A-Z]/.test(value),
+    },
+    {
+      label: 'One lowercase letter',
+      validate: (value: string) => /[a-z]/.test(value),
+    },
+    {
+      label: 'One number',
+      validate: (value: string) => /[0-9]/.test(value),
+    },
+    {
+      label: 'One special character (!@#$%^&*)',
+      validate: (value: string) => /[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]/.test(value),
+    },
+  ]
+
+  const passwordIssues = passwordRequirements.filter((requirement) => !requirement.validate(newEmp.password))
+  const isPasswordValid = passwordIssues.length === 0
 
   const fetchEmployees = async () => {
     setLoading(true)
@@ -42,8 +72,18 @@ const AdminEmployees: React.FC = () => {
 
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault()
+
+    // Validate password if it's a new employee or if the password field is being updated
+    if ((editingId === null || newEmp.password) && !isPasswordValid) {
+        alert('Please ensure the workstation password meets all security requirements.')
+        return
+    }
+
     try {
-      const res = await fetch(getApiUrl('/payments/admin/employees/'), {
+      const isUpdating = editingId !== null
+      const url = isUpdating ? getApiUrl(`/payments/admin/employees/${editingId}/`) : getApiUrl('/payments/admin/employees/')
+      
+      const res = await fetch(url, {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
@@ -59,14 +99,32 @@ const AdminEmployees: React.FC = () => {
       const data = await res.json()
       if (res.ok) {
         setIsAdding(false)
-        setNewEmp({ name: '', role: 'Waiter', phone: '', email: '', salary: 0, account_number: '' })
+        setEditingId(null)
+        setNewEmp({ name: '', role: 'Waiter', phone: '', email: '', salary: 0, account_number: '', username: '', password: '' })
         fetchEmployees()
+        alert(isUpdating ? 'Employee updated!' : 'Employee added!')
       } else {
-        alert(data.error || 'Failed to add employee')
+        alert(data.error || 'Operation failed')
       }
     } catch (err) {
-      alert('Failed to add employee')
+      alert('Connection error')
     }
+  }
+
+  const startEdit = (emp: Employee) => {
+    setEditingId(emp.id)
+    setNewEmp({
+      name: emp.name,
+      role: emp.role,
+      phone: emp.phone,
+      email: emp.email,
+      salary: emp.salary,
+      account_number: emp.account_number || '',
+      username: emp.username || '',
+      password: '' // Keep empty unless changing
+    })
+    setIsAdding(true)
+    window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
   const deleteEmployee = async (id: number) => {
@@ -248,16 +306,21 @@ const AdminEmployees: React.FC = () => {
             </div>
           )}
           <button 
-            onClick={() => setIsAdding(!isAdding)}
+            onClick={() => {
+                setIsAdding(!isAdding)
+                setEditingId(null)
+                setNewEmp({ name: '', role: 'Waiter', phone: '', email: '', salary: 0, account_number: '', username: '', password: '' })
+            }}
             className="bg-orange-500 text-white px-6 py-2.5 rounded-xl font-semibold shadow-md hover:bg-orange-600 transition-all active:scale-95 whitespace-nowrap"
           >
-            {isAdding ? 'Cancel' : 'Add Employee'}
+            {isAdding ? 'Cancel' : 'Register New Employee'}
           </button>
         </div>
       </div>
 
       {isAdding && (
         <section className="bg-slate-700 p-8 rounded-2xl shadow-lg border border-slate-600/60 animate-in fade-in slide-in-from-top-4">
+          <h3 className="text-xl font-display text-white mb-6">{editingId ? 'Edit Employee Details' : 'Registration Form'}</h3>
           <form onSubmit={handleAdd} className="grid gap-4 md:grid-cols-3">
             <div className="space-y-1">
               <label className="text-xs font-semibold uppercase text-muted-foreground">Full Name</label>
@@ -281,6 +344,39 @@ const AdminEmployees: React.FC = () => {
                 <option>Cashier</option>
                 <option>Cleaner</option>
               </select>
+            </div>
+            <div className="md:col-span-1 space-y-1">
+                <label className="text-xs font-bold text-orange-400 uppercase">Workstation Username</label>
+                <input 
+                    className="w-full rounded-lg border border-orange-500/30 bg-slate-800 px-3 py-2 text-sm text-slate-100 focus:border-orange-500 outline-none"
+                    value={newEmp.username}
+                    onChange={e => setNewEmp({...newEmp, username: e.target.value})}
+                    placeholder="e.g. john_waiter"
+                />
+            </div>
+            <div className="md:col-span-2 space-y-1">
+                <label className="text-xs font-bold text-orange-400 uppercase">{editingId ? 'Reset Workstation Password' : 'Workstation Password'}</label>
+                <input 
+                    type="password"
+                    className="w-full rounded-lg border border-orange-500/30 bg-slate-800 px-3 py-2 text-sm text-slate-100 focus:border-orange-500 outline-none"
+                    value={newEmp.password}
+                    onChange={e => setNewEmp({...newEmp, password: e.target.value})}
+                    placeholder={editingId ? "Leave blank to keep current" : "••••••••"}
+                />
+                {(newEmp.password || editingId === null) && (
+                    <div className="mt-2 space-y-1 text-[10px] text-slate-400">
+                        {passwordRequirements.map((requirement) => {
+                            const valid = requirement.validate(newEmp.password)
+                            if (valid) return null; // Disappear if condition is met
+                            return (
+                                <div key={requirement.label} className="flex items-center gap-2">
+                                    <span className="text-red-500">✖</span>
+                                    <span>{requirement.label}</span>
+                                </div>
+                            )
+                        })}
+                    </div>
+                )}
             </div>
             <div className="space-y-1">
               <label className="text-xs font-semibold uppercase text-muted-foreground">Salary (KES)</label>
@@ -317,7 +413,7 @@ const AdminEmployees: React.FC = () => {
               />
             </div>
             <button type="submit" className="md:col-span-3 bg-slate-900 text-white py-3 rounded-xl font-bold hover:bg-slate-800 transition-colors shadow-lg shadow-slate-900/20">
-              Save Employee
+              {editingId ? 'Update Record' : 'Create Record'}
             </button>
           </form>
         </section>
@@ -362,9 +458,14 @@ const AdminEmployees: React.FC = () => {
                   </td>
                   <td className="px-6 py-4 font-medium">{emp.name}</td>
                   <td className="px-6 py-4">
+                    <div className="flex flex-col">
                     <span className="bg-orange-900/30 text-orange-400 px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-tight border border-orange-500/20">
                       {emp.role}
                     </span>
+                    {emp.username && (
+                        <span className="text-[9px] text-slate-500 mt-1 font-mono">ID: {emp.username}</span>
+                    )}
+                    </div>
                   </td>
                   <td className="px-6 py-4 text-sm">
                     <div>{emp.phone}</div>
@@ -377,7 +478,13 @@ const AdminEmployees: React.FC = () => {
                     {emp.account_number || '—'}
                   </td>
                   <td className="px-6 py-4 text-right">
-                    <div className="flex justify-end gap-3 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <div className="flex justify-end gap-3">
+                      <button 
+                        onClick={() => startEdit(emp)}
+                        className="text-white hover:text-orange-400 text-sm font-semibold"
+                      >
+                        Edit
+                      </button>
                       <button 
                         onClick={() => sendEmail(emp)}
                         className="text-orange-500 hover:text-orange-400 text-sm font-semibold"
