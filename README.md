@@ -70,10 +70,14 @@ This project is pre-configured for automated deployment on **Render** (as indica
 3.  **Automatic Provisioning**: Render will detect `render.yaml` and automatically set up the static frontend, the Python backend, and the PostgreSQL database.
 4.  **Configuration**: Use the secrets generated in step 1 to fill in the required environment variables in the Render dashboard.
 
-### Deploying to Vercel (Frontend Only)
-1.  Connect your repository to Vercel.
-2.  Vercel will automatically detect the **Vite** framework and configure the build settings.
-3.  Set the `VITE_API_URL` environment variable in the Vercel dashboard to point to your live backend API.
+### Deploying to Vercel (Full Stack)
+1.  **Connect Repo**: Connect your repository to Vercel.
+2.  **Framework**: Vercel will detect Vite, but `vercel.json` will override it to handle the Python backend.
+3.  **Environment Variables**:
+    - Set `VITE_API_URL` to `/api` (or your full Vercel URL).
+    - Set `DATABASE_URL` to your external PostgreSQL instance.
+    - Set `DJANGO_SECRET_KEY` and other secrets from `generate_secrets.py`.
+4.  **Deployment**: Vercel will build the frontend into `dist` and host the Django app as a serverless function via `api/index.py`.
 
 ## Deploying to Sevalla (Docker)
 

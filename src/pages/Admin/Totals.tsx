@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { getApiUrl } from '@/lib/api'
+import { getAdminToken } from '@/lib/admin-session'
 
 const Totals: React.FC = () => {
   const [orders, setOrders] = useState<any[]>([])
@@ -7,10 +8,12 @@ const Totals: React.FC = () => {
 
   useEffect(() => {
     const load = async () => {
+      const token = getAdminToken()
+      const headers = { Authorization: `Bearer ${token}` }
       try {
         const [o, c] = await Promise.all([
-          fetch(getApiUrl('/payments/orders/')),
-          fetch(getApiUrl('/payments/config/'))
+          fetch(getApiUrl('/payments/orders/'), { headers }),
+          fetch(getApiUrl('/payments/config/'), { headers })
         ])
 
         if (!o.ok || !c.ok) {
@@ -33,9 +36,10 @@ const Totals: React.FC = () => {
     load()
   }, [])
 
-  const totalOrders = orders.length
+  const paidOrders = orders.filter(o => o.is_paid)
+  const totalOrders = paidOrders.length
   const pending = orders.filter(o => ['pending', 'preparing', 'ready'].includes((o.status || '').toLowerCase())).length
-  const revenue = orders.reduce((s, o) => s + ((o.total_amount || 0)), 0) * rate
+  const revenue = paidOrders.reduce((s, o) => s + ((o.total_amount || 0)), 0) * rate
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">

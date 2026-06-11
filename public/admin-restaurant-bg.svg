@@ -1,60 +1,96 @@
 <svg width="1920" height="1080" viewBox="0 0 1920 1080" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid slice">
   <defs>
-    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#0b1220" />
-      <stop offset="100%" stop-color="#151d30" />
+    <linearGradient id="navyGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#0A1A2F"/>
+      <stop offset="100%" stop-color="#1A2F4F"/>
     </linearGradient>
-    <radialGradient id="warmLight" cx="50%" cy="50%" r="50%">
-      <stop offset="0%" stop-color="#fb923c" stop-opacity="0.45" />
-      <stop offset="100%" stop-color="#fb923c" stop-opacity="0" />
-    </radialGradient>
-    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
-      <feGaussianBlur stdDeviation="40" result="blur" />
-      <feMerge>
-        <feMergeNode in="blur" />
-        <feMergeNode in="SourceGraphic" />
-      </feMerge>
-    </filter>
+    <linearGradient id="goldGrad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#C9A961"/>
+      <stop offset="100%" stop-color="#F4D03F"/>
+    </linearGradient>
   </defs>
-
-  <rect width="1920" height="1080" fill="url(#bg)" />
-  <rect x="120" y="100" width="1680" height="820" rx="40" fill="#111827" opacity="0.92" />
-
-  <!-- Tables -->
-  <g fill="#131c2d" opacity="0.95">
-    <rect x="260" y="620" width="460" height="120" rx="30" />
-    <rect x="770" y="660" width="320" height="90" rx="24" />
-    <rect x="1230" y="640" width="420" height="100" rx="28" />
+  
+  <!-- Background -->
+  <rect width="1920" height="1080" fill="url(#navyGrad)"/>
+  
+  <!-- Marble floor tiles -->
+  <g opacity="0.25">
+    <rect x="0" y="680" width="1920" height="400" fill="#C9A961" opacity="0.08"/>
+    <g stroke="#C9A961" stroke-width="1.5" opacity="0.3">
+      <path d="M0 720 H1920 M0 780 H1920 M0 840 H1920 M0 900 H1920 M0 960 H1920 M0 1020 H1920"/>
+      <path d="M240 680 V1080 M480 680 V1080 M720 680 V1080 M960 680 V1080 M1200 680 V1080 M1440 680 V1080 M1680 680 V1080"/>
+    </g>
   </g>
-  <g fill="#1e293b" opacity="0.85">
-    <rect x="240" y="600" width="500" height="18" rx="9" />
-    <rect x="760" y="640" width="360" height="18" rx="9" />
-    <rect x="1210" y="620" width="460" height="18" rx="9" />
+  
+  <!-- Large chandelier -->
+  <g transform="translate(960, 180)">
+    <circle cx="0" cy="0" r="100" fill="none" stroke="url(#goldGrad)" stroke-width="5"/>
+    <circle cx="0" cy="0" r="65" fill="none" stroke="url(#goldGrad)" stroke-width="4"/>
+    <circle cx="-50" cy="25" r="12" fill="#F4D03F"/>
+    <circle cx="50" cy="25" r="12" fill="#F4D03F"/>
+    <circle cx="-25" cy="50" r="12" fill="#F4D03F"/>
+    <circle cx="25" cy="50" r="12" fill="#F4D03F"/>
+    <circle cx="0" cy="60" r="15" fill="#F4D03F"/>
   </g>
-
-  <!-- Chair silhouettes -->
-  <g fill="#0f172a" opacity="0.88">
-    <rect x="200" y="720" width="80" height="100" rx="20" />
-    <rect x="520" y="720" width="80" height="100" rx="20" />
-    <rect x="1130" y="740" width="80" height="100" rx="20" />
-    <rect x="1550" y="740" width="80" height="100" rx="20" />
+  
+  <!-- Small wall sconces -->
+  <g fill="#F4D03F" opacity="0.8">
+    <circle cx="300" cy="250" r="8"/>
+    <circle cx="1620" cy="250" r="8"/>
+    <circle cx="300" cy="450" r="8"/>
+    <circle cx="1620" cy="450" r="8"/>
   </g>
-
-  <!-- Warm hanging lights -->
-  <g filter="url(#glow)" opacity="0.8">
-    <circle cx="410" cy="220" r="80" fill="url(#warmLight)" />
-    <circle cx="760" cy="190" r="60" fill="url(#warmLight)" />
-    <circle cx="1460" cy="230" r="90" fill="url(#warmLight)" />
+  
+  <!-- Tables with chairs - 4 sets -->
+  <g stroke="url(#goldGrad)" stroke-width="3" fill="#0A1A2F">
+    <!-- Table 1 -->
+    <g transform="translate(350, 750)">
+      <ellipse cx="0" cy="0" rx="140" ry="70"/>
+      <rect x="-25" y="-30" width="50" height="60" fill="url(#goldGrad)" opacity="0.9" rx="6"/>
+      <ellipse cx="-120" cy="20" rx="45" ry="55"/>
+      <ellipse cx="120" cy="20" rx="45" ry="55"/>
+      <ellipse cx="-70" cy="80" rx="45" ry="55"/>
+      <ellipse cx="70" cy="80" rx="45" ry="55"/>
+    </g>
+    
+    <!-- Table 2 -->
+    <g transform="translate(760, 780)">
+      <ellipse cx="0" cy="0" rx="140" ry="70"/>
+      <rect x="-25" y="-30" width="50" height="60" fill="url(#goldGrad)" opacity="0.9" rx="6"/>
+      <ellipse cx="-120" cy="20" rx="45" ry="55"/>
+      <ellipse cx="120" cy="20" rx="45" ry="55"/>
+    </g>
+    
+    <!-- Table 3 -->
+    <g transform="translate(1160, 780)">
+      <ellipse cx="0" cy="0" rx="140" ry="70"/>
+      <rect x="-25" y="-30" width="50" height="60" fill="url(#goldGrad)" opacity="0.9" rx="6"/>
+      <ellipse cx="-120" cy="20" rx="45" ry="55"/>
+      <ellipse cx="120" cy="20" rx="45" ry="55"/>
+    </g>
+    
+    <!-- Table 4 -->
+    <g transform="translate(1570, 750)">
+      <ellipse cx="0" cy="0" rx="140" ry="70"/>
+      <rect x="-25" y="-30" width="50" height="60" fill="url(#goldGrad)" opacity="0.9" rx="6"/>
+      <ellipse cx="-120" cy="20" rx="45" ry="55"/>
+      <ellipse cx="120" cy="20" rx="45" ry="55"/>
+      <ellipse cx="-70" cy="80" rx="45" ry="55"/>
+      <ellipse cx="70" cy="80" rx="45" ry="55"/>
+    </g>
   </g>
-
-  <!-- Table highlights -->
-  <g opacity="0.75" fill="#f97316">
-    <circle cx="310" cy="690" r="16" />
-    <circle cx="840" cy="710" r="12" />
-    <circle cx="1310" cy="690" r="18" />
+  
+  <!-- Bar counter at back -->
+  <rect x="400" y="500" width="1120" height="80" fill="#0A1A2F" stroke="url(#goldGrad)" stroke-width="4" rx="8"/>
+  <rect x="450" y="520" width="80" height="40" fill="url(#goldGrad)" opacity="0.7" rx="4"/>
+  <rect x="650" y="520" width="80" height="40" fill="url(#goldGrad)" opacity="0.7" rx="4"/>
+  <rect x="850" y="520" width="80" height="40" fill="url(#goldGrad)" opacity="0.7" rx="4"/>
+  <rect x="1050" y="520" width="80" height="40" fill="url(#goldGrad)" opacity="0.7" rx="4"/>
+  <rect x="1250" y="520" width="80" height="40" fill="url(#goldGrad)" opacity="0.7" rx="4"/>
+  
+  <!-- Wall panels -->
+  <g stroke="url(#goldGrad)" stroke-width="3" fill="none" opacity="0.4">
+    <rect x="150" y="80" width="450" height="550" rx="10"/>
+    <rect x="1320" y="80" width="450" height="550" rx="10"/>
   </g>
-
-  <!-- Subtle floor reflection and depth -->
-  <ellipse cx="960" cy="980" rx="740" ry="60" fill="#040714" opacity="0.55" />
-  <ellipse cx="960" cy="940" rx="840" ry="35" fill="#0a1320" opacity="0.6" />
 </svg>

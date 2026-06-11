@@ -9,7 +9,7 @@ const features = [
 
 const About = () => {
   return (
-    <section id="about" className="py-24 bg-slate-900">
+    <section id="about" className="py-24 bg-slate-900 scroll-mt-20">
       <div className="container mx-auto px-4">
         <div className="text-center mb-16">
           <p className="font-body text-primary text-sm font-semibold uppercase tracking-[0.2em] mb-2">Why Us</p>

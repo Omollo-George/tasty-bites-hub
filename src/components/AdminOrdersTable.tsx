@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { getApiUrl } from '@/lib/api'
+import { getAdminToken } from '@/lib/admin-session'
 
 const Badge: React.FC<{status:string}> = ({status}) => {
   const normalized = (status || '').toLowerCase()
@@ -22,9 +23,12 @@ const OrdersTable: React.FC = () => {
     if (initial) {
       setLoading(true)
     }
+    const token = getAdminToken()
     try {
       const [r, c] = await Promise.all([
-        fetch(getApiUrl('/payments/orders/')),
+        fetch(getApiUrl('/payments/orders/'), {
+          headers: { Authorization: `Bearer ${token}` }
+        }),
         fetch(getApiUrl('/payments/config/')),
       ])
 

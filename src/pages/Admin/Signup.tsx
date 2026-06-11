@@ -2,6 +2,7 @@ import React, { useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { setAdminToken } from '@/lib/admin-session'
 import { getApiUrl } from '@/lib/api'
+import heroImage from '@/assets/hero-food.jpg'; // Use the home section image
  
 const AdminSignup: React.FC = () => {
   const [username, setUsername] = useState('')
@@ -56,8 +57,24 @@ const AdminSignup: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center p-4">
-      <div className="w-full max-w-md bg-card p-8 rounded-3xl shadow-xl">
+    <div
+      className="min-h-screen flex items-center justify-center p-4 relative"
+    >
+      {/* Background image with JPG fallback and SVG fallback */}
+      <div 
+        className="absolute inset-0 -z-10"
+        style={{
+          backgroundImage: `url(${heroImage})`,
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
+          backgroundRepeat: 'no-repeat',
+          backgroundAttachment: 'fixed',
+        }}
+      />
+      {/* Subtle overlay for contrast */}
+      <div className="absolute inset-0 -z-10 bg-black/20" />
+      
+      <div className="w-full max-w-md bg-slate-900/95 p-8 rounded-3xl shadow-xl border border-slate-800 relative z-10">
         <h1 className="font-display text-3xl mb-4">Admin Sign Up</h1>
         <p className="text-sm text-muted-foreground mb-6">Create an admin account for the dashboard.</p>
         <form className="space-y-4" onSubmit={handleSubmit}>
@@ -66,7 +83,7 @@ const AdminSignup: React.FC = () => {
             <input
               value={username}
               onChange={(e) => setUsername(e.target.value)}
-              className="mt-2 w-full rounded-xl border border-input bg-background px-4 py-3"
+              className="mt-2 w-full rounded-xl border border-slate-700 bg-slate-800 px-4 py-3 text-slate-100 outline-none focus:ring-2 focus:ring-orange-500/20"
               placeholder="admin"
               required
             />
@@ -77,7 +94,7 @@ const AdminSignup: React.FC = () => {
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="mt-2 w-full rounded-xl border border-input bg-background px-4 py-3"
+              className="mt-2 w-full rounded-xl border border-slate-700 bg-slate-800 px-4 py-3 text-slate-100 outline-none focus:ring-2 focus:ring-orange-500/20"
               placeholder="••••••••"
               required
             />
@@ -88,7 +105,7 @@ const AdminSignup: React.FC = () => {
               type="password"
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
-              className="mt-2 w-full rounded-xl border border-input bg-background px-4 py-3"
+              className="mt-2 w-full rounded-xl border border-slate-700 bg-slate-800 px-4 py-3 text-slate-100 outline-none focus:ring-2 focus:ring-orange-500/20"
               placeholder="••••••••"
               required
             />
@@ -97,14 +114,14 @@ const AdminSignup: React.FC = () => {
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-hero-gradient text-primary-foreground rounded-full px-4 py-3 font-semibold hover:opacity-90 disabled:opacity-50"
+            className="w-full bg-orange-500 text-white rounded-full px-4 py-3 font-semibold hover:bg-orange-600 disabled:opacity-50"
           >
             {loading ? 'Creating account…' : 'Sign Up'}
           </button>
         </form>
-        <p className="text-sm text-muted-foreground mt-6">
+        <p className="text-sm text-slate-400 mt-6">
           Already have an account?{' '}
-          <Link to="/admin/login" className="text-primary hover:underline">Sign in</Link>
+          <Link to="/admin/login" className="text-orange-500 hover:underline">Sign in</Link>
         </p>
       </div>
     </div>

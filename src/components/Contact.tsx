@@ -2,7 +2,7 @@ import { MapPin, Phone, Clock } from "lucide-react";
 
 const Contact = () => {
   return (
-    <section id="contact" className="py-24 bg-slate-950">
+    <section id="contact" className="py-24 bg-slate-950 scroll-mt-20">
       <div className="container mx-auto px-4">
         <div className="text-center mb-16">
           <p className="font-body text-primary text-sm font-semibold uppercase tracking-[0.2em] mb-2">Visit Us</p>

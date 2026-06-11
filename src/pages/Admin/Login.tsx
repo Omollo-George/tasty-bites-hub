@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
-import { Eye, EyeOff } from 'lucide-react'
-import { setAdminSessionExpiry, setAdminToken, getAdminToken, isAdminSessionValid } from '@/lib/admin-session'
+import { Eye, EyeOff, Users } from 'lucide-react'
+import { setAdminToken, getAdminToken, isAdminSessionValid } from '@/lib/admin-session'
 import { getApiUrl } from '@/lib/api'
+import heroImage from '@/assets/hero-food.jpg'
 
 const AdminLogin: React.FC = () => {
   const [username, setUsername] = useState('')
@@ -64,11 +65,15 @@ const AdminLogin: React.FC = () => {
     setError('')
     setLoading(true)
 
+    if (!isPasswordValid) {
+      setError('Please ensure your password meets all security requirements.')
+      setLoading(false)
+      return
+    }
+
     try {
       const payload = { username: username.trim(), password: password.trim() }
-      console.debug('[AdminLogin] signin payload', payload)
-
-      const endpoint = getApiUrl('/payments/admin/signin/');      console.debug('[AdminLogin] Fetching from:', endpoint);
+      const endpoint = getApiUrl('/payments/admin/signin/')
 
       const response = await fetch(endpoint, {
         method: 'POST',
@@ -81,12 +86,10 @@ const AdminLogin: React.FC = () => {
       const contentType = response.headers.get("content-type");
       if (!contentType || !contentType.includes("application/json")) {
         const errorBody = await response.text();
-        console.error('[AdminLogin] Expected JSON but received:', response.status, errorBody.substring(0, 200));
-        throw new Error(`Connection Error (${response.status}): The server returned an invalid format. The backend service may be starting up or misconfigured.`);
+        throw new Error(`Server Error (${response.status}): The backend returned an invalid format. Check server logs.`);
       }
 
       const data = await response.json()
-      console.debug('[AdminLogin] signin response', response.status, data)
 
       if (!response.ok) {
         setError(data.error || 'Failed to sign in')
@@ -115,11 +118,11 @@ const AdminLogin: React.FC = () => {
       <div 
         className="absolute inset-0 -z-10"
         style={{
-          backgroundImage: 'url(/admin-restaurant-bg.jpg), url(/admin-restaurant-bg.svg)',
-          backgroundSize: 'cover, cover',
-          backgroundPosition: 'center, center',
-          backgroundRepeat: 'no-repeat, no-repeat',
-          backgroundAttachment: 'fixed, fixed',
+          backgroundImage: `url(${heroImage})`,
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
+          backgroundRepeat: 'no-repeat',
+          backgroundAttachment: 'fixed',
         }}
       />
       {/* Subtle overlay for contrast */}
@@ -164,17 +167,16 @@ const AdminLogin: React.FC = () => {
           <div className="mt-2 space-y-1 text-xs text-slate-400">
             {passwordRequirements.map((requirement) => {
               const valid = requirement.validate(password)
+              if (valid) return null; // Disappear if condition is met
               return (
                 <div key={requirement.label} className="flex items-center gap-2">
-                  <span className={valid ? 'text-green-500' : 'text-red-500'}>
-                    {valid ? '✔' : '✖'}
-                  </span>
+                  <span className="text-red-500">✖</span>
                   <span>{requirement.label}</span>
                 </div>
               )
             })}
           </div>
-          {error && <p className="text-sm text-red-600">{error}</p>}
+          {error && <p className="text-sm text-red-500 font-medium">{error}</p>}
           {lockoutSeconds > 0 && (
             <p className="text-sm text-yellow-700">
               Please wait {lockoutSeconds} second{lockoutSeconds === 1 ? '' : 's'} before trying again.
@@ -191,6 +193,18 @@ const AdminLogin: React.FC = () => {
         <p className="text-sm text-slate-500 mt-6">
           Only admin users can sign in. If you do not have access, contact the site administrator.
         </p>
+
+        <div className="mt-8 pt-6 border-t border-slate-800">
+          <Link 
+            to="/staff" 
+            className="flex items-center justify-center gap-3 text-sm font-semibold text-slate-400 hover:text-orange-500 transition-all group"
+          >
+            <div className="p-2 rounded-lg bg-slate-800 group-hover:bg-orange-500/10 transition-colors">
+              <Users size={18} />
+            </div>
+            <span>Access Staff Workstation</span>
+          </Link>
+        </div>
       </div>
     </div>
   )

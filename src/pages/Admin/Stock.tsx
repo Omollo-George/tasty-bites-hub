@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useMemo } from 'react'; // Removed Fragment import
 import { Search, Filter, AlertTriangle, CheckCircle, XCircle, Trash2, Edit2, Plus } from 'lucide-react'; // Removed Fragment import
 import { getApiUrl } from '@/lib/api';
+import { getAdminToken } from '@/lib/admin-session';
 
 type MenuItemType = {
   id: number;
@@ -33,12 +34,14 @@ const AdminStock: React.FC = () => {
     created_at: new Date().toISOString().slice(0, 16)
   });
 
-  const adminToken = typeof window !== 'undefined' ? localStorage.getItem('admin_token') : ''; // Moved adminToken declaration here
+  const adminToken = getAdminToken() || ''; 
 
   const fetchMenuItems = async () => {
     setLoading(true);
     try {
-      const response = await fetch(getApiUrl('/payments/menu-items/'));
+      const response = await fetch(getApiUrl('/payments/menu-items/'), {
+        headers: { Authorization: `Bearer ${adminToken}` }
+      });
       
       if (!response.headers.get("content-type")?.includes("application/json")) {
         throw new Error(`Invalid server response (${response.status})`);
@@ -64,7 +67,9 @@ const AdminStock: React.FC = () => {
 
   const fetchMostConsumed = async () => {
     try {
-      const response = await fetch(getApiUrl('/payments/stock/most-consumed/'));
+      const response = await fetch(getApiUrl('/payments/stock/most-consumed/'), {
+        headers: { Authorization: `Bearer ${adminToken}` }
+      });
       
       if (!response.headers.get("content-type")?.includes("application/json")) return;
       

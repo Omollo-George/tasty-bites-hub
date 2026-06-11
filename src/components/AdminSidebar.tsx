@@ -1,15 +1,14 @@
 import React from 'react'
-import { NavLink } from 'react-router-dom'
-import { Home, ShoppingBag, BarChart3, Menu as MenuIcon, Settings, Users, Package, Zap, UtensilsCrossed } from 'lucide-react'
+import { NavLink, Link } from 'react-router-dom'
+import { Home, ShoppingBag, BarChart3, Menu as MenuIcon, Settings, Users, Package, Zap } from 'lucide-react'
 import { getAdminToken } from '@/lib/admin-session'
-import TastyBitesIcon from './TastyBitesIcon'
+import TastyBitesIcon from './TastyBitesIcon' // Monitor is already imported here. No change needed.
 
 const navItems = [
   { to: '/admin', label: 'Dashboard', icon: Home, end: true },
   { to: '/admin/orders', label: 'Orders', icon: ShoppingBag },
   { to: '/admin/reports', label: 'Reports', icon: BarChart3 },
   { to: '/admin/automation', label: 'Automation', icon: Zap },
-  { to: '/admin/kds', label: 'KDS', icon: UtensilsCrossed }, // New KDS Link
   { to: '/admin/menu', label: 'Menu', icon: MenuIcon },
   { to: '/admin/employees', label: 'Employees', icon: Users },
   { to: '/admin/stock', label: 'Stock', icon: Package },

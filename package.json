@@ -5,7 +5,7 @@
   "scripts": {
     "install:all": "npm install --legacy-peer-deps && pip install -r tastybites/requirements.txt",
     "build": "vite build",
-    "dev:client": "vite",
+    "dev:client": "cross-env VITE_GOOGLE_MAPS_API_KEY=YOUR_ACTUAL_KEY_HERE vite",
     "dev:server": "python tastybites/manage.py runserver 0.0.0.0:8000",
     "dev": "concurrently \"npm run dev:client\" \"npm run dev:server\"",
     "migrate": "python tastybites/manage.py migrate",

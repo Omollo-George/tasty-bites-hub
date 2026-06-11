@@ -1,3 +1,4 @@
+/// <reference types="vite/client" />
 import React, { useEffect, useState } from 'react'
 
 type Employee = {
@@ -8,7 +9,7 @@ type Employee = {
   email: string
   salary: number
   status: string
-  joined_at: string
+  created_at: string
 }
 
 const AdminEmployees: React.FC = () => {
@@ -19,11 +20,12 @@ const AdminEmployees: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('')
   
   const adminToken = localStorage.getItem('admin_token') || ''
+  const API_BASE = import.meta.env.VITE_API_URL;
 
   const fetchEmployees = async () => {
     setLoading(true)
     try {
-      const res = await fetch('/api/payments/admin/employees/', {
+      const res = await fetch(`${API_BASE}/payments/admin/employees/`, {
         headers: { Authorization: `Bearer ${adminToken}` }
       })
       const data = await res.json()
@@ -40,7 +42,7 @@ const AdminEmployees: React.FC = () => {
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault()
     try {
-      const res = await fetch('/api/payments/admin/employees/', {
+      const res = await fetch(`${API_BASE}/payments/admin/employees/`, {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
@@ -65,7 +67,7 @@ const AdminEmployees: React.FC = () => {
   const deleteEmployee = async (id: number) => {
     if (!window.confirm('Remove this employee?')) return
     try {
-      const res = await fetch(`/api/payments/admin/employees/${id}/`, {
+      const res = await fetch(`${API_BASE}/payments/admin/employees/${id}/`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${adminToken}` }
       })
@@ -78,6 +80,42 @@ const AdminEmployees: React.FC = () => {
     } catch (err) {
       alert('Delete failed')
     }
+  }
+
+  const sendEmail = async (emp: Employee) => {
+    try {
+      // URL must match urls.py definition: /admin/employees/<id>/email/
+      const res = await fetch(`${API_BASE}/payments/admin/employees/${emp.id}/email/`, {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}` 
+        },
+        body: JSON.stringify({
+          // For now, using default subject and message. In a real app, these would come from user input.
+          subject: `Message for ${emp.name} from Tasty Bites Admin`,
+          message: `Dear ${emp.name},\n\nThis is a test email from Tasty Bites Admin. Your role is ${emp.role}.\n\nRegards,\nAdmin Team`
+        })
+      })
+      
+      if (res.ok) {
+        alert(`Email request sent for ${emp.name}`)
+      } else {
+        const data = await res.json()
+        alert(data.error || 'Failed to trigger email system')
+      }
+    } catch (err) {
+      alert('Error connecting to the email service')
+    }
+  }
+
+  const sendWhatsApp = (emp: Employee) => {
+    if (!emp.phone) return alert('No valid phone number found')
+    let phone = emp.phone.replace(/\D/g, '')
+    if (phone.startsWith('0')) phone = '254' + phone.substring(1)
+    if (phone.length === 9) phone = '254' + phone
+    
+    window.open(`https://wa.me/${phone}`, '_blank')
   }
 
   return (
@@ -207,6 +245,12 @@ const AdminEmployees: React.FC = () => {
                         className="text-orange-500 hover:text-orange-400 text-sm font-semibold"
                       >
                         Email
+                      </button>
+                      <button 
+                        onClick={() => sendWhatsApp(emp)}
+                        className="text-green-500 hover:text-green-400 text-sm font-semibold"
+                      >
+                        WhatsApp
                       </button>
                       <button 
                         onClick={() => deleteEmployee(emp.id)}

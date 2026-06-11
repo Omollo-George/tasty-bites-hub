@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, Link } from 'react-router-dom';
 import { useToast } from '@/hooks/use-toast';
 import TastyBitesIcon from '@/components/TastyBitesIcon';
+import { ArrowLeft } from 'lucide-react';
 
 interface OrderItem {
   name: string;
@@ -66,11 +67,15 @@ const OrderTracking: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col items-center justify-center p-4">
-      <div className="bg-slate-900 border border-slate-800 rounded-xl p-8 shadow-lg w-full max-w-md text-center">
+      <div className="bg-slate-900 border border-slate-800 rounded-xl p-8 shadow-lg w-full max-w-md text-center relative">
+        <Link to="/" className="absolute top-6 left-6 text-slate-400 hover:text-[#d69e2e] transition-colors flex items-center gap-2 text-xs font-bold uppercase tracking-widest group">
+          <ArrowLeft size={16} className="group-hover:-translate-x-1 transition-transform" /> 
+          Home
+        </Link>
         <TastyBitesIcon size={60} className="mx-auto mb-6" />
         <h2 className="font-display text-3xl text-[#d69e2e] mb-6">Track Your Order</h2>
         
-        <form onSubmit={handleSubmit} className="flex gap-2 mb-8">
+        <form onSubmit={handleSubmit} className="flex flex-col sm:flex-row gap-3 sm:gap-2 mb-8">
           <input
             type="text"
             value={orderIdInput}
