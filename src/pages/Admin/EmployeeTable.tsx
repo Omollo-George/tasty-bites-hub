@@ -5,7 +5,7 @@ import { getAdminToken, isAdminSessionValid } from '@/lib/admin-session';
 import { getStaffRole, getStaffName } from '@/lib/staff-session';
 import { getAuthToken, getAuthHeaders } from '@/lib/auth'; // Import the new getAuthToken and getAuthHeaders
 import Receipt from '@/components/Receipt';
-import { toast } from '@/hooks/use-toast';
+import { useToast } from '@/hooks/use-toast';
 import { 
   ArrowLeft, 
   Printer, 
@@ -19,7 +19,8 @@ import {
   Utensils, 
   LayoutGrid, 
   Smartphone, 
-  Download 
+  Download,
+  UserMinus
 } from 'lucide-react';
 
 interface MenuItem {
@@ -96,6 +97,7 @@ const EmployeeTable: React.FC = () => {
   const [awaitingMpesaConfirm, setAwaitingMpesaConfirm] = useState(false);
   const [currentOrderId, setCurrentOrderId] = useState<string | null>(null);
 
+  const { toast } = useToast();
   const pollTimerRef = useRef<any>(null);
   const safetyTimeoutRef = useRef<any>(null);
 
@@ -106,12 +108,20 @@ const EmployeeTable: React.FC = () => {
   const authToken = getAuthToken();
   const canAccess = isAdmin || ['waiter', 'cashier', 'manager'].includes(staffRole || '');
 
+  const formatImageUrl = (url?: string) => {
+    if (!url) return '';
+    if (url.startsWith('http')) return url;
+    const baseUrl = (import.meta.env.VITE_API_URL || 'http://localhost:8000').replace(/\/api\/?$/, '');
+    const path = url.startsWith('/') ? url : `/${url}`;
+    return `${baseUrl}${path}`;
+  };
+
   useEffect(() => {
     const fetchData = async () => {
       try {
         const [menuRes, tablesRes] = await Promise.all([
-          fetch(getApiUrl('/payments/menu-items/')),
-          fetch(getApiUrl('/payments/pos/tables/'), { headers: { Authorization: `Bearer ${adminToken}` } })
+          fetch(getApiUrl('/payments/menu-items/'), { headers: getAuthHeaders() }),
+          fetch(getApiUrl('/payments/pos/tables/'), { headers: getAuthHeaders() })
         ]);
         const menuData = await menuRes.json();
         const tablesData = await tablesRes.json();
@@ -264,17 +274,22 @@ const EmployeeTable: React.FC = () => {
 
     setLoading(true);
     try {
-      const res = await fetch(getApiUrl(`/payments/pos/mark-item-served/${orderId}/${itemIndex}/`), { // Use authToken for auth
+      const res = await fetch(getApiUrl(`/payments/pos/mark-item-served/${orderId}/${itemIndex}/`), {
         method: 'POST',
-        headers: { Authorization: `Bearer ${adminToken}` }
+        headers: getAuthHeaders()
       });
+
+      if (!res.headers.get("content-type")?.includes("application/json")) {
+        throw new Error("Server returned an invalid response format.");
+      }
+
       if (res.ok) {
         const data = await res.json();
         setActiveOrder(data.order); // Backend returns updated order
         toast({ title: "Item Served", description: "Item marked as served." });
       } else {
         const errorData = await res.json();
-        toast({ title: "Failed to Mark Served", description: errorData.error || "Could not update item status.", variant: "destructive" });
+        toast({ title: "Action Failed", description: errorData.error || "Could not update item status.", variant: "destructive" });
       }
     } catch (e) {
       console.error("Error marking item served:", e);
@@ -290,24 +305,31 @@ const EmployeeTable: React.FC = () => {
       toast({ title: "Bill Already Requested", description: "Bill is already pending payment.", variant: "default" }); // Corrected variant
       return;
     }
-    if (!authToken) {
-      toast({ title: "Authentication Error", description: "Please log in to perform this action.", variant: "destructive" });
-      return;
-    }
+
     setLoading(true);
-    const res = await fetch(getApiUrl(`/payments/pos/request-bill/${activeOrder.order_id}/`), {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${adminToken}` }
-    });
-    if (res.ok) {
-      const data = await res.json();
-      setActiveOrder(data.order); // Backend returns updated order
-      toast({ title: "Bill Requested", description: `Bill for order ${activeOrder.order_id.substring(0, 6)} sent to cashier.` });
-    } else {
-      const errorData = await res.json();
-      toast({ title: "Failed to Request Bill", description: errorData.error || "Could not request bill.", variant: "destructive" });
+    try {
+      const res = await fetch(getApiUrl(`/payments/pos/request-bill/${activeOrder.order_id}/`), {
+        method: 'POST',
+        headers: getAuthHeaders()
+      });
+
+      if (!res.headers.get("content-type")?.includes("application/json")) {
+        throw new Error("Server returned an invalid response format.");
+      }
+
+      if (res.ok) {
+        const data = await res.json();
+        setActiveOrder(data.order); // Backend returns updated order
+        toast({ title: "Bill Requested", description: `Bill for order ${activeOrder.order_id.substring(0, 6)} sent to cashier.` });
+      } else {
+        const errorData = await res.json();
+        toast({ title: "Failed to Request Bill", description: errorData.error || "Could not request bill.", variant: "destructive" });
+      }
+    } catch (e) {
+      toast({ title: "Connection Error", description: "Could not reach server to request bill.", variant: "destructive" });
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   const handleCancelTransaction = async () => {
@@ -396,6 +418,42 @@ const EmployeeTable: React.FC = () => {
           toast({ title: "Print Error", description: "Could not open print window.", variant: "destructive" });
         }
       }
+    }
+  };
+
+  const clearTableStatus = async () => {
+    if (!selectedTable) return;
+    const tableObj = tables.find(t => t.number === selectedTable);
+    if (!tableObj) return;
+
+    if (!window.confirm(`Mark Table ${selectedTable} as Unoccupied? This will clear the active session.`)) return;
+
+    setLoading(true);
+    try {
+      const res = await fetch(getApiUrl(`/payments/pos/tables/${tableObj.id}/`), {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ status: 'available' })
+      });
+      
+      if (res.ok) {
+        toast({ title: "Table Cleared", description: `Table ${selectedTable} is now unoccupied.` });
+        setSelectedTable('');
+        setActiveOrder(null);
+        // Refresh table list
+        const tablesRes = await fetch(getApiUrl('/payments/pos/tables/'), { headers: getAuthHeaders() });
+        if (tablesRes.ok) {
+          const tablesData = await tablesRes.json();
+          setTables(tablesData.tables || []);
+        }
+      } else {
+        const errorData = await res.json();
+        toast({ title: "Action Failed", description: errorData.error || "Could not clear table.", variant: "destructive" });
+      }
+    } catch (e) {
+      toast({ title: "Error", description: "Connection failed.", variant: "destructive" });
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -557,10 +615,9 @@ const EmployeeTable: React.FC = () => {
             onClick={() => addToCart(item)}
             className="bg-slate-800 rounded-xl p-3 text-left border border-slate-700 hover:border-orange-500 transition-all active:scale-95 group relative"
             >
-              <img 
-                src={item.image_url} 
+              <img
+                src={formatImageUrl(item.image_url)}
                 alt={item.name} 
-                crossOrigin="anonymous"
                 className="w-full h-24 object-cover rounded-lg mb-2" 
               />
               <p className="font-semibold text-slate-100 text-sm truncate">{item.name}</p>
@@ -575,6 +632,15 @@ const EmployeeTable: React.FC = () => {
         <div className="p-4 border-b border-slate-800 flex items-center gap-2">
           <ShoppingCart className="text-orange-500" />
           <h3 className="font-display text-xl text-slate-100">Order Summary</h3>
+          {selectedTable && (
+            <button 
+              onClick={clearTableStatus}
+              title="Reset Table Status"
+              className="ml-auto p-1.5 rounded-lg bg-slate-800 text-slate-400 hover:text-red-400 hover:bg-red-500/10 transition-all border border-slate-700"
+            >
+              <UserMinus size={16} />
+            </button>
+          )}
         </div>
 
         <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-900/50">
@@ -589,7 +655,7 @@ const EmployeeTable: React.FC = () => {
                   <CheckCircle2 size={12} className={item.is_served ? "text-emerald-500" : "text-blue-500"} />
                   <p className="text-slate-100 text-sm font-medium">{item.name} <span className="text-[10px] text-slate-500">(x{item.quantity})</span></p>
                 </div>
-                {item.modifiers && item.modifiers.length > 0 && (
+                {(item.modifiers || []).length > 0 && (
                   <p className="text-xs text-slate-500 ml-4 italic">({item.modifiers.join(', ')})</p>
                 )}
               </div>
@@ -605,7 +671,7 @@ const EmployeeTable: React.FC = () => {
               <div className="flex-1 min-w-0">
                 <p className="text-slate-100 text-sm font-bold truncate">{item.name} <span className="text-[9px] bg-orange-500 text-white px-1 rounded ml-1">NEW</span></p>
                 <p className="text-slate-400 text-xs">KES {item.price * item.quantity}</p>
-                {item.modifiers && item.modifiers.length > 0 && (
+                {(item.modifiers || []).length > 0 && (
                   <p className="text-xs text-slate-500 ml-0 italic">({item.modifiers.join(', ')})</p>
                 )}
               </div>

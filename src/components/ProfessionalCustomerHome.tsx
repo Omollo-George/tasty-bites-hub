@@ -79,6 +79,14 @@ const ProfessionalCustomerHome = () => {
   const [reviews, setReviews] = useState<Review[]>([]);
   const [showReviewModal, setShowReviewModal] = useState(false);
 
+  const formatImageUrl = (url?: string) => {
+    if (!url) return '';
+    if (url.startsWith('http')) return url;
+    const baseUrl = (import.meta.env.VITE_API_URL || 'http://localhost:8000').replace(/\/api\/?$/, '');
+    const path = url.startsWith('/') ? url : `/${url}`;
+    return `${baseUrl}${path}`;
+  };
+
   const pollTimerRef = useRef<any>(null);
   const safetyTimeoutRef = useRef<any>(null);
 
@@ -202,7 +210,7 @@ const ProfessionalCustomerHome = () => {
         description: `You now have ${newQuantity} of this item.`,
         action: {
           label: "View Cart",
-          onClick: () => console.log("Open cart drawer/page") // Placeholder for future cart view
+          onClick: () => setShowCartModal(true)
         },
       });
       return newCart;
@@ -563,7 +571,7 @@ const ProfessionalCustomerHome = () => {
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
             {data.featured.map(item => ( // Pass onAdd to ProItemCard
-              <ProItemCard key={item.id} item={item} currency={data.config.currency} onAdd={() => handleAddToCart(item)} />
+              <ProItemCard key={item.id} item={item} currency={data.config.currency} onAdd={() => handleAddToCart(item)} formatImageUrl={formatImageUrl} />
             ))}
           </div>
         </section>
@@ -581,7 +589,7 @@ const ProfessionalCustomerHome = () => {
                 i.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
                 i.category.toLowerCase().includes(searchQuery.toLowerCase())
               ).map(item => (
-                <ProItemCard key={item.id} item={item} currency={data.config.currency} compact onAdd={() => handleAddToCart(item)} />
+                <ProItemCard key={item.id} item={item} currency={data.config.currency} compact onAdd={() => handleAddToCart(item)} formatImageUrl={formatImageUrl} />
               ))}
             </div>
           </section>
@@ -640,12 +648,13 @@ const ProItemCard = ({
   item, 
   currency, 
   compact,
-  onAdd 
-}: { item: RawMenuItem; currency: string; compact?: boolean; onAdd: () => void }) => (
+  onAdd,
+  formatImageUrl
+}: { item: RawMenuItem; currency: string; compact?: boolean; onAdd: () => void; formatImageUrl: (url?: string) => string }) => (
   <div className="group relative bg-white/5 border border-white/10 rounded-[2.5rem] overflow-hidden backdrop-blur-sm transition-all duration-500 hover:bg-white/10 hover:border-white/20 hover:-translate-y-2">
     <div className={`relative ${compact ? 'h-48' : 'h-64'} overflow-hidden`}>
       <img 
-        src={item.image_url} 
+        src={formatImageUrl(item.image_url)} 
         className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" 
         alt={item.name} 
       />

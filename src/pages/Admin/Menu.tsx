@@ -44,6 +44,16 @@ const AdminMenu: React.FC = () => {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const adminToken = getAdminToken() || '';
 
+  const formatImageUrl = (url?: string) => {
+    if (!url) return '';
+    if (url.startsWith('http')) return url;
+    // Construct the absolute URL by prepending the backend base URL, stripping any trailing /api.
+    // We trust the path provided by the backend.
+    const baseUrl = (import.meta.env.VITE_API_URL || 'http://localhost:8000').replace(/\/api\/?$/, '');
+    const path = url.startsWith('/') ? url : `/${url}`;
+    return `${baseUrl}${path}`;
+  };
+
   const fetchTables = async () => {
     try {
       const response = await fetch(getApiUrl('/payments/pos/tables/'), {
@@ -150,11 +160,17 @@ const AdminMenu: React.FC = () => {
         body: formData,
       })
       const data = await response.json()
+      console.log('Image upload response data:', data); // Log the response for debugging
       if (response.ok) {
-        if (isEditing && editingItem) {
-          setEditingItem({ ...editingItem, image_url: data.url })
+        const imageUrl = data.url || data.image_url || data.image; // Handle different backend property names
+        if (imageUrl) {
+          if (isEditing && editingItem) {
+            setEditingItem({ ...editingItem, image_url: imageUrl })
+          } else {
+            setNewItem({ ...newItem, image_url: imageUrl })
+          }
         } else {
-          setNewItem({ ...newItem, image_url: data.url })
+          alert('Upload successful, but no image URL returned from server.')
         }
       } else {
         alert(data.error || 'Upload failed')
@@ -171,6 +187,11 @@ const AdminMenu: React.FC = () => {
       alert('Name, Category, and Price are required.')
       return
     }
+    const price = Number(newItem.price);
+    if (isNaN(price) || price <= 0) {
+      alert('Please enter a valid price greater than 0.');
+      return;
+    }
     try {
       const response = await fetch(getApiUrl('/payments/menu-items/create/'), {
         method: 'POST',
@@ -180,7 +201,7 @@ const AdminMenu: React.FC = () => {
         },
         body: JSON.stringify({
           ...newItem,
-          price: Number(newItem.price),
+          price: price,
           food_cost: Number(newItem.food_cost || 0),
         }),
       })
@@ -290,8 +311,8 @@ const AdminMenu: React.FC = () => {
             break;
           }
           const data = await response.json()
-          console.error(`Failed to add default item ${item.name}:`, data.error || 'Unknown error')
-          alert(`Failed to add some default menu items. Check console for details.`)
+          console.error(`Failed to add item "${item.name}":`, data.error || 'Unknown error')
+          alert(`Failed to add "${item.name}". Reason: ${data.error || 'Server rejected item data.'}`)
           break // Stop on first error
         }
       }
@@ -449,9 +470,8 @@ const AdminMenu: React.FC = () => {
                   </button>
                 </div>
                 {newItem.image_url && (
-                  <img 
-                    src={newItem.image_url} 
-                    crossOrigin="anonymous"
+                  <img
+                    src={formatImageUrl(newItem.image_url)}
                     className="h-20 w-32 object-cover rounded-lg mt-2 border border-slate-700" 
                     alt="Preview" 
                   />
@@ -577,9 +597,8 @@ const AdminMenu: React.FC = () => {
                   </button>
                 </div>
                 {editingItem.image_url && (
-                  <img 
-                    src={editingItem.image_url} 
-                    crossOrigin="anonymous"
+                  <img
+                    src={formatImageUrl(editingItem.image_url)}
                     className="h-20 w-32 object-cover rounded-lg mt-2 border border-slate-700" 
                     alt="Preview" 
                   />

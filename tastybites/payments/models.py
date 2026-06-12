@@ -108,6 +108,7 @@ class OrderItem(models.Model):
     quantity = models.PositiveIntegerField(default=1)
     modifiers = models.JSONField(blank=True, null=True, default=list)
     seat_number = models.PositiveIntegerField(default=1)
+    is_served = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
 
     if TYPE_CHECKING:

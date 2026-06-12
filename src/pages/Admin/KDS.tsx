@@ -149,7 +149,7 @@ const AdminKDS: React.FC = () => {
                       {item.is_served && (
                         <span className="text-xs text-emerald-400 ml-2">(Served)</span>
                       )}
-                      {item.modifiers && item.modifiers.length > 0 && !item.is_served && (
+                      {(item.modifiers || []).length > 0 && !item.is_served && (
                         <span className="text-xs text-slate-500 ml-2">({item.modifiers.join(', ')})</span>
                       )}
                     </li>
