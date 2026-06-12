@@ -11,6 +11,7 @@ urlpatterns = [
     path('admin/signout/', views.admin_signout, name='admin_signout'),
     path('staff/signin/', views.staff_signin, name='staff_signin'),
     path('admin/touch/', views.admin_touch, name='admin_touch'),
+    path('staff/activities/', views.staff_activities, name='staff_activities'),
     path('admin/session-logs/', views.admin_session_logs, name='admin_session_logs'),
     path('admin/me/', views.admin_me, name='admin_me'),
     path('admin/settings/', views.admin_settings, name='admin_settings'),
