@@ -123,6 +123,30 @@ def _get_staff_token(request):
 def _is_staff(request):
     return bool(_get_staff_token(request))
 
+def staff_activities(request):
+    """Returns a log of recent activities for the staff dashboard."""
+    if not _is_staff(request):
+        return JsonResponse({'error': 'unauthorized'}, status=403)
+
+    try:
+        # Fetch recent orders to show as activity
+        orders = Order.objects.all().select_related('table').order_by('-created_at')[:15]
+        activities = []
+
+        for o in orders:
+            activities.append({
+                'id': f"act-{o.order_id[:8]}",
+                'type': 'order',
+                'title': f"Order {o.status.title()}",
+                'description': f"Table {o.table.number if o.table else 'Takeaway'} - KES {o.total_amount}",
+                'time': o.created_at.isoformat() if o.created_at else None,
+                'status': o.status
+            })
+
+        return JsonResponse({'activities': activities})
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
 def _get_period_dates(period_type: str, date_str: str):
     """
     Calculates start and end dates for a report period based on type and a reference date.
