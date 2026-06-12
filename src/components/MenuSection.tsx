@@ -120,6 +120,14 @@ const MenuSection = () => {
     };
   }, []);
 
+  const formatImageUrl = (url?: string) => {
+    if (!url) return '';
+    if (url.startsWith('http')) return url;
+    const baseUrl = (import.meta.env.VITE_API_URL || 'http://localhost:8000').replace(/\/api\/?$/, '');
+    const path = url.startsWith('/') ? url : `/${url}`;
+    return `${baseUrl}${path}`;
+  };
+
   const handleCancelTransaction = async () => {
     if (pollTimerRef.current) {
       window.clearTimeout(pollTimerRef.current);
@@ -461,6 +469,7 @@ const MenuSection = () => {
                 <p className="text-slate-400 text-sm mb-4">{item.description}</p>
 
                 <div className="flex items-center justify-between">
+                  {item.image_url && <img src={formatImageUrl(item.image_url)} alt={item.name} className="w-16 h-16 object-cover rounded-lg mr-4" />}
                   <span className="font-display text-3xl text-gradient">{formatCurrency(item.price * rate)}</span>
 
                   {activeItem === item.name ? (

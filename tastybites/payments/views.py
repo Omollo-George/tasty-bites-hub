@@ -1446,6 +1446,7 @@ def _serialize_order(order):
                 'quantity': item.quantity,
                 'modifiers': item.modifiers or [],
                 'seat_number': item.seat_number,
+                'is_served': item.is_served,
                 'subtotal': float(item.price * item.quantity),
             }
             for item in order.items.all().order_by('id')  # type: ignore
@@ -2014,7 +2015,7 @@ def table_list(request):
 @csrf_exempt
 def table_update(request, table_id):
     """Updates or removes a table."""
-    if not _is_admin(request):
+    if not _is_staff(request):
         return JsonResponse({'error': 'unauthorized'}, status=403)
     
     try:
@@ -2035,6 +2036,37 @@ def table_update(request, table_id):
     t.name = (payload.get('name') or t.name)
     t.save()
     return JsonResponse({'ok': True, 'status': t.status, 'name': t.name})
+
+
+def get_active_pos_order(request):
+    """Retrieves an active order for a given table number."""
+    if request.method != 'GET':
+        return HttpResponseBadRequest('Only GET allowed')
+
+    if not _is_staff(request):
+        return JsonResponse({'error': 'unauthorized'}, status=403)
+
+    table_number = request.GET.get('table_number')
+    if not table_number:
+        return JsonResponse({'error': 'table_number is required'}, status=400)
+
+    try:
+        table = Table.objects.get(number=table_number)
+        # Find an active order for this table. Prioritize non-completed/cancelled orders.
+        order = Order.objects.filter(
+            table=table,
+            status__in=['pending', 'preparing', 'paid', 'bill_pending']
+        ).order_by('-created_at').first() # Get the most recent active order
+
+        if order:
+            return JsonResponse(_serialize_order(order))
+        else:
+            return JsonResponse({'error': 'no_active_order_found'}, status=404)
+    except Table.DoesNotExist:
+        return JsonResponse({'error': 'table_not_found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': 'server_error', 'message': str(e)}, status=500)
+
 
 @csrf_exempt
 def create_pos_order(request):
@@ -2093,6 +2125,7 @@ def create_pos_order(request):
         total_amount += delivery_cost
 
         split_count = max(1, int(payload.get('split_count', 1)))
+        initial_status = payload.get('status', 'preparing')
         order = Order.objects.create(
             table=table,
             phone=phone,
@@ -2100,7 +2133,7 @@ def create_pos_order(request):
             delivery_distance_km=Decimal(str(delivery_distance_km)) if delivery_distance_km not in (None, '') else None,
             delivery_time=delivery_time,
             delivery_cost=delivery_cost,
-            status='preparing',
+            status=initial_status,
             split_count=split_count,
             total_amount=total_amount,
         )
@@ -2183,6 +2216,42 @@ def create_pos_order(request):
         print(f"create_pos_order error: {error_message}")
         return JsonResponse({'error': 'server_error', 'message': error_message}, status=500)
 
+@csrf_exempt
+def add_to_pos_order(request, order_id):
+    """Adds new items to an existing active order (KOT update)."""
+    if not _is_staff(request):
+        return JsonResponse({'error': 'unauthorized'}, status=403)
+        
+    try:
+        order = Order.objects.get(order_id=order_id)
+        payload = json.loads(request.body.decode('utf-8'))
+        items_data = payload.get('items', [])
+        
+        new_total = order.total_amount
+        for item in items_data:
+            price = Decimal(str(item.get('price', 0)))
+            quantity = max(1, int(item.get('quantity', 1)))
+            
+            OrderItem.objects.create(
+                order=order,
+                name=str(item.get('name', '')).strip(),
+                price=price,
+                food_cost=Decimal(str(item.get('food_cost') or item.get('cost') or 0)),
+                quantity=quantity,
+                modifiers=item.get('modifiers', []),
+                seat_number=item.get('seat_number', 1)
+            )
+            new_total += (price * quantity)
+            
+        order.total_amount = new_total
+        order.save()
+        
+        return JsonResponse(_serialize_order(order))
+    except Order.DoesNotExist:
+        return JsonResponse({'error': 'order_not_found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': 'server_error', 'message': str(e)}, status=500)
+
 def kds_queue(request):
     """Live queue for the kitchen."""
     orders = Order.objects.filter(
@@ -2195,6 +2264,7 @@ def kds_queue(request):
             'name': i.name,
             'quantity': i.quantity,
             'seat': i.seat_number,
+            'is_served': i.is_served,
             'modifiers': i.modifiers
         } for i in o.items.all()]  # type: ignore
         
@@ -2221,6 +2291,49 @@ def order_complete(request, order_id):
     order.status = 'ready'
     order.save()
     return JsonResponse({'ok': True})
+
+@csrf_exempt
+def mark_item_served(request, order_id, item_index):
+    """Waiter marks a specific item in an order as served."""
+    if not _is_staff(request):
+        return JsonResponse({'error': 'unauthorized'}, status=403)
+    
+    try:
+        order = Order.objects.get(order_id=order_id)
+        # We convert to a list to match the index sent from the frontend map
+        items = list(order.items.all().order_by('id'))
+        idx = int(item_index)
+        
+        if 0 <= idx < len(items):
+            item = items[idx]
+            item.is_served = True
+            item.save()
+            return JsonResponse({'ok': True, 'order': _serialize_order(order)})
+        else:
+            return JsonResponse({'error': 'item_not_found'}, status=404)
+    except Order.DoesNotExist:
+        return JsonResponse({'error': 'order_not_found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+@csrf_exempt
+def request_bill(request, order_id):
+    """Waiter signals that the customer is ready to pay."""
+    if not _is_staff(request):
+        return JsonResponse({'error': 'unauthorized'}, status=403)
+    
+    try:
+        order = Order.objects.get(order_id=order_id)
+        order.status = 'bill_pending'
+        order.save()
+        
+        if order.table:
+            order.table.status = 'bill_pending'
+            order.table.save()
+            
+        return JsonResponse({'ok': True, 'order': _serialize_order(order)})
+    except Order.DoesNotExist:
+        return JsonResponse({'error': 'order_not_found'}, status=404)
 
 @csrf_exempt
 def initiate_split_payment(request):
@@ -2273,6 +2386,7 @@ def get_receipt_data(request, order_id):
             'name': i.name,
             'qty': i.quantity,
             'seat': i.seat_number,
+            'is_served': i.is_served,
             'price': float(i.price),
             'modifiers': i.modifiers,
             'subtotal': float(i.subtotal)
