@@ -2093,8 +2093,7 @@ def create_pos_order(request):
     delivery_address = (payload.get('delivery_address') or '').strip()
     delivery_time = (payload.get('delivery_time') or '').strip()
     delivery_distance_km = payload.get('delivery_distance_km')
-    delivery_time = (payload.get('delivery_time') or '').strip()
-    delivery_cost = Decimal(str(payload.get('delivery_cost') or '0') or '0')
+    delivery_cost_raw = payload.get('delivery_cost')
 
     payment_method = str(payload.get('payment_method') or Transaction.METHOD_M_PESA).lower()
     if payment_method == Transaction.METHOD_M_PESA:
@@ -2113,6 +2112,20 @@ def create_pos_order(request):
         if order_type == 'table' and clean_table_no and clean_table_no.lower() != 'counter':
             table, _ = Table.objects.get_or_create(number=clean_table_no, defaults={'name': clean_table_no})
 
+        # Robust Decimal conversion for delivery data
+        delivery_cost = Decimal('0.00')
+        try:
+            delivery_cost = Decimal(str(delivery_cost_raw or '0') or '0')
+        except (InvalidOperation, ValueError, TypeError):
+            pass
+
+        clean_distance = None
+        try:
+            if delivery_distance_km not in (None, ''):
+                clean_distance = Decimal(str(delivery_distance_km))
+        except (InvalidOperation, ValueError, TypeError):
+            pass
+
         total_amount = Decimal('0.00')
         for item in items_data:
             try:
@@ -2130,7 +2143,7 @@ def create_pos_order(request):
             table=table,
             phone=phone,
             delivery_address=delivery_address,
-            delivery_distance_km=Decimal(str(delivery_distance_km)) if delivery_distance_km not in (None, '') else None,
+            delivery_distance_km=clean_distance,
             delivery_time=delivery_time,
             delivery_cost=delivery_cost,
             status=initial_status,
@@ -2157,11 +2170,19 @@ def create_pos_order(request):
             elif not isinstance(modifiers, list):
                 modifiers = []
 
+            # Robust Decimal conversion for OrderItem to prevent 500 crashes
+            try:
+                i_price = Decimal(str(item.get('price') or '0'))
+                i_food_cost = Decimal(str(item.get('food_cost') or item.get('cost') or '0') or '0')
+            except (InvalidOperation, ValueError, TypeError):
+                i_price = Decimal('0.00')
+                i_food_cost = Decimal('0.00')
+
             OrderItem.objects.create(
                 order=order,
                 name=str(item.get('name') or '').strip(),
-                price=Decimal(str(item.get('price') or '0')),
-                food_cost=Decimal(str(item.get('food_cost') or item.get('cost') or '0') or '0'),
+                price=i_price,
+                food_cost=i_food_cost,
                 quantity=max(1, int(item.get('quantity') or 1)),
                 modifiers=modifiers,
                 seat_number=seat,
@@ -2254,32 +2275,49 @@ def add_to_pos_order(request, order_id):
 
 def kds_queue(request):
     """Live queue for the kitchen."""
-    orders = Order.objects.filter(
-        status__in=['preparing', 'pending', 'paid']
-    ).order_by('created_at')
+    if not _is_staff(request):
+        return JsonResponse({'error': 'unauthorized'}, status=403)
 
-    results = []
-    for o in orders:
-        items = [{
-            'name': i.name,
-            'quantity': i.quantity,
-            'seat': i.seat_number,
-            'is_served': i.is_served,
-            'modifiers': i.modifiers
-        } for i in o.items.all()]  # type: ignore
-        
-        results.append({
-            'order_id': o.order_id,
-            'table': o.table.number if o.table else 'Takeaway',
-            'items': items,
-            'created_at': o.created_at.isoformat() if o.created_at else None,
-            'status': o.status,
-            'phone': o.phone,
-            'total_amount': float(o.total_amount),
-            'split_count': o.split_count,
-        })
+    try:
+        # Optimization: use select_related and prefetch_related to reduce DB queries
+        orders = Order.objects.filter(
+            status__in=['preparing', 'pending', 'paid']
+        ).select_related('table').prefetch_related('items').order_by('created_at')
 
-    return JsonResponse({'queue': results})
+        results = []
+        for o in orders:
+            # Safer item serialization
+            items = [{
+                'name': i.name,
+                'quantity': i.quantity,
+                'seat': i.seat_number,
+                'is_served': i.is_served,
+                'modifiers': i.modifiers if isinstance(i.modifiers, list) else []
+            } for i in o.items.all()]
+            
+            # Safer table access
+            table_display = 'Takeaway'
+            if o.table:
+                table_display = o.table.number or o.table.name or f"Table {o.table.id}"
+            elif o.delivery_address:
+                table_display = 'Delivery'
+
+            results.append({
+                'order_id': o.order_id,
+                'table': table_display,
+                'items': items,
+                'created_at': o.created_at.isoformat() if o.created_at else None,
+                'status': o.status,
+                'phone': o.phone,
+                'total_amount': float(o.total_amount or 0), # Robustness against None
+                'split_count': o.split_count or 1,
+            })
+
+        return JsonResponse({'queue': results})
+    except Exception as e:
+        # Log the actual error to server console and return a JSON error instead of crashing
+        print(f"KDS Queue Error: {str(e)}")
+        return JsonResponse({'error': 'server_error', 'message': str(e)}, status=500)
 
 @csrf_exempt
 def order_complete(request, order_id):
