@@ -1,0 +1,14 @@
+version: '3.8'
+services:
+  web:
+    build: .
+    working_dir: /app/backend
+    ports:
+      - "8000:8000"
+    environment:
+      - DJANGO_DEBUG=False
+      - PORT=8000
+      - DJANGO_SECRET_KEY=changeme
+    volumes:
+      - ./:/app:cached
+    command: gunicorn tastybites.wsgi:application --bind 0.0.0.0:8000 --workers 2
