@@ -100,6 +100,11 @@ const AdminLogin: React.FC = () => {
       } else {
         setLockoutSeconds(0)
         setAdminToken(data.token)
+        if (data.username) {
+          import('@/lib/admin-session').then(module => {
+            module.setAdminUser({ username: data.username })
+          })
+        }
         navigate(from, { replace: true })
       }
     } catch (err) {

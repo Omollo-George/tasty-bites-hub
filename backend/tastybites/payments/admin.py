@@ -38,9 +38,9 @@ class OrderAdmin(admin.ModelAdmin):
 
 @admin.register(MenuItem)
 class MenuItemAdmin(admin.ModelAdmin):
-    list_display = ('name', 'category', 'price', 'stock_level', 'popular', 'is_available', 'image_url')
+    list_display = ('name', 'sku', 'category', 'price', 'stock_level', 'popular', 'is_available', 'image_url')
     list_filter = ('category', 'popular', 'is_available')
-    search_fields = ('name', 'description')
+    search_fields = ('name', 'description', 'sku')
     list_editable = ('price', 'stock_level', 'is_available', 'image_url')
 
 @admin.register(OrderItem)

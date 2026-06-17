@@ -3,6 +3,7 @@ import { Flame, ShoppingCart, Star, ChevronRight, Search, MapPin, MessageSquareT
 import { getApiUrl } from '@/lib/api';
 import { useNavigate, Link } from 'react-router-dom';
 import { toast } from 'sonner';
+import { formatImageUrl } from '@/lib/image';
 import CartModal from './CartModal'; // Import the new CartModal component
 import { formatCurrency } from './utils'; 
 import Receipt from './Receipt'; // Reusing the Receipt component
@@ -42,6 +43,7 @@ interface OrderReceipt {
   table_number: string; // Added to satisfy Receipt props
   delivery_address?: string;
   phone?: string;
+  cashier_notified?: boolean;
 }
 
 interface Review {
@@ -78,14 +80,6 @@ const ProfessionalCustomerHome = () => {
   const navigate = useNavigate();
   const [reviews, setReviews] = useState<Review[]>([]);
   const [showReviewModal, setShowReviewModal] = useState(false);
-
-  const formatImageUrl = (url?: string) => {
-    if (!url) return '';
-    if (url.startsWith('http')) return url;
-    const baseUrl = (import.meta.env.VITE_API_URL || 'http://localhost:8000').replace(/\/api\/?$/, '');
-    const path = url.startsWith('/') ? url : `/${url}`;
-    return `${baseUrl}${path}`;
-  };
 
   const pollTimerRef = useRef<any>(null);
   const safetyTimeoutRef = useRef<any>(null);
@@ -289,6 +283,7 @@ const ProfessionalCustomerHome = () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           items: cart.map((item) => ({
+            menu_item_id: (item as any).menu_item_id || (item as any).id || undefined,
             name: item.name,
             price: item.price,
             quantity: item.quantity,
@@ -348,6 +343,7 @@ const ProfessionalCustomerHome = () => {
                 order_type: "takeaway", // Added to satisfy OrderReceipt interface
                 table_number: "",
                 delivery_address: orderType === 'delivery' ? deliveryAddress : undefined,
+                cashier_notified: true,
               };
 
               setLastOrder(orderDetails);
@@ -577,23 +573,33 @@ const ProfessionalCustomerHome = () => {
         </section>
 
         {/* Category Grids */}
-        {Object.entries(data.menu_by_category).map(([category, items]) => (
-          <section key={category} className="mb-20">
-            <div id={`category-${category}`} className="flex items-center gap-4 mb-10">
-              <h4 className="text-4xl font-black tracking-tight italic uppercase">{category}</h4>
-              <div className="h-[2px] flex-1 bg-gradient-to-r from-white/20 to-transparent" />
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-              {items.filter(i => 
-                i.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                i.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                i.category.toLowerCase().includes(searchQuery.toLowerCase())
-              ).map(item => (
-                <ProItemCard key={item.id} item={item} currency={data.config.currency} compact onAdd={() => handleAddToCart(item)} formatImageUrl={formatImageUrl} />
-              ))}
-            </div>
-          </section>
-        ))}
+        {data.categories.map((category) => {
+          const items = data.menu_by_category[category] || [];
+          return (
+            <section key={category} className="mb-20">
+              <div id={`category-${category}`} className="flex items-center gap-4 mb-10">
+                <h4 className="text-4xl font-black tracking-tight italic uppercase">{category}</h4>
+                <div className="h-[2px] flex-1 bg-gradient-to-r from-white/20 to-transparent" />
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                {items.filter(i => 
+                  i.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                  i.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                  i.category.toLowerCase().includes(searchQuery.toLowerCase())
+                ).map((item, index) => (
+                  <ProItemCard 
+                    key={`${category}-${item.id}-${index}`} 
+                    item={item} 
+                    currency={data.config.currency} 
+                    compact 
+                    onAdd={() => handleAddToCart(item)} 
+                    formatImageUrl={formatImageUrl} 
+                  />
+                ))}
+              </div>
+            </section>
+          );
+        })}
       </main>
 
       {/* Customer Reviews Section */}

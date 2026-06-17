@@ -8,6 +8,7 @@ import {
   setAdminSessionExpiry,
   touchAdminSession,
 } from '@/lib/admin-session'
+import { getApiUrl } from '@/lib/api'
 
 const WARNING_THRESHOLD_MS = 60 * 1000
 
@@ -18,7 +19,6 @@ const AdminAuthGuard: React.FC<{ children: React.ReactNode }> = ({ children }) =
   const [timeRemainingSeconds, setTimeRemainingSeconds] = useState(0)
   const lastServerTouch = useRef(Date.now())
   const location = useLocation()
-  const apiBase = import.meta.env.VITE_API_URL ?? 'http://localhost:8000'
 
   // HOOK 1: Verify token on mount
   useEffect(() => {
@@ -32,12 +32,23 @@ const AdminAuthGuard: React.FC<{ children: React.ReactNode }> = ({ children }) =
 
     const verify = async () => {
       try {
-        const res = await fetch(`${apiBase}/api/payments/admin/me/`, {
+        const res = await fetch(getApiUrl('/payments/admin/me/'), {
           headers: {
             Authorization: `Bearer ${token}`,
           },
         })
         if (res.ok) {
+          const data = await res.json()
+          if (data && data.username) {
+            const { setAdminUser } = await import('@/lib/admin-session')
+            setAdminUser({
+              id: data.id,
+              username: data.username,
+              display_name: data.display_name || data.username,
+              authorized: data.authorized,
+              expires_at: data.expires_at,
+            })
+          }
           setAuthorized(true)
           setAdminSessionExpiry()
         } else {
@@ -62,7 +73,7 @@ const AdminAuthGuard: React.FC<{ children: React.ReactNode }> = ({ children }) =
     const logout = async () => {
       const token = getAdminToken()
       if (token) {
-        await fetch(`${import.meta.env.VITE_API_URL ?? ''}/api/payments/admin/signout/`, {
+        await fetch(getApiUrl('/payments/admin/signout/'), {
           headers: { Authorization: `Bearer ${token}` }
         }).catch(() => {})
       }
@@ -80,7 +91,7 @@ const AdminAuthGuard: React.FC<{ children: React.ReactNode }> = ({ children }) =
         if (now - lastServerTouch.current > 5 * 60 * 1000) {
           lastServerTouch.current = now
           const token = getAdminToken()
-          fetch(`${apiBase}/api/payments/admin/touch/`, {
+          fetch(getApiUrl('/payments/admin/touch/'), {
             method: 'POST',
             headers: { Authorization: `Bearer ${token}` }
           }).catch(() => {})
@@ -137,8 +148,12 @@ const AdminAuthGuard: React.FC<{ children: React.ReactNode }> = ({ children }) =
 
   const staySignedIn = () => {
     const token = getAdminToken()
-      fetch(`${apiBase}/api/payments/admin/touch/`, {
-    }).catch(() => {})
+    if (token) {
+      fetch(getApiUrl('/payments/admin/touch/'), {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      }).catch(() => {})
+    }
     touchAdminSession()
     setShowTimeoutWarning(false)
   }

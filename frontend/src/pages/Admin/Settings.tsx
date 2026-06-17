@@ -27,6 +27,10 @@ const AdminSettings: React.FC = () => {
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState('')
   const [userMessage, setUserMessage] = useState('')
+  const [showClearSessionsModal, setShowClearSessionsModal] = useState(false)
+  const [sessionClearPassword, setSessionClearPassword] = useState('')
+  const [sessionClearMessage, setSessionClearMessage] = useState('')
+  const [sessionClearLoading, setSessionClearLoading] = useState(false)
   const navigate = useNavigate()
 
   useEffect(() => {
@@ -184,6 +188,50 @@ const AdminSettings: React.FC = () => {
     }
   }
 
+  const clearAllSessions = async () => {
+    const token = getAdminToken()
+    if (!token) {
+      navigate('/admin/login')
+      return
+    }
+
+    setSessionClearMessage('')
+    setSessionClearLoading(true)
+
+    try {
+      const response = await fetch(getApiUrl('/payments/admin/clear-sessions/'), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ password: sessionClearPassword }),
+      })
+
+      if (!response.headers.get("content-type")?.includes("application/json")) {
+        throw new Error("Invalid server response.");
+      }
+
+      const data = await response.json()
+      if (!response.ok) {
+        setSessionClearMessage(data.error || 'Failed to clear sessions')
+      } else {
+        setSessionClearMessage('All admin sessions cleared successfully.')
+        setSessionClearPassword('')
+        setShowClearSessionsModal(false)
+        // Refresh the session logs
+        setTimeout(() => {
+          window.location.reload()
+        }, 1500)
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      setSessionClearMessage(`Unable to clear sessions: ${message}`)
+    } finally {
+      setSessionClearLoading(false)
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between mb-6">
@@ -308,9 +356,18 @@ const AdminSettings: React.FC = () => {
       </div>
 
       <div className="bg-slate-800 p-6 rounded-xl shadow-card border border-slate-700">
-        <div className="mb-4">
-          <p className="text-sm text-slate-400">Security Audit</p>
-          <h3 className="font-semibold text-xl text-slate-100">Session History</h3>
+        <div className="mb-4 flex items-center justify-between">
+          <div>
+            <p className="text-sm text-slate-400">Security Audit</p>
+            <h3 className="font-semibold text-xl text-slate-100">Session History</h3>
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowClearSessionsModal(true)}
+            className="rounded-full border border-red-900/50 px-4 py-2 text-red-400 hover:bg-red-950/30 disabled:opacity-50"
+          >
+            Clear All Sessions
+          </button>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-left">
@@ -341,6 +398,58 @@ const AdminSettings: React.FC = () => {
           </table>
         </div>
       </div>
+
+      {showClearSessionsModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-slate-800 rounded-xl border border-slate-700 p-6 max-w-md w-full shadow-lg">
+            <h4 className="text-lg font-semibold text-slate-100 mb-4">Clear All Sessions</h4>
+            <p className="text-sm text-slate-400 mb-4">
+              This will log out all admin users immediately. Enter your password to confirm.
+            </p>
+            <label className="grid gap-2 mb-4">
+              <span className="text-sm text-slate-400">Password</span>
+              <input
+                type="password"
+                value={sessionClearPassword}
+                onChange={(e) => setSessionClearPassword(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && sessionClearPassword && !sessionClearLoading) {
+                    clearAllSessions()
+                  }
+                }}
+                placeholder="••••••••"
+                className="w-full rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-slate-100"
+                disabled={sessionClearLoading}
+              />
+            </label>
+            {sessionClearMessage && (
+              <p className="text-sm text-slate-400 mb-4">{sessionClearMessage}</p>
+            )}
+            <div className="flex gap-3 justify-end">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowClearSessionsModal(false)
+                  setSessionClearPassword('')
+                  setSessionClearMessage('')
+                }}
+                disabled={sessionClearLoading}
+                className="rounded-full border border-slate-600 px-4 py-2 text-slate-300 hover:bg-slate-700 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={clearAllSessions}
+                disabled={sessionClearLoading || !sessionClearPassword}
+                className="rounded-full bg-red-600 px-4 py-2 text-white hover:bg-red-700 disabled:opacity-50"
+              >
+                {sessionClearLoading ? 'Clearing…' : 'Clear Sessions'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

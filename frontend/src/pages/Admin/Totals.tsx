@@ -37,8 +37,11 @@ const Totals: React.FC = () => {
   }, [])
 
   const paidOrders = orders.filter(o => o.is_paid)
-  const totalOrders = paidOrders.length
-  const pending = orders.filter(o => ['pending', 'preparing', 'ready'].includes((o.status || '').toLowerCase())).length
+  const totalOrders = orders.length
+  const pending = orders.filter(o => {
+    const status = (o.status || '').toLowerCase()
+    return !o.is_paid && !['paid', 'completed', 'cancelled'].includes(status)
+  }).length
   const revenue = paidOrders.reduce((s, o) => s + ((o.total_amount || 0)), 0) * rate
 
   return (

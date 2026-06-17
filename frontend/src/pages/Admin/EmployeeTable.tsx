@@ -2,8 +2,9 @@ import React, { useEffect, useState, useRef } from 'react';
 import { Link, useSearchParams, Navigate } from 'react-router-dom';
 import { getApiUrl } from '@/lib/api';
 import { getAdminToken, isAdminSessionValid } from '@/lib/admin-session';
-import { getStaffRole, getStaffName } from '@/lib/staff-session';
+import { getStaffRole, getStaffName, getStaffId } from '@/lib/staff-session';
 import { getAuthToken, getAuthHeaders } from '@/lib/auth'; // Import the new getAuthToken and getAuthHeaders
+import { formatImageUrl } from '@/lib/image';
 import Receipt from '@/components/Receipt';
 import { useToast } from '@/hooks/use-toast';
 import { 
@@ -84,6 +85,7 @@ const EmployeeTable: React.FC = () => {
   const [tables, setTables] = useState<Table[]>([]);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [activeOrder, setActiveOrder] = useState<PosOrderReceipt | null>(null);
+  const [lastSentOrder, setLastSentOrder] = useState<PosOrderReceipt | null>(null);
   const [orderType, setOrderType] = useState<'table' | 'takeaway'>('table');
   const [selectedTable, setSelectedTable] = useState<string>('');
   const [searchQuery, setSearchQuery] = useState('');
@@ -91,6 +93,7 @@ const EmployeeTable: React.FC = () => {
   const [initialLoading, setInitialLoading] = useState(true);
   const [showReceiptModal, setShowReceiptModal] = useState(false);
   const [receiptData, setReceiptData] = useState<PosOrderReceipt | null>(null);
+  const [waiterNameOverride, setWaiterNameOverride] = useState<string>('');
 
   const { toast } = useToast();
   const pollTimerRef = useRef<any>(null);
@@ -103,23 +106,17 @@ const EmployeeTable: React.FC = () => {
   const authToken = getAuthToken();
   const canAccess = isAdmin || ['waiter', 'cashier', 'manager'].includes(staffRole || '');
 
-  const formatImageUrl = (url?: string) => {
-    if (!url) return '';
-    if (url.startsWith('http')) return url;
-    const baseUrl = (import.meta.env.VITE_API_URL || 'http://localhost:8000').replace(/\/api\/?$/, '');
-    const path = url.startsWith('/') ? url : `/${url}`;
-    return `${baseUrl}${path}`;
-  };
+  // Determine final waiter name: use override if set, otherwise use staffName, fallback to 'Staff'
+  const finalWaiterName = waiterNameOverride || staffName || 'Staff';
 
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [menuRes, tablesRes] = await Promise.all([
-          fetch(getApiUrl('/payments/menu-items/'), { headers: getAuthHeaders() }),
-          fetch(getApiUrl('/payments/pos/tables/'), { headers: getAuthHeaders() })
-        ]);
-        const menuData = await menuRes.json();
-        const tablesData = await tablesRes.json();
+        // Fetch menu items without auth headers (public endpoint) to avoid token mismatch issues
+        const menuRes = await fetch(getApiUrl('/payments/menu-items/'));
+        const tablesRes = await fetch(getApiUrl('/payments/pos/tables/'), { headers: getAuthHeaders() });
+        const menuData = menuRes.ok ? await menuRes.json() : { menu_items: [] };
+        const tablesData = tablesRes.ok ? await tablesRes.json() : { tables: [] };
         setMenuItems(menuData.menu_items || []);
         setTables(tablesData.tables || []);
 
@@ -150,6 +147,48 @@ const EmployeeTable: React.FC = () => {
     };
     fetchData();
   }, [authToken, searchParams]); // Removed adminToken from dependency array
+
+  // Listen for Server-Sent Events to keep preview/in-memory orders in sync
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.EventSource) return;
+    let es: EventSource | null = null;
+    try {
+      es = new EventSource(getApiUrl('/payments/stream/'));
+      es.onmessage = (ev) => {
+        try {
+          const payload = JSON.parse(ev.data || '{}');
+          const type = payload.type;
+          const data = payload.data || {};
+          // If the lastSentOrder was updated/ready/paid/changed on the server, clear the preview
+          if (lastSentOrder && data.order_id && data.order_id === lastSentOrder.order_id && (type === 'order_update' || type === 'order_ready' || type === 'new_order')) {
+            setLastSentOrder(null);
+          }
+          // If the activeOrder was updated, refresh it from server
+          if (activeOrder && data.order_id && data.order_id === activeOrder.order_id && (type === 'order_update' || type === 'order_ready')) {
+            (async () => {
+              try {
+                const res = await fetch(getApiUrl(`/payments/orders/${activeOrder.order_id}/`), { headers: getAuthHeaders() });
+                if (res.ok) {
+                  const od = await res.json();
+                  setActiveOrder(od.order || od);
+                }
+              } catch (e) {
+                // ignore
+              }
+            })();
+          }
+        } catch (e) {
+          // ignore parse errors
+        }
+      };
+      es.onerror = () => {
+        // Silent reconnects are handled by EventSource automatically
+      };
+    } catch (e) {
+      // EventSource may be blocked in some environments — fail silently
+    }
+    return () => { if (es) es.close(); };
+  }, [activeOrder, lastSentOrder]);
 
   if (!canAccess && !initialLoading) {
     toast({ title: "Access Denied", description: "You don't have permission to use the POS workstation.", variant: "destructive" });
@@ -229,6 +268,8 @@ const EmployeeTable: React.FC = () => {
           order_type: orderType,
           payment_method: 'unpaid',
           status: 'sent_kitchen',
+          waiter_name: finalWaiterName,
+          waiter_id: getStaffId() || undefined,
         };
       } else {
         if (!activeOrder?.order_id) {
@@ -237,7 +278,8 @@ const EmployeeTable: React.FC = () => {
         endpoint = `/payments/pos/add-to-order/${activeOrder.order_id}/`;
         payload = {
           items: itemsPayload,
-          waiter_name: staffName,
+          waiter_name: finalWaiterName,
+          waiter_id: getStaffId() || undefined,
         };
       }
 
@@ -249,8 +291,16 @@ const EmployeeTable: React.FC = () => {
       if (res.ok) {
         const data = await res.json();
         const order = data.order || data; // Robustly handle both nested or direct object responses
-        setActiveOrder(order); 
         setCart([]); // Clear new items cart
+        // If the order was sent to kitchen, clear the activeOrder so waiter can start a new one,
+        // but retain a preview of the last sent order so items remain visible.
+        if (order.status === 'sent_kitchen' || order.status === 'preparing') {
+          setActiveOrder(null);
+          setLastSentOrder(order);
+        } else {
+          setActiveOrder(order);
+          setLastSentOrder(null);
+        }
         toast({ title: "KOT Printed", description: `Order ${order.order_id?.substring(0, 6) || ''} ${isNewOrder ? 'created' : 'updated'} and sent to Kitchen.` });
       } else {
         const errorData = await res.json();
@@ -265,7 +315,9 @@ const EmployeeTable: React.FC = () => {
   };
 
   const markItemServed = async (orderId: string, itemIndex: number) => {
-    if (!activeOrder || activeOrder.order_id !== orderId) return;
+    // Allow serving items for either the activeOrder or the lastSentOrder preview
+    const targetOrder = activeOrder || lastSentOrder;
+    if (!targetOrder || targetOrder.order_id !== orderId) return;
     if (!authToken) {
       toast({ title: "Authentication Error", description: "Please log in to perform this action.", variant: "destructive" });
       return;
@@ -285,6 +337,10 @@ const EmployeeTable: React.FC = () => {
       if (res.ok) {
         const data = await res.json();
         setActiveOrder(data.order); // Backend returns updated order
+        // If we had a lastSentOrder preview for this order, clear it because the order is now being modified/served
+        if (lastSentOrder && data.order && lastSentOrder.order_id === data.order.order_id) {
+          setLastSentOrder(null);
+        }
         toast({ title: "Item Served", description: "Item marked as served." });
       } else {
         const errorData = await res.json();
@@ -444,6 +500,22 @@ const EmployeeTable: React.FC = () => {
               onChange={e => setSearchQuery(e.target.value)}
             />
           </div>
+          <div className="ml-3">
+            {menuItems.length === 0 && (
+              <button onClick={async () => {
+                setInitialLoading(true);
+                try {
+                  const mres = await fetch(getApiUrl('/payments/menu-items/'));
+                  const mdata = mres.ok ? await mres.json() : { menu_items: [] };
+                  setMenuItems(mdata.menu_items || []);
+                } catch (e) {
+                  console.error('Failed to reload menu items', e);
+                } finally {
+                  setInitialLoading(false);
+                }
+              }} className="text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 px-3 py-1 rounded">Reload Menu</button>
+            )}
+          </div>
         </div>
         <div className="flex-1 overflow-y-auto p-4 grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
           {filteredMenu.map(item => (
@@ -479,14 +551,27 @@ const EmployeeTable: React.FC = () => {
               <UserMinus size={16} />
             </button>
           )}
+          {/* New Order button to clear preview and start fresh */}
+          <button
+            title="Start new order"
+            onClick={() => { setLastSentOrder(null); setActiveOrder(null); setCart([]); setSelectedTable(''); }}
+            className="ml-auto p-1.5 rounded-lg bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700 transition-all border border-slate-700"
+          >
+            New Order
+          </button>
         </div>
 
         <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-900/50">
           {/* Locked Sent Items */}
-          {activeOrder && activeOrder.items.length > 0 && (
-            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Sent to Kitchen</p>
+          {(activeOrder || lastSentOrder) && (activeOrder || lastSentOrder)!.items.length > 0 && (
+            <div className="flex items-center justify-between">
+              <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Sent to Kitchen</p>
+              {lastSentOrder && !activeOrder && (
+                <button onClick={() => setLastSentOrder(null)} className="text-xs text-slate-400 hover:text-white">Hide</button>
+              )}
+            </div>
           )}
-          {activeOrder && activeOrder.items.map((item, idx) => ( // Display items already sent to kitchen
+          {(activeOrder || lastSentOrder) && (activeOrder || lastSentOrder)!.items.map((item, idx) => ( // Display items already sent to kitchen
             <div key={idx} className="flex items-center justify-between gap-2 bg-slate-950/50 p-3 rounded-xl border border-slate-800/50 opacity-80">
               <div className="flex-1">
                 <div className="flex items-center gap-2">
@@ -498,14 +583,14 @@ const EmployeeTable: React.FC = () => {
                 )}
               </div>
               {!item.is_served && (
-                <button onClick={() => markItemServed(activeOrder.order_id, idx)} disabled={loading} className="text-[10px] font-bold text-orange-500 hover:text-orange-400 uppercase">Serve</button>
+                <button onClick={() => markItemServed((activeOrder || lastSentOrder)!.order_id, idx)} disabled={loading} className="text-[10px] font-bold text-orange-500 hover:text-orange-400 uppercase">Serve</button>
               )}
             </div>
           ))}
 
           {/* New Unsent Items */}
           {cart.map(item => (
-            <div key={item.id} className="flex items-center justify-between gap-2 bg-orange-500/5 p-3 rounded-xl border border-orange-500/20 animate-in slide-in-from-right-2">
+              <div key={item.id} className="flex items-center justify-between gap-2 bg-orange-500/5 p-3 rounded-xl border border-orange-500/20 animate-in slide-in-from-right-2">
               <div className="flex-1 min-w-0">
                 <p className="text-slate-100 text-sm font-bold truncate">{item.name} <span className="text-[9px] bg-orange-500 text-white px-1 rounded ml-1">NEW</span></p>
                 <p className="text-slate-400 text-xs">KES {item.price * item.quantity}</p>
@@ -514,9 +599,9 @@ const EmployeeTable: React.FC = () => {
                 )}
               </div>
               <div className="flex items-center gap-2">
-                <button onClick={() => updateCartQuantity(item.id, -1)} className="p-1 hover:bg-slate-700 rounded"><Minus size={14}/></button>
-                <span className="text-sm font-bold text-slate-200">{item.quantity}</span>
-                <button onClick={() => updateCartQuantity(item.id, 1)} className="p-1 hover:bg-slate-700 rounded"><Plus size={14}/></button>
+                <button onClick={() => updateCartQuantity(item.id, -1)} aria-label={`Decrease ${item.name} quantity`} className="p-2 bg-slate-800 hover:bg-orange-500 text-white rounded-lg border border-slate-700 shadow-sm transition-colors"><Minus size={16}/></button>
+                <span className="text-sm font-bold text-slate-200 px-2">{item.quantity}</span>
+                <button onClick={() => updateCartQuantity(item.id, 1)} aria-label={`Increase ${item.name} quantity`} className="p-2 bg-slate-800 hover:bg-orange-500 text-white rounded-lg border border-slate-700 shadow-sm transition-colors"><Plus size={16}/></button>
               </div>
             </div>
           ))}
@@ -567,6 +652,18 @@ const EmployeeTable: React.FC = () => {
                     <option key={t.id} value={t.number}>Table {t.number} {t.status === 'occupied' ? '• Occupied' : ''}</option>
                   ))}
                 </select>
+
+                        {/* Waiter Name Input */}
+                        <div className="space-y-1.5">
+                          <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest px-1">Waiter / Server</label>
+                          <input
+                            type="text"
+                            placeholder={staffName || 'Enter waiter name'}
+                            value={waiterNameOverride}
+                            onChange={e => setWaiterNameOverride(e.target.value)}
+                            className="w-full bg-slate-800 border border-slate-700 rounded-xl py-2.5 px-3 text-sm text-white outline-none focus:ring-1 focus:ring-orange-500 shadow-sm hover:border-slate-600"
+                          />
+                        </div>
               </div>
             </div>
           )}

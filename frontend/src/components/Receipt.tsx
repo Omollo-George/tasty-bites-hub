@@ -6,124 +6,158 @@ interface ReceiptProps {
   order: {
     order_id: string;
     items: any[];
-    table_number: string;
+    table_number?: string;
     delivery_address?: string;
+    subtotal?: number;
     total_amount: number;
     payment_method: string;
     order_type: string;
     phone?: string;
     delivery_distance_km?: number;
     waiter_name?: string;
+    waiter_id?: string | number;
+    cashier_notified?: boolean;
+    discount?: number;
+    tax?: number;
   };
   onClose: () => void;
+  showWaiterInfo?: boolean; // For cashier internal records only
 }
 
-const Receipt: React.FC<ReceiptProps> = ({ order, onClose }) => {
-  const formatCurrency = (value: number) =>
-    new Intl.NumberFormat("en-KE", { style: "currency", currency: "KES" }).format(value);
+const Receipt: React.FC<ReceiptProps> = ({ order, onClose, showWaiterInfo = false }) => {
+  const currency = "KES";
+  const formatCurrency = (value: number = 0) =>
+    new Intl.NumberFormat("en-KE", { style: "currency", currency }).format(value);
 
   const handlePrint = () => {
     window.print();
   };
 
+  const subtotal = order.subtotal ?? order.items?.reduce((s, it) => s + (Number(it.price || 0) * Number(it.quantity || 1)), 0);
+  const discount = Number(order.discount || 0);
+  const tax = Number(order.tax || 0);
+  const total = Number(order.total_amount || subtotal - discount + tax);
+
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 print:p-0 print:bg-white">
-      <div className="relative w-full max-w-sm bg-white text-slate-900 rounded-2xl overflow-hidden shadow-2xl print:shadow-none print:rounded-none">
-        {/* Actions - Hidden on Print */}
-        <div className="absolute top-4 right-4 flex gap-2 print:hidden">
-          <button onClick={handlePrint} className="p-2 bg-slate-100 hover:bg-slate-200 rounded-full transition-colors">
-            <Printer size={20} />
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4">
+      <style>{`
+        /* Thermal printer friendly print styles */
+        @media print {
+          @page { size: 72mm auto; margin: 4mm; }
+          html, body { background: #fff !important; color: #000 !important; }
+          /* Root overlay hidden, only show the receipt container */
+          body * { visibility: hidden; }
+          .receipt-root, .receipt-root * { visibility: visible; }
+          .receipt-root { width: 72mm; max-width: 72mm; box-shadow: none !important; border-radius: 0 !important; padding: 0 !important; margin: 0 !important; }
+          .receipt-root img { display: none; }
+          .no-print { display: none !important; }
+          .receipt-root { font-family: monospace; font-size: 12px; color: #000; }
+          .receipt-root .font-display { font-family: monospace; }
+          .receipt-root .text-slate-500, .receipt-root .text-slate-600, .receipt-root .text-slate-700 { color: #000 !important; }
+        }
+        /* On-screen keep existing look */
+      `}</style>
+
+      <div className="relative w-full max-w-md bg-white text-slate-900 rounded-xl overflow-hidden shadow-2xl receipt-root">
+        <div className="absolute top-4 right-4 flex gap-2 no-print">
+          <button onClick={handlePrint} className="p-2 bg-slate-100 hover:bg-slate-200 rounded-md transition-colors">
+            <Printer size={18} />
           </button>
-          <button onClick={onClose} className="p-2 bg-slate-100 hover:bg-slate-200 rounded-full transition-colors">
-            <X size={20} />
+          <button onClick={onClose} className="p-2 bg-slate-100 hover:bg-slate-200 rounded-md transition-colors">
+            <X size={18} />
           </button>
         </div>
 
-        {/* Receipt Content */}
-        <div className="p-8 font-mono text-sm">
-          <div className="flex flex-col items-center text-center mb-6">
-            <TastyBitesIcon size={40} className="mb-2" />
-            <h2 className="font-display text-xl font-bold text-[#1a365d]">TASTY BITES HUB</h2>
-            <p className="text-[10px] text-slate-500 uppercase tracking-widest">Premium Hospitality Management</p>
-            <div className="w-full border-b border-dashed border-slate-300 my-4" />
-            <p className="font-bold">ORDER: {order.order_id}</p>
-            <p className="text-xs">{new Date().toLocaleString()}</p>
-          </div>
-
-          {/* Waiter Information - Prominently Displayed */}
-          {order.waiter_name && (
-            <div className="mb-4 p-3 bg-slate-100 rounded-lg border-2 border-slate-300 text-center">
-              <p className="text-[10px] text-slate-600 font-bold uppercase tracking-widest">Service Staff</p>
-              <p className="text-lg font-bold text-slate-900">{order.waiter_name}</p>
-              <p className="text-[10px] text-slate-600 font-mono">ID: {order.order_id.substring(0, 8).toUpperCase()}</p>
-            </div>
-          )}
-
-          <div className="space-y-1 mb-4 text-xs">
-            <div className="flex justify-between">
-              <span>TYPE:</span>
-              <span className="font-bold uppercase">{order.order_type}</span>
-            </div>
-            {order.table_number && (
-              <div className="flex justify-between">
-                <span>TABLE:</span>
-                <span className="font-bold">{order.table_number}</span>
+        <div className="p-6 font-sans text-sm leading-relaxed">
+          <div className="flex items-start justify-between mb-4">
+            <div className="flex items-center gap-3">
+              <TastyBitesIcon size={40} />
+              <div>
+                <div className="font-display text-lg font-bold">TASTY BITES HUB</div>
+                <div className="text-xs text-slate-500">123 Flavor Street • Nairobi • +254 700 000 000</div>
               </div>
-            )}
-            {order.delivery_address && (
-              <div className="flex justify-between">
-                <span>ADDRESS:</span>
-                <span className="font-bold">{order.delivery_address}</span>
-              </div>
-            )}
-            <div className="flex justify-between">
-              <span>PAYMENT:</span>
-              <span className="font-bold uppercase">{order.payment_method}</span>
+            </div>
+            <div className="text-right text-xs text-slate-500">
+              <div>Order: <span className="font-bold text-slate-700">{order.order_id}</span></div>
+              <div>{new Date().toLocaleString()}</div>
             </div>
           </div>
 
-          <div className="w-full border-b border-dashed border-slate-300 mb-4" />
+          <div className="grid grid-cols-2 gap-2 text-xs text-slate-600 mb-4">
+            <div>
+              <div className="font-semibold text-slate-800">Type</div>
+              <div className="mt-1">{order.order_type}</div>
+              {order.table_number && <div className="mt-1">Table {order.table_number}</div>}
+              {order.phone && <div className="mt-1">Phone: {order.phone}</div>}
+            </div>
+            <div className="text-right">
+              <div className="font-semibold text-slate-800">Payment</div>
+              <div className="mt-1">{order.payment_method}</div>
+              {order.delivery_address && <div className="mt-1">{order.delivery_address}</div>}
+            </div>
+          </div>
 
-          <div className="space-y-3 mb-6">
+          <div className="w-full border-t border-b border-slate-200 py-2">
+            <div className="grid grid-cols-12 gap-2 text-xs">
+              <div className="col-span-7 font-medium">Item</div>
+              <div className="col-span-3 text-right font-medium">Qty</div>
+              <div className="col-span-2 text-right font-medium">Total</div>
+            </div>
+          </div>
+
+          <div className="py-3 space-y-2">
             {order.items.map((item, idx) => (
-              <div key={idx}>
-                <div className="flex justify-between items-start">
-                  <span className="flex-1">{item.quantity} x {item.name}</span>
-                  <span className="ml-4">{formatCurrency(item.price * item.quantity)}</span>
+              <div key={idx} className="grid grid-cols-12 gap-2 items-start text-sm">
+                <div className="col-span-7">
+                  <div className="font-semibold text-slate-800">{item.name}</div>
+                  <div className="text-xs text-slate-500">{(item.sku || item.menu_item_id) ? `SKU: ${item.sku || item.menu_item_id}` : null}</div>
+                  {item.modifiers?.length > 0 && <div className="text-xs text-slate-500 mt-1">+ {item.modifiers.join(', ')}</div>}
                 </div>
-                {item.modifiers?.length > 0 && (
-                  <div className="text-[10px] text-slate-500 ml-4 italic">
-                    + {item.modifiers.join(", ")}
-                  </div>
-                )}
+                <div className="col-span-3 text-right text-sm">{item.quantity}</div>
+                <div className="col-span-2 text-right text-sm">{formatCurrency(Number(item.price || 0) * Number(item.quantity || 1))}</div>
               </div>
             ))}
           </div>
 
-          <div className="w-full border-b border-dashed border-slate-300 mb-4" />
+          <div className="border-t border-slate-200 pt-3">
+            <div className="flex justify-between text-sm text-slate-600 mb-1">
+              <div>Subtotal</div>
+              <div className="font-medium">{formatCurrency(subtotal)}</div>
+            </div>
+            {discount > 0 && (
+              <div className="flex justify-between text-sm text-slate-600 mb-1">
+                <div>Discount</div>
+                <div className="font-medium">-{formatCurrency(discount)}</div>
+              </div>
+            )}
+            {tax > 0 && (
+              <div className="flex justify-between text-sm text-slate-600 mb-1">
+                <div>Tax</div>
+                <div className="font-medium">{formatCurrency(tax)}</div>
+              </div>
+            )}
 
-          <div className="space-y-1">
-            <div className="flex justify-between text-lg font-bold text-[#1a365d]">
-              <span>TOTAL</span>
-              <span>{formatCurrency(order.total_amount)}</span>
+            <div className="flex justify-between text-lg font-bold text-slate-900 mt-2">
+              <div>Total</div>
+              <div>{formatCurrency(total)}</div>
             </div>
           </div>
 
-          {/* Dynamic QR Code for Ordering */}
-          <div className="mt-8 flex flex-col items-center gap-2 print:mt-4">
-            <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Scan to Order More</p>
-            <div className="p-1.5 bg-white border border-slate-200 rounded-lg shadow-sm">
-              <img 
-                src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(window.location.origin + '/?source=qr#menu')}`} 
-                alt="Scan to order" 
-                className="w-24 h-24"
-              />
+          <div className="mt-4 grid grid-cols-2 gap-4 text-xs text-slate-600">
+            <div>
+              <div className="font-semibold text-slate-800">Served By</div>
+              <div className="mt-1 text-sm">{order.waiter_name || 'Unassigned'}</div>
+              {order.waiter_id && <div className="text-xs text-slate-500">ID: {order.waiter_id}</div>}
+            </div>
+            <div className="text-right">
+              <div className="font-semibold text-slate-800">Processed</div>
+              <div className="mt-1 text-sm">{order.cashier_notified ? 'Yes' : 'No'}</div>
             </div>
           </div>
 
-          <div className="mt-8 text-center text-[10px] text-slate-400">
-            <p>Thank you for visiting Tasty Bites Hub</p>
-            <p>Please come again!</p>
+          <div className="mt-6 text-center text-xs text-slate-500">
+            <div>Thank you for choosing Tasty Bites Hub</div>
+            <div className="mt-1">www.tastybites.example • VAT NO: 12345678</div>
           </div>
         </div>
       </div>
