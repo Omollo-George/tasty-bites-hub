@@ -13,7 +13,10 @@ type Employee = {
   salary: number
   status: string
   account_number?: string
+  special_id?: string
   joined_at: string
+  document_url?: string | null
+  document_name?: string | null
 }
 
 const AdminEmployees: React.FC = () => {
@@ -21,7 +24,11 @@ const AdminEmployees: React.FC = () => {
   const [loading, setLoading] = useState(true)
   const [isAdding, setIsAdding] = useState(false)
   const [editingId, setEditingId] = useState<number | null>(null)
-  const [newEmp, setNewEmp] = useState({ name: '', role: 'Waiter', phone: '', email: '', salary: 0, account_number: '', username: '', password: '' })
+  const [newEmp, setNewEmp] = useState({ name: '', role: 'Waiter', phone: '', email: '', salary: 0, account_number: '', special_id: '', username: '', password: '' })
+  const [selectedFile, setSelectedFile] = useState<File | null>(null)
+  const [existingDocumentName, setExistingDocumentName] = useState<string | null>(null)
+  const [removeDocument, setRemoveDocument] = useState(false)
+  const [togglingIds, setTogglingIds] = useState<number[]>([])
   const [selectedIds, setSelectedIds] = useState<number[]>([])
   const [searchQuery, setSearchQuery] = useState('')
   const adminToken = getAdminToken() || '';
@@ -82,14 +89,31 @@ const AdminEmployees: React.FC = () => {
     try {
       const isUpdating = editingId !== null
       const url = isUpdating ? getApiUrl(`/payments/admin/employees/${editingId}/`) : getApiUrl('/payments/admin/employees/')
+      const formData = new FormData()
+      formData.append('name', newEmp.name)
+      formData.append('role', newEmp.role)
+      formData.append('phone', newEmp.phone)
+      formData.append('email', newEmp.email)
+      formData.append('username', newEmp.username)
+      formData.append('salary', String(newEmp.salary))
+      formData.append('account_number', newEmp.account_number)
+      formData.append('special_id', newEmp.special_id)
+      if (newEmp.password) {
+        formData.append('password', newEmp.password)
+      }
+      if (selectedFile) {
+        formData.append('document', selectedFile)
+      }
+      if (removeDocument) {
+        formData.append('remove_document', 'true')
+      }
       
       const res = await fetch(url, {
         method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${adminToken}` 
+        headers: {
+          Authorization: `Bearer ${adminToken}`
         },
-        body: JSON.stringify(newEmp)
+        body: formData
       })
 
       if (!res.headers.get("content-type")?.includes("application/json")) {
@@ -100,6 +124,9 @@ const AdminEmployees: React.FC = () => {
       if (res.ok) {
         setIsAdding(false)
         setEditingId(null)
+        setSelectedFile(null)
+        setExistingDocumentName(null)
+        setRemoveDocument(false)
         setNewEmp({ name: '', role: 'Waiter', phone: '', email: '', salary: 0, account_number: '', username: '', password: '' })
         fetchEmployees()
         alert(isUpdating ? 'Employee updated!' : 'Employee added!')
@@ -120,9 +147,13 @@ const AdminEmployees: React.FC = () => {
       email: emp.email,
       salary: emp.salary,
       account_number: emp.account_number || '',
+      special_id: emp.special_id || '',
       username: emp.username || '',
       password: '' // Keep empty unless changing
     })
+    setSelectedFile(null)
+    setExistingDocumentName(emp.document_name || null)
+    setRemoveDocument(false)
     setIsAdding(true)
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
@@ -309,7 +340,7 @@ const AdminEmployees: React.FC = () => {
             onClick={() => {
                 setIsAdding(!isAdding)
                 setEditingId(null)
-                setNewEmp({ name: '', role: 'Waiter', phone: '', email: '', salary: 0, account_number: '', username: '', password: '' })
+                setNewEmp({ name: '', role: 'Waiter', phone: '', email: '', salary: 0, account_number: '', special_id: '', username: '', password: '' })
             }}
             className="bg-orange-500 text-white px-6 py-2.5 rounded-xl font-semibold shadow-md hover:bg-orange-600 transition-all active:scale-95 whitespace-nowrap"
           >
@@ -412,6 +443,38 @@ const AdminEmployees: React.FC = () => {
                 onChange={e => setNewEmp({...newEmp, account_number: e.target.value})}
               />
             </div>
+            <div className="space-y-1">
+              <label className="text-xs font-semibold uppercase text-muted-foreground">Waiter Special ID</label>
+              <input 
+                className="w-full rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-sm text-slate-200"
+                placeholder="e.g. W001, W002"
+                value={newEmp.special_id}
+                onChange={e => setNewEmp({...newEmp, special_id: e.target.value})}
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-semibold uppercase text-muted-foreground">Employee Document (PDF)</label>
+              <input
+                type="file"
+                accept="application/pdf"
+                onChange={e => setSelectedFile(e.target.files?.[0] || null)}
+                className="w-full text-sm text-slate-200 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-orange-500 file:text-white"
+              />
+              {existingDocumentName && !selectedFile && (
+                <div className="flex items-center justify-between gap-3 text-xs text-slate-400">
+                  <span>Current file: {existingDocumentName}</span>
+                  <label className="inline-flex items-center gap-2 cursor-pointer text-orange-300">
+                    <input
+                      type="checkbox"
+                      checked={removeDocument}
+                      onChange={e => setRemoveDocument(e.target.checked)}
+                      className="rounded border-slate-600 bg-slate-700 text-orange-500"
+                    />
+                    Remove existing document
+                  </label>
+                </div>
+              )}
+            </div>
             <button type="submit" className="md:col-span-3 bg-slate-900 text-white py-3 rounded-xl font-bold hover:bg-slate-800 transition-colors shadow-lg shadow-slate-900/20">
               {editingId ? 'Update Record' : 'Create Record'}
             </button>
@@ -420,88 +483,144 @@ const AdminEmployees: React.FC = () => {
       )}
 
       <div className="bg-slate-700 rounded-2xl shadow-sm overflow-hidden border border-slate-600/60">
-        <table className="w-full text-left border-collapse">
+        <table className="w-full text-left border-collapse text-sm">
           <thead className="bg-slate-800">
-            <tr className="text-[11px] font-bold uppercase tracking-wider text-slate-400 border-b border-slate-700">
-              <th className="px-6 py-4 w-10">
+            <tr className="text-xs font-bold uppercase tracking-wider text-slate-400 border-b border-slate-700">
+              <th className="px-3 py-3 w-10">
                 <input 
                   type="checkbox" 
                   checked={filteredEmployees.length > 0 && selectedIds.length === filteredEmployees.length}
                   onChange={toggleSelectAll}
-                  className="rounded border-slate-600 bg-slate-700 text-orange-500 focus:ring-orange-500"
+                  className="rounded border-slate-600 bg-slate-700 text-orange-500 focus:ring-orange-500 w-4 h-4"
                 />
               </th>
-              <th className="px-6 py-4">Name</th>
-              <th className="px-6 py-4">Role</th>
-              <th className="px-6 py-4">Contact</th>
-              <th className="px-6 py-4">Salary</th>
-              <th className="px-6 py-4">Account No.</th>
-              <th className="px-6 py-4 text-right">Actions</th>
+              <th className="px-3 py-3 min-w-[130px]">Name</th>
+              <th className="px-3 py-3 min-w-[90px]">Role</th>
+              <th className="px-3 py-3 min-w-[100px]">Special ID</th>
+              <th className="px-3 py-3 min-w-[140px]">Phone</th>
+              <th className="px-3 py-3 min-w-[90px]">Shift</th>
+              <th className="px-3 py-3 min-w-[100px] text-right">Salary</th>
+              <th className="px-3 py-3 min-w-[120px] text-right">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-600">
             {loading ? (
-              <tr><td colSpan={7} className="px-6 py-8 text-center text-muted-foreground">Loading data...</td></tr>
+              <tr><td colSpan={8} className="px-3 py-4 text-center text-sm text-muted-foreground">Loading data...</td></tr>
             ) : employees.length === 0 ? (
-              <tr><td colSpan={7} className="px-6 py-8 text-center text-muted-foreground">No employees found.</td></tr>
+              <tr><td colSpan={8} className="px-3 py-4 text-center text-sm text-muted-foreground">No employees found.</td></tr>
             ) : (
               filteredEmployees
                 .map(emp => (
                 <tr key={emp.id} className="hover:bg-slate-600 transition-colors group">
-                  <td className="px-6 py-4">
+                  <td className="px-3 py-3">
                     <input 
                       type="checkbox"
                       checked={selectedIds.includes(emp.id)}
                       onChange={() => toggleSelect(emp.id)}
-                      className="rounded border-slate-600 bg-slate-700 text-orange-500 focus:ring-orange-500"
+                      className="rounded border-slate-600 bg-slate-700 text-orange-500 focus:ring-orange-500 w-4 h-4"
                     />
                   </td>
-                  <td className="px-6 py-4 font-medium">{emp.name}</td>
-                  <td className="px-6 py-4">
-                    <div className="flex flex-col">
-                    <span className="bg-orange-900/30 text-orange-400 px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-tight border border-orange-500/20">
+                  <td className="px-3 py-3 font-medium text-sm">
+                    <div>{emp.name}</div>
+                    {emp.username && <div className="text-xs text-slate-500 font-mono">@{emp.username}</div>}
+                  </td>
+                  <td className="px-3 py-3 text-sm">
+                    <span className="bg-orange-900/30 text-orange-400 px-2 py-1 rounded text-xs font-bold uppercase border border-orange-500/20">
                       {emp.role}
                     </span>
-                    {emp.username && (
-                        <span className="text-[9px] text-slate-500 mt-1 font-mono">ID: {emp.username}</span>
+                  </td>
+                  <td className="px-3 py-3 text-sm">
+                    {emp.special_id ? (
+                      <span className="bg-slate-600 text-emerald-300 px-2 py-1 rounded text-xs font-bold border border-emerald-500/30">
+                        {emp.special_id}
+                      </span>
+                    ) : (
+                      <span className="text-xs text-slate-500 italic">—</span>
                     )}
-                    </div>
                   </td>
-                  <td className="px-6 py-4 text-sm">
-                    <div>{emp.phone}</div>
-                    <div className="text-xs text-slate-400">{emp.email}</div>
+                  <td className="px-3 py-3 text-sm">
+                    <div className="font-mono text-slate-200">{emp.phone}</div>
+                    <div className="text-xs text-slate-400 truncate">{emp.email}</div>
                   </td>
-                  <td className="px-6 py-4 text-sm font-mono">
-                    KES {emp.salary.toLocaleString()}
+                  <td className="px-3 py-3 text-sm">
+                    {emp.status === 'on_shift' ? (
+                      <span className="inline-flex items-center px-2.5 py-1 rounded-full bg-emerald-600/10 text-emerald-400 text-xs font-semibold border border-emerald-500/20">On</span>
+                    ) : (
+                      <span className="inline-flex items-center px-2.5 py-1 rounded-full bg-slate-800/30 text-slate-400 text-xs font-semibold border border-slate-700">Off</span>
+                    )}
                   </td>
-                  <td className="px-6 py-4 text-sm font-mono text-slate-400">
-                    {emp.account_number || '—'}
+                  <td className="px-3 py-3 text-sm font-mono text-right">
+                    KES {(emp.salary / 1000).toFixed(0)}K
                   </td>
-                  <td className="px-6 py-4 text-right">
-                    <div className="flex justify-end gap-3">
+                  <td className="px-3 py-3 text-right">
+                    <div className="flex justify-end gap-2 text-sm">
                       <button 
                         onClick={() => startEdit(emp)}
-                        className="text-white hover:text-orange-400 text-sm font-semibold"
+                        className="text-blue-400 hover:text-blue-300 px-2 py-1 rounded hover:bg-slate-600 transition-colors font-semibold"
+                        title="Edit"
                       >
-                        Edit
+                        ✎
                       </button>
                       <button 
                         onClick={() => sendEmail(emp)}
-                        className="text-orange-500 hover:text-orange-400 text-sm font-semibold"
+                        className="text-orange-400 hover:text-orange-300 px-2 py-1 rounded hover:bg-slate-600 transition-colors font-semibold"
+                        title="Email"
                       >
-                        Email
+                        ✉
                       </button>
                       <button 
                         onClick={() => sendWhatsApp(emp)}
-                        className="text-emerald-500 hover:text-emerald-400 text-sm font-semibold"
+                        className="text-emerald-400 hover:text-emerald-300 px-2 py-1 rounded hover:bg-slate-600 transition-colors font-semibold"
+                        title="WhatsApp"
                       >
-                        WhatsApp
+                        💬
+                      </button>
+                      {emp.document_url && (
+                        <a
+                          href={emp.document_url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-sky-400 hover:text-sky-300 px-2 py-1 rounded hover:bg-slate-600 transition-colors font-semibold"
+                          title="Download document"
+                        >
+                          ↓
+                        </a>
+                      )}
+                      <button
+                        onClick={async () => {
+                          const newStatus = emp.status === 'on_shift' ? 'active' : 'on_shift'
+                          setTogglingIds(prev => [...prev, emp.id])
+                          try {
+                            const res = await fetch(getApiUrl(`/payments/admin/employees/${emp.id}/`), {
+                              method: 'POST',
+                              headers: { Authorization: `Bearer ${adminToken}`, 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ status: newStatus }),
+                            })
+                            if (res.ok) {
+                              // update locally to avoid refetching entire list (prevents blink)
+                              setEmployees(prev => prev.map(e => e.id === emp.id ? { ...e, status: newStatus } : e))
+                            } else {
+                              const data = await res.json().catch(() => ({}))
+                              alert(data.error || 'Failed to update shift status')
+                            }
+                          } catch (err) {
+                            alert('Failed to update shift status')
+                          } finally {
+                            setTogglingIds(prev => prev.filter(i => i !== emp.id))
+                          }
+                        }}
+                        disabled={togglingIds.includes(emp.id)}
+                        className={`text-purple-400 hover:text-purple-300 px-2 py-1 rounded hover:bg-slate-600 transition-colors font-semibold ${togglingIds.includes(emp.id) ? 'opacity-60 cursor-wait' : ''}`}
+                        title={emp.status === 'on_shift' ? 'Remove from shift' : 'Add to shift'}
+                      >
+                        {togglingIds.includes(emp.id) ? '…' : (emp.status === 'on_shift' ? '⊘' : '⊕')}
                       </button>
                       <button 
                         onClick={() => deleteEmployee(emp.id)}
-                        className="text-slate-400 hover:text-red-500 text-sm font-semibold transition-colors"
+                        className="text-red-400 hover:text-red-300 px-2 py-1 rounded hover:bg-slate-600 transition-colors font-semibold"
+                        title="Delete"
                       >
-                        Remove
+                        🗑
                       </button>
                     </div>
                   </td>

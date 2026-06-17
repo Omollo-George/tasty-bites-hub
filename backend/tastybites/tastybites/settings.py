@@ -14,6 +14,7 @@ import os
 from pathlib import Path
 import dj_database_url
 from dotenv import load_dotenv
+from corsheaders.defaults import default_headers
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -129,6 +130,8 @@ USE_TZ = True
 STATIC_URL = 'static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
+MEDIA_URL = '/media/'
+MEDIA_ROOT = BASE_DIR / 'media'
 # M-Pesa Daraja API Config
 MPESA_ENVIRONMENT = 'sandbox'
 
@@ -152,6 +155,7 @@ if not CORS_ALLOW_ALL_ORIGINS:
         CORS_ALLOWED_ORIGINS = ['http://localhost:5173', 'http://127.0.0.1:5173']
 
 CORS_ALLOW_CREDENTIALS = True
+CORS_ALLOW_HEADERS = list(default_headers) + ['Authorization', 'X-ADMIN-TOKEN', 'X-STAFF-TOKEN']
 
 # CSRF Trusted Origins for production
 CSRF_TRUSTED_ORIGINS = os.environ.get(

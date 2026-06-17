@@ -1,7 +1,7 @@
 import React, { useState } from 'react'
 import { useLocation, useNavigate, Link } from 'react-router-dom'
 import { Eye, EyeOff, ShieldCheck, ArrowLeft, Users } from 'lucide-react'
-import { setStaffToken } from '@/lib/staff-session'
+import { setStaffToken, setStaffTokenWithId } from '@/lib/staff-session'
 import { getAdminToken, isAdminSessionValid } from '@/lib/admin-session'
 import { getApiUrl } from '@/lib/api'
 import heroImage from '@/assets/hero-food.jpg'
@@ -66,12 +66,18 @@ const StaffLogin: React.FC = () => {
       const data = await response.json()
       if (!response.ok) {
         setError(data.error || 'Invalid staff credentials')
+      } else if (!data.token) {
+        setError('Login succeeded but no token was returned. Please restart the backend or contact support.')
       } else {
-        setStaffToken(data.token, data.name, data.role, data.expires_at)
+        const expiresAt = data.expires_at || new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString()
+        setStaffTokenWithId(data.token, data.name, data.role, expiresAt, data.id)
         navigate(from, { replace: true })
       }
     } catch (err) {
-      setError('Connection Error: Please check if the server is running.')
+      const message = err instanceof Error ? err.message : String(err)
+      setError(message === 'Failed to fetch'
+        ? 'Connection Error: Backend server unreachable or CORS blocked.'
+        : 'Connection Error: Please check if the server is running.')
     } finally {
       setLoading(false)
     }
@@ -162,12 +168,9 @@ const StaffLogin: React.FC = () => {
           </button>
         </form>
 
-        <div className="mt-8 pt-6 border-t border-slate-800 flex justify-between items-center">
+        <div className="mt-8 pt-6 border-t border-slate-800 flex justify-start items-center">
           <Link to="/" className="text-xs font-bold text-slate-500 hover:text-slate-300 flex items-center gap-1 transition-colors uppercase tracking-widest">
             <ArrowLeft size={14} /> Back to Home
-          </Link>
-          <Link to="/admin/login" className="text-xs font-bold text-orange-500 hover:text-orange-400 transition-colors uppercase tracking-widest">
-            Admin Access
           </Link>
         </div>
       </div>

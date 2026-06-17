@@ -9,10 +9,13 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { AlertCircle, CheckCircle, Loader, X } from 'lucide-react';
 
 interface OrderItem {
-  item_id: string;
-  item_name: string;
+  id?: string | number;
+  item_id?: string;
+  name?: string;
+  item_name?: string;
   quantity: number;
-  unit_price: number;
+  price?: number;
+  unit_price?: number;
   subtotal: number;
   is_served?: boolean;
 }
@@ -25,6 +28,7 @@ interface PendingBill {
   total_amount: number;
   status: string;
   waiter_name: string;
+  waiter_id?: string | number;
   order_type: string;
   created_at: string;
 }
@@ -32,6 +36,7 @@ interface PendingBill {
 interface Receipt {
   order_id: string;
   waiter_name: string;
+  waiter_id?: string | number;
   order_type: string;
   table?: number;
   phone?: string;
@@ -45,6 +50,7 @@ export default function Cashier() {
   const staffName = getStaffName();
 
   const [bills, setBills] = useState<PendingBill[]>([]);
+  const totalOutstanding = bills.reduce((s, b) => s + Number(b.total_amount || 0), 0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedBill, setSelectedBill] = useState<PendingBill | null>(null);
@@ -63,12 +69,32 @@ export default function Cashier() {
 
   useEffect(() => {
     if (!staffName) {
-      navigate('/staff-login');
+      navigate('/staff/login');
       return;
     }
+
     fetchPendingBills();
     const interval = setInterval(fetchPendingBills, 3000);
-    return () => clearInterval(interval);
+
+    const eventSource = new EventSource(getApiUrl('/payments/stream/'));
+    eventSource.onmessage = (event) => {
+      try {
+        const payload = JSON.parse(event.data);
+        if (payload?.type && ['order_update', 'new_order'].includes(payload.type)) {
+          fetchPendingBills();
+        }
+      } catch (err) {
+        // ignore parse errors
+      }
+    };
+    eventSource.onerror = () => {
+      eventSource.close();
+    };
+
+    return () => {
+      clearInterval(interval);
+      eventSource.close();
+    };
   }, [staffName, navigate]);
 
   const fetchPendingBills = async () => {
@@ -79,14 +105,22 @@ export default function Cashier() {
       });
 
       if (!response.ok) {
-        throw new Error('Failed to fetch pending bills');
+        let errorMessage = `Failed to fetch pending bills (${response.status})`
+        try {
+          const errorData = await response.json()
+          if (errorData?.error) errorMessage = errorData.error
+        } catch {
+          const errorText = await response.text().catch(() => '')
+          if (errorText) errorMessage = errorText
+        }
+        throw new Error(errorMessage)
       }
 
       const data = await response.json();
       setBills(data.bills || []);
       setError(null);
     } catch (err: any) {
-      setError(err.message);
+      setError(err.message || 'Failed to fetch pending bills')
       console.error('Fetch pending bills error:', err);
     } finally {
       setLoading(false);
@@ -104,12 +138,20 @@ export default function Cashier() {
     setPaymentMethod(method);
     setProcessingPayment(true);
     setError(null);
+    setMpesaError(null);
     setShowPaymentMethod(false);
 
     // If MPESA, ensure a phone number is provided
     if (method === 'mpesa') {
       if (!mpesaNumber) {
         setMpesaError('Enter MPESA phone number');
+        setProcessingPayment(false);
+        return;
+      }
+      // Validate phone format (should be 12-13 digits)
+      const phoneRegex = /^\d{10,13}$/;
+      if (!phoneRegex.test(mpesaNumber)) {
+        setMpesaError('Phone number should be 10-13 digits (e.g., 2547XXXXXXXX)');
         setProcessingPayment(false);
         return;
       }
@@ -128,7 +170,13 @@ export default function Cashier() {
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || 'Failed to confirm payment');
+        const errorMsg = errorData.error || errorData.detail || 'Failed to confirm payment';
+        if (method === 'mpesa') {
+          setMpesaError(errorMsg);
+          setProcessingPayment(false);
+          return;
+        }
+        throw new Error(errorMsg);
       }
 
       const data = await response.json();
@@ -137,6 +185,11 @@ export default function Cashier() {
       // If MPESA flow started, backend returns checkout_request_id; poll status
       if (method === 'mpesa') {
         const checkoutId = data.checkout_request_id || (data.mpesa && data.mpesa.CheckoutRequestID) || null;
+        if (!checkoutId) {
+          setMpesaError('Failed to initiate M-Pesa payment. Please try again.');
+          setProcessingPayment(false);
+          return;
+        }
         setMpesaCheckoutId(checkoutId);
         setMpesaPolling(true);
         setShowMpesaPrompt(false);
@@ -157,15 +210,17 @@ export default function Cashier() {
 
                 // fetch updated order details
                 try {
-                  const ordResp = await fetch(getApiUrl(`/orders/${order.order_id}/`), { headers: getAuthHeaders() });
+                  const ordResp = await fetch(getApiUrl(`/payments/orders/${order.order_id}/`), { headers: getAuthHeaders() });
                   if (ordResp.ok) {
                     const ordJson = await ordResp.json();
                     const ord = ordJson.order || ordJson;
                     setReceipt({
                       order_id: ord.order_id,
                       waiter_name: ord.waiter_name,
+                      waiter_id: ord.waiter_id,
                       order_type: ord.order_type,
                       table: ord.table,
+                      table_id: ord.table_id,
                       phone: ord.phone,
                       items: ord.items,
                       total_amount: ord.total_amount,
@@ -174,9 +229,9 @@ export default function Cashier() {
                     setShowReceipt(true);
 
                     // Mark table free if needed
-                    if (ord.order_type === 'table' && ord.table) {
+                    if (ord.order_type === 'table' && ord.table_id) {
                       try {
-                        await fetch(getApiUrl(`/payments/pos/tables/${ord.table}/mark-free/`), { method: 'POST', headers: getAuthHeaders() });
+                        await fetch(getApiUrl(`/payments/pos/tables/${ord.table_id}/mark-free/`), { method: 'POST', headers: getAuthHeaders() });
                       } catch (err) {
                         console.error('Error marking table as free:', err);
                       }
@@ -186,9 +241,10 @@ export default function Cashier() {
                   console.error('Failed to fetch order after MPESA success:', err);
                 }
 
-                // Refresh bills and clear selection
-                fetchPendingBills();
+                // Optimistically remove cleared bill locally then refresh
+                setBills(prev => prev.filter(b => b.order_id !== order.order_id));
                 setSelectedBill(null);
+                fetchPendingBills();
                 setProcessingPayment(false);
                 return;
               }
@@ -196,8 +252,11 @@ export default function Cashier() {
                 if (mpesaIntervalRef.current) { clearInterval(mpesaIntervalRef.current); mpesaIntervalRef.current = null; }
                 setMpesaPolling(false);
                 setMpesaCheckoutId(null);
-                setError('M-Pesa payment failed or timed out');
+                setError('M-Pesa payment failed or timed out. Bill remains outstanding.');
+                setSelectedBill(null);
                 setProcessingPayment(false);
+                // Refresh bills to ensure consistency - bill remains in outstanding total
+                setTimeout(() => fetchPendingBills(), 500);
                 return;
               }
             }
@@ -208,8 +267,11 @@ export default function Cashier() {
             if (mpesaIntervalRef.current) { clearInterval(mpesaIntervalRef.current); mpesaIntervalRef.current = null; }
             setMpesaPolling(false);
             setMpesaCheckoutId(null);
-            setError('M-Pesa payment timed out');
+            setError('M-Pesa payment timed out. Bill remains outstanding.');
+            setSelectedBill(null);
             setProcessingPayment(false);
+            // Refresh bills to ensure consistency - bill remains in outstanding total
+            setTimeout(() => fetchPendingBills(), 500);
           }
         }, 3000);
 
@@ -217,9 +279,9 @@ export default function Cashier() {
       }
 
       // For cash (or fallback), treat as completed immediately
-      if (order.order_type === 'table' && order.table) {
+      if (order.order_type === 'table' && order.table_id) {
         try {
-          await fetch(getApiUrl(`/payments/pos/tables/${order.table}/mark-free/`), {
+          await fetch(getApiUrl(`/payments/pos/tables/${order.table_id}/mark-free/`), {
             method: 'POST',
             headers: getAuthHeaders(),
           });
@@ -232,6 +294,7 @@ export default function Cashier() {
       setReceipt({
         order_id: order.order_id,
         waiter_name: order.waiter_name,
+        waiter_id: order.waiter_id,
         order_type: order.order_type,
         table: order.table,
         phone: order.phone,
@@ -241,17 +304,22 @@ export default function Cashier() {
       });
 
       setShowReceipt(true);
-
-      // Refresh bills list
-      setTimeout(() => {
-        fetchPendingBills();
-        setSelectedBill(null);
-      }, 2000);
+      // Optimistically remove cleared bill from local list and refresh
+      setBills(prev => prev.filter(b => b.order_id !== order.order_id));
+      setSelectedBill(null);
+      setTimeout(() => fetchPendingBills(), 1000);
     } catch (err: any) {
-      setError(err.message);
+      const errorMsg = err.message || 'An error occurred while processing payment';
+      if (method === 'mpesa') {
+        setMpesaError(errorMsg);
+      } else {
+        setError(errorMsg);
+      }
       console.error('Payment confirmation error:', err);
     } finally {
-      setProcessingPayment(false);
+      if (!(method === 'mpesa' && mpesaPolling)) {
+        setProcessingPayment(false);
+      }
     }
   };
 
@@ -282,8 +350,8 @@ export default function Cashier() {
               <div class="order-info">
                 <p><strong>Order ID:</strong> ${receipt.order_id}</p>
                 <p><strong>Waiter:</strong> ${receipt.waiter_name}</p>
+                ${receipt.waiter_id ? `<p><strong>Waiter ID:</strong> ${receipt.waiter_id}</p>` : ''}
                 <p><strong>Type:</strong> ${receipt.order_type}</p>
-                ${receipt.table ? `<p><strong>Table:</strong> ${receipt.table}</p>` : ''}
                 ${receipt.phone ? `<p><strong>Phone:</strong> ${receipt.phone}</p>` : ''}
                 <p><strong>Time:</strong> ${receipt.timestamp}</p>
               </div>
@@ -293,8 +361,8 @@ export default function Cashier() {
                     (item) =>
                       `
                   <div class="item">
-                    <span>${item.item_name} x${item.quantity}</span>
-                    <span>KES ${(item.subtotal || item.unit_price * item.quantity).toFixed(2)}</span>
+                    <span>${(item.item_name || item.name)} x${item.quantity}</span>
+                    <span>KES ${(item.subtotal || ((item.unit_price || item.price) * item.quantity)).toFixed(2)}</span>
                   </div>
                 `
                   )
@@ -360,19 +428,6 @@ export default function Cashier() {
           </div>
         )}
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="rounded-3xl border border-slate-800 bg-slate-900 p-6 shadow-xl shadow-slate-950/40">
-            <p className="text-sm uppercase tracking-[0.3em] text-slate-500">Open Tickets</p>
-            <p className="text-4xl font-bold text-sky-400 mt-4">{bills.length}</p>
-            <p className="mt-2 text-slate-400">Tickets currently waiting for cashier confirmation.</p>
-          </div>
-          <div className="rounded-3xl border border-slate-800 bg-slate-900 p-6 shadow-xl shadow-slate-950/40">
-            <p className="text-sm uppercase tracking-[0.3em] text-slate-500">Total Open</p>
-            <p className="text-4xl font-bold text-emerald-400 mt-4">KES {bills.reduce((sum, bill) => sum + (bill.total_amount || 0), 0).toFixed(2)}</p>
-            <p className="mt-2 text-slate-400">Amount pending settlement across all open bills.</p>
-          </div>
-        </div>
-
         <section className="rounded-3xl border border-slate-800 bg-slate-900 p-6 shadow-xl shadow-slate-950/40">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
             <div>
@@ -381,6 +436,10 @@ export default function Cashier() {
             </div>
             <div className="text-sm text-slate-500">
               Updated every few seconds for real-time cashier processing.
+            </div>
+            <div className="text-right">
+              <p className="text-xs text-slate-400">Total Outstanding</p>
+              <p className="text-2xl font-semibold text-amber-400">KES {totalOutstanding.toFixed(2)}</p>
             </div>
           </div>
 
@@ -399,12 +458,12 @@ export default function Cashier() {
                   <div className="flex items-start justify-between gap-4">
                     <div>
                       <p className="text-sm uppercase tracking-[0.2em] text-slate-500">Order #{bill.order_id}</p>
-                      <p className="text-xl font-semibold text-white mt-2">Waiter: {bill.waiter_name}</p>
+                      <p className="text-xl font-semibold text-white mt-2">Waiter: {bill.waiter_name && bill.waiter_name.trim() ? bill.waiter_name : (bill.waiter_id ? `ID: ${bill.waiter_id}` : '—')}</p>
                     </div>
                     <span className={`rounded-full px-3 py-1 text-xs font-semibold ${
                       bill.order_type === 'table' ? 'bg-sky-500/10 text-sky-300' : 'bg-orange-500/10 text-orange-300'
                     }`}>
-                      {bill.order_type === 'table' ? `Table ${bill.table}` : 'Takeaway'}
+                      {bill.order_type === 'table' ? 'Dine-in' : 'Takeaway'}
                     </span>
                   </div>
                   <div className="mt-5 space-y-4">
@@ -416,8 +475,8 @@ export default function Cashier() {
                       <div className="space-y-2">
                         {bill.items.map((item, idx) => (
                           <div key={idx} className="flex justify-between text-slate-200 text-sm">
-                            <span>{item.item_name} x{item.quantity}</span>
-                            <span>KES {(item.subtotal || item.unit_price * item.quantity).toFixed(2)}</span>
+                            <span>{(item.item_name || item.name)} x{item.quantity}</span>
+                            <span>KES {(item.subtotal || ((item.unit_price || item.price) * item.quantity)).toFixed(2)}</span>
                           </div>
                         ))}
                       </div>
@@ -456,7 +515,7 @@ export default function Cashier() {
             {selectedBill && (
               <div className="space-y-4">
                 <div className="rounded-3xl border border-slate-800 bg-slate-900 p-4 space-y-2 text-sm">
-                  <p className="font-semibold text-lg text-white">Waiter: {selectedBill.waiter_name}</p>
+                  <p className="font-semibold text-lg text-white">Waiter: {selectedBill.waiter_name && selectedBill.waiter_name.trim() ? selectedBill.waiter_name : (selectedBill.waiter_id ? `ID: ${selectedBill.waiter_id}` : '—')}</p>
                   <p className="text-slate-400">Amount: <span className="font-bold text-2xl text-emerald-300">KES {selectedBill.total_amount.toFixed(2)}</span></p>
                   <p className="text-slate-500">{selectedBill.items.length} items</p>
                 </div>
@@ -492,7 +551,7 @@ export default function Cashier() {
           </DialogContent>
         </Dialog>
 
-        <Dialog open={showMpesaPrompt} onOpenChange={setShowMpesaPrompt}>
+        <Dialog open={showMpesaPrompt} onOpenChange={(open) => { if (!processingPayment) setShowMpesaPrompt(open); }}>
           <DialogContent className="max-w-md bg-slate-950 text-slate-100 border border-slate-800">
             <DialogHeader>
               <DialogTitle>Enter M-Pesa Number</DialogTitle>
@@ -503,17 +562,24 @@ export default function Cashier() {
                 <input
                   value={mpesaNumber}
                   onChange={(e) => { setMpesaNumber(e.target.value.replace(/\s+/g, '')); setMpesaError(null); }}
+                  onKeyDown={(e) => { if (e.key === 'Enter' && !processingPayment) handleProcessPayment('mpesa'); }}
                   placeholder="2547XXXXXXXX"
-                  className="bg-slate-900 border border-slate-800 rounded-lg px-4 py-2 text-slate-100"
+                  disabled={processingPayment}
+                  className="bg-slate-900 border border-slate-800 rounded-lg px-4 py-2 text-slate-100 disabled:opacity-50"
                 />
                 {mpesaError && <p className="text-xs text-red-400 mt-2">{mpesaError}</p>}
               </div>
               <div className="flex gap-2 justify-end">
-                <Button onClick={() => { setShowMpesaPrompt(false); setMpesaNumber(''); setMpesaError(null); }} className="bg-red-600 text-white hover:bg-red-500 px-4 py-3 rounded-xl font-bold shadow-lg flex items-center gap-2">
+                <Button onClick={() => { setShowMpesaPrompt(false); setMpesaNumber(''); setMpesaError(null); }} disabled={processingPayment} className="bg-red-600 text-white hover:bg-red-500 px-4 py-3 rounded-xl font-bold shadow-lg flex items-center gap-2 disabled:opacity-50">
                   <X size={16} />
                   Cancel
                 </Button>
-                <Button onClick={() => handleProcessPayment('mpesa')} className="bg-emerald-500 text-slate-950 hover:bg-emerald-400 px-4 py-3 rounded-xl font-bold">Send Payment Request</Button>
+                <Button onClick={() => handleProcessPayment('mpesa')} disabled={processingPayment} className="bg-emerald-500 text-slate-950 hover:bg-emerald-400 px-4 py-3 rounded-xl font-bold disabled:opacity-50 flex items-center gap-2">
+                  {processingPayment && paymentMethod === 'mpesa' ? (
+                    <Loader className="animate-spin" size={16} />
+                  ) : null}
+                  Send Payment Request
+                </Button>
               </div>
             </div>
           </DialogContent>
@@ -532,8 +598,8 @@ export default function Cashier() {
                 <div className="rounded-3xl border border-slate-800 bg-slate-900 p-4 space-y-2 font-mono text-sm text-slate-200">
                   <p><strong>Order ID:</strong> {receipt.order_id}</p>
                   <p><strong>Waiter:</strong> {receipt.waiter_name}</p>
+                  {receipt.waiter_id && <p><strong>Waiter ID:</strong> {receipt.waiter_id}</p>}
                   <p><strong>Type:</strong> {receipt.order_type}</p>
-                  {receipt.table && <p><strong>Table:</strong> {receipt.table}</p>}
                   {receipt.phone && <p><strong>Phone:</strong> {receipt.phone}</p>}
                   <hr className="my-2 border-slate-800" />
                   <p><strong>Total:</strong> KES {receipt.total_amount.toFixed(2)}</p>
@@ -543,12 +609,11 @@ export default function Cashier() {
             )}
             <DialogFooter className="gap-2">
               <Button
-                variant="outline"
                 onClick={() => {
                   setShowReceipt(false);
                   setReceipt(null);
                 }}
-                className="border-slate-700 text-slate-100 hover:border-slate-500"
+                className="bg-slate-700 text-white hover:bg-slate-600 px-4 py-3 rounded-xl font-bold shadow-lg transition-colors"
               >
                 Close
               </Button>

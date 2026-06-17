@@ -21,6 +21,8 @@ type ReportData = {
   best_items: Array<{ name: string; quantity: number; revenue: number; food_cost: number }>
   worst_items: Array<{ name: string; quantity: number; revenue: number; food_cost: number }>
   hourly_sales: Array<{ hour: number; label: string; orders: number; revenue: number }>
+  best_waiter?: { waiter_id?: number | null; waiter_name: string; orders: number }
+  least_waiter?: { waiter_id?: number | null; waiter_name: string; orders: number }
   totals: { revenue: number; cash_revenue: number; mpesa_revenue: number; food_cost: number; wastage: number; miscellaneous: number; profit: number; food_cost_ratio: number }
 }
 
@@ -179,6 +181,29 @@ const Reports: React.FC = () => {
     fetchWastage();
     fetchMisc();
   }, [selectedPeriodType, selectedDate, customStartDate, customEndDate]);
+
+  // Subscribe to SSE so reports refresh when orders are paid
+  useEffect(() => {
+    let es: EventSource | null = null
+    try {
+      es = new EventSource(getApiUrl('/payments/stream/'))
+      es.onmessage = (e) => {
+        try {
+          const payload = JSON.parse(e.data)
+          if (payload && payload.type === 'order_update' && payload.data && payload.data.status === 'paid') {
+            // Re-fetch report data when a new payment occurs
+            fetchReport()
+          }
+        } catch (err) {
+          // ignore parse errors
+        }
+      }
+      es.onerror = () => { if (es) { es.close(); es = null } }
+    } catch (err) {
+      // ignore SSE setup errors
+    }
+    return () => { if (es) es.close() }
+  }, [])
 
   const totalOrders = useMemo(
     () => data?.hourly_sales.reduce((sum, entry) => sum + entry.orders, 0) ?? 0,
@@ -455,6 +480,24 @@ const Reports: React.FC = () => {
           valueClassName={data ? (data.totals.profit >= 0 ? 'text-green-400' : 'text-red-400') : ''}
         />
       </div>
+      {data?.best_waiter || data?.least_waiter ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {data?.best_waiter ? (
+            <div className="bg-slate-800 p-5 rounded-xl shadow-card border border-slate-700">
+              <p className="text-sm text-slate-400">Top Waiter</p>
+              <h3 className="text-2xl sm:text-3xl font-display font-semibold text-slate-100">{data.best_waiter.waiter_name}</h3>
+              <p className="text-sm text-slate-400">Orders: {data.best_waiter.orders}</p>
+            </div>
+          ) : null}
+          {data?.least_waiter ? (
+            <div className="bg-slate-800 p-5 rounded-xl shadow-card border border-slate-700">
+              <p className="text-sm text-slate-400">Least Active Waiter</p>
+              <h3 className="text-2xl sm:text-3xl font-display font-semibold text-slate-100">{data.least_waiter.waiter_name}</h3>
+              <p className="text-sm text-slate-400">Orders: {data.least_waiter.orders}</p>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
 
       <div className="grid grid-cols-1 xl:grid-cols-[0.7fr_0.3fr] gap-6">
         <section className="bg-slate-900 p-6 rounded-xl shadow-card border border-slate-800">
@@ -463,8 +506,8 @@ const Reports: React.FC = () => {
             <p className="text-slate-400">Loading hourly data…</p>
           ) : (
             <div className="space-y-6">
-              <div className="h-[320px] w-full">
-                <ResponsiveContainer width="100%" height="100%">
+              <div className="w-full" style={{ minHeight: 320 }}>
+                <ResponsiveContainer width="100%" height={320} minWidth={0} minHeight={0}>
                   <ComposedChart data={hourlyData} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#475569" /> {/* Changed stroke color */}
                     <XAxis dataKey="label" tick={{ fontSize: 11, fill: '#cbd5e1' }} interval={2} minTickGap={10} /> {/* Added fill color */}

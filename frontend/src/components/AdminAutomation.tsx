@@ -7,6 +7,43 @@ const AdminAutomation: React.FC = () => {
   const [insights, setInsights] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [query, setQuery] = useState('');
+  const [answer, setAnswer] = useState<string | null>(null);
+  const [queryLoading, setQueryLoading] = useState(false);
+  const [history, setHistory] = useState<Array<{ query: string; answer: string }>>([]);
+
+  const submitQuery = async () => {
+    if (!query.trim()) return;
+    setQueryLoading(true);
+    setAnswer(null);
+    const token = getAdminToken();
+
+    try {
+      const res = await fetch(getApiUrl('/payments/automation/query/'), {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ query: query.trim(), history }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => null);
+        throw new Error(err?.error || 'Failed to get answer');
+      }
+      const data = await res.json();
+      const nextAnswer = data.answer || 'No answer returned.';
+      setAnswer(nextAnswer);
+      setHistory((current) => [...current, { query: query.trim(), answer: nextAnswer }]);
+      setQuery('');
+    } catch (e) {
+      const message = e instanceof Error ? e.message : 'Unable to answer query.';
+      setAnswer(message);
+      setHistory((current) => [...current, { query: query.trim(), answer: message }]);
+    } finally {
+      setQueryLoading(false);
+    }
+  };
 
   useEffect(() => {
     const fetchInsights = async () => {
@@ -113,6 +150,122 @@ const AdminAutomation: React.FC = () => {
               <span className="text-slate-400">Sync Interval</span>
               <span className="text-blue-400 font-bold text-xs">Real-time</span>
             </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+        <div className="bg-slate-900/60 border border-slate-700 p-6 rounded-3xl lg:col-span-2">
+          <div className="flex items-center gap-3 mb-4">
+            <MessageSquare className="text-emerald-300" />
+            <div>
+              <h3 className="font-bold">🤖 AI Report Assistant (Real-Time)</h3>
+              <p className="text-xs text-slate-400">Powered by live restaurant data — conversational insights on demand</p>
+            </div>
+          </div>
+          <div className="grid gap-3 mb-6">
+            <textarea
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Ask: e.g. 'Which stock items are low?', 'How much revenue did we make this week?', 'Who is the top waiter?'"
+              className="min-h-[120px] w-full resize-none rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3 text-sm text-slate-100 placeholder:text-slate-500"
+            />
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setQuery('How is everything going?')}
+                className="text-xs bg-slate-800/50 hover:bg-slate-800 border border-slate-700 text-slate-300 px-3 py-2 rounded-xl"
+              >
+                💬 Status
+              </button>
+              <button
+                type="button"
+                onClick={() => setQuery('What is today\'s revenue?')}
+                className="text-xs bg-slate-800/50 hover:bg-slate-800 border border-slate-700 text-slate-300 px-3 py-2 rounded-xl"
+              >
+                💰 Today's Revenue
+              </button>
+              <button
+                type="button"
+                onClick={() => setQuery('Show me low stock items')}
+                className="text-xs bg-slate-800/50 hover:bg-slate-800 border border-slate-700 text-slate-300 px-3 py-2 rounded-xl"
+              >
+                ⚠️ Low Stock
+              </button>
+              <button
+                type="button"
+                onClick={() => setQuery('Who is the top performer?')}
+                className="text-xs bg-slate-800/50 hover:bg-slate-800 border border-slate-700 text-slate-300 px-3 py-2 rounded-xl"
+              >
+                🏆 Top Waiter
+              </button>
+            </div>
+            <div className="flex flex-wrap gap-3">
+              <button
+                type="button"
+                onClick={submitQuery}
+                disabled={queryLoading}
+                className="inline-flex items-center justify-center rounded-full bg-emerald-500 px-5 py-3 text-sm font-semibold text-slate-950 hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {queryLoading ? 'Thinking...' : 'Ask AI'}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setHistory([]);
+                  setAnswer(null);
+                }}
+                disabled={history.length === 0 && !answer}
+                className="inline-flex items-center justify-center rounded-full border border-slate-700 bg-slate-900 px-5 py-3 text-sm font-semibold text-slate-100 hover:border-slate-500 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Clear chat
+              </button>
+            </div>
+          </div>
+          <div className="rounded-2xl border border-slate-700 bg-slate-950/80 p-5 min-h-[160px] max-h-[400px] overflow-y-auto">
+            <p className="text-xs uppercase text-slate-500 mb-3">Live Conversation</p>
+            <div className="space-y-3 text-sm">
+              {history.length > 0 ? (
+                history.map((entry, i) => (
+                  <div key={i} className="space-y-2 animate-fadeIn">
+                    <div className="rounded-2xl bg-slate-900/80 p-4 ml-auto max-w-xs">
+                      <p className="text-[11px] uppercase text-slate-500 mb-1">You</p>
+                      <p className="whitespace-pre-wrap text-slate-100">{entry.query}</p>
+                    </div>
+                    <div className="rounded-2xl bg-emerald-950/40 border border-emerald-500/30 p-4 max-w-xs">
+                      <p className="text-[11px] uppercase text-emerald-400 mb-1">🤖 Tasty Bites AI</p>
+                      <p className="whitespace-pre-wrap text-slate-100">{entry.answer}</p>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <p className="whitespace-pre-wrap text-slate-100 text-center py-8">
+                  👋 Start asking questions about your business! Try "How are you?", "What's today's revenue?", or "Show me low stock items"
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-slate-900/60 border border-slate-700 p-6 rounded-3xl">
+          <div className="flex items-center gap-3 mb-4">
+            <Bell className="text-yellow-300" />
+            <div>
+              <h3 className="font-bold">Inventory Alerts</h3>
+              <p className="text-xs text-slate-400">Low stock items and actions to take.</p>
+            </div>
+          </div>
+          <div className="space-y-3">
+            {insights?.staffing_insights?.filter((s:any) => s.trigger?.startsWith('Low Stock')).length > 0 ? (
+              insights.staffing_insights.filter((s:any) => s.trigger?.startsWith('Low Stock')).map((alert:any, i:number) => (
+                <div key={i} className="bg-slate-800/60 border border-yellow-500/20 rounded-xl p-4">
+                  <p className="text-[11px] text-yellow-300 uppercase font-bold tracking-wide">{alert.trigger}</p>
+                  <p className="text-sm text-slate-200 mt-2">{alert.action}</p>
+                </div>
+              ))
+            ) : (
+              <p className="text-sm text-slate-400 italic">No low stock alerts right now. Inventory levels are healthy.</p>
+            )}
           </div>
         </div>
       </div>

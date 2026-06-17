@@ -13,6 +13,7 @@ urlpatterns = [
     path('admin/touch/', views.admin_touch, name='admin_touch'),
     path('staff/activities/', views.staff_activities, name='staff_activities'),
     path('admin/session-logs/', views.admin_session_logs, name='admin_session_logs'),
+    path('admin/clear-sessions/', views.admin_clear_sessions, name='admin_clear_sessions'),
     path('admin/me/', views.admin_me, name='admin_me'),
     path('admin/settings/', views.admin_settings, name='admin_settings'),
     path('admin/users/', views.admin_users, name='admin_users'),
@@ -27,9 +28,13 @@ urlpatterns = [
     path('menu-items/<int:item_id>/update-price/', views.menu_item_update, name='menu_item_update'),
     path('menu-items/<int:item_id>/update-stock/', views.menu_item_stock_update, name='menu_item_stock_update'),
     path('menu-items/<int:item_id>/delete/', views.menu_item_delete, name='menu_item_delete'),
+    path('admin/backup/', views.admin_backup, name='admin_backup'),
     path('admin/clear/', views.admin_clear, name='admin_clear'),
     path('admin/upload-image/', views.upload_image, name='upload_image'),
     path('automation/insights/', views.automation_insights, name='automation_insights'),
+    path('automation/query/', views.automation_query, name='automation_query'),
+    path('admin/index-data/', views.admin_index_data, name='admin_index_data'),
+    path('search/knowledge/', views.search_knowledge, name='search_knowledge'),
 
     path('reports/summary/', views.report_summary, name='report_summary'),
     path('reports/download/', views.download_report, name='download_report'),
@@ -44,6 +49,9 @@ urlpatterns = [
     path('stock/most-consumed/', views.most_consumed_stock, name='most_consumed_stock'),
     path('admin/stock/add/', views.admin_add_stock, name='admin_add_stock'),
 
+    # Staff Briefing
+    path('staff/briefing/', views.staff_briefing, name='staff_briefing'),
+
     path('admin/employees/', views.employees_list, name='employees_list'),
     path('admin/employees/<int:employee_id>/', views.employee_detail, name='employee_detail'),
     path('admin/employees/<int:employee_id>/email/', views.send_employee_email, name='send_employee_email'),
@@ -52,13 +60,17 @@ urlpatterns = [
     # POS & KDS Endpoints
     path('pos/tables/', views.table_list, name='table_list'),
     path('pos/tables/<int:table_id>/', views.table_update, name='table_update'),
+    path('pos/tables/<int:table_id>/mark-free/', views.mark_table_free, name='mark_table_free'),
     path('pos/create-order/', views.create_pos_order, name='create_pos_order'),
     path('pos/active-order/', views.get_active_pos_order, name='get_active_pos_order'),
     path('pos/add-to-order/<str:order_id>/', views.add_to_pos_order, name='add_to_pos_order'),
+    path('cashier/pending-bills/', views.cashier_pending_bills, name='cashier_pending_bills'),
+    path('cashier/confirm-payment/<str:order_id>/', views.cashier_confirm_payment, name='cashier_confirm_payment'),
     path('kds/queue/', views.kds_queue, name='kds_queue'),
     path('kds/complete/<str:order_id>/', views.order_complete, name='order_complete'),
     path('pos/split-payment/', views.initiate_split_payment, name='initiate_split_payment'),
-    path('pos/receipt/<str:order_id>/', views.get_receipt_data, name='get_receipt_data'),    path('stream/', views.payments_stream, name='payments_stream'),
+    path('pos/receipt/<str:order_id>/', views.get_receipt_data, name='get_receipt_data'),
+    path('stream/', views.payments_stream, name='payments_stream'),
     path('reviews/', views.reviews_list, name='reviews_list'),
     path('reviews/create/', views.create_review, name='create_review'),
 ]

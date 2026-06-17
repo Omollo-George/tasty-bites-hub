@@ -44,6 +44,10 @@ wheels/
 .installed.cfg
 *.egg
 db.sqlite3
+backend/menu_items/
+backend/tastybites/db-*.sqlite3
+backend/tastybites/data_index.jsonl
+backend/tastybites/media/
 staticfiles/
 
 # Editor directories and files
@@ -56,3 +60,4 @@ staticfiles/
 *.njsproj
 *.sln
 *.sw?
+archive/

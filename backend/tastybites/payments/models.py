@@ -25,6 +25,17 @@ class Transaction(models.Model):
         (METHOD_CASH, 'Cash'),
     ]
 
+    STATUS_PENDING = 'pending'
+    STATUS_INITIATED = 'initiated'
+    STATUS_SUCCESS = 'success'
+    STATUS_FAILED = 'failed'
+    STATUS_CHOICES = [
+        (STATUS_PENDING, 'Pending'),
+        (STATUS_INITIATED, 'Initiated'),
+        (STATUS_SUCCESS, 'Success'),
+        (STATUS_FAILED, 'Failed'),
+    ]
+
     merchant_request_id = models.CharField(max_length=128, blank=True, null=True)
     checkout_request_id = models.CharField(max_length=128, blank=True, null=True, db_index=True)
     phone = models.CharField(max_length=32)
@@ -32,7 +43,7 @@ class Transaction(models.Model):
     amount = models.DecimalField(max_digits=10, decimal_places=2)
     item = models.CharField(max_length=255, blank=True, null=True)
     order = models.ForeignKey('Order', on_delete=models.SET_NULL, null=True, blank=True, related_name='transactions')
-    status = models.CharField(max_length=32, default='pending')
+    status = models.CharField(max_length=32, choices=STATUS_CHOICES, default=STATUS_PENDING, db_index=True)
     method = models.CharField(max_length=32, choices=METHOD_CHOICES, default=METHOD_M_PESA)
     raw_response = models.JSONField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -69,14 +80,31 @@ class Table(models.Model):
 
 
 class Order(models.Model):
+    STATUS_PENDING = 'pending'
+    STATUS_BILL_PENDING = 'bill_pending'
+    STATUS_READY = 'ready'
+    STATUS_PAID = 'paid'
+    STATUS_COMPLETED = 'completed'
+    STATUS_CANCELLED = 'cancelled'
+    STATUS_CHOICES = [
+        (STATUS_PENDING, 'Pending'),
+        (STATUS_BILL_PENDING, 'Bill Pending'),
+        (STATUS_READY, 'Ready'),
+        (STATUS_PAID, 'Paid'),
+        (STATUS_COMPLETED, 'Completed'),
+        (STATUS_CANCELLED, 'Cancelled'),
+    ]
+
     order_id = models.CharField(max_length=64, unique=True, default=generate_uuid_hex, editable=False)
     table = models.ForeignKey(Table, on_delete=models.SET_NULL, null=True, blank=True, related_name='orders')
+    waiter = models.ForeignKey('Employee', on_delete=models.SET_NULL, null=True, blank=True, related_name='orders')
+    waiter_name = models.CharField(max_length=255, blank=True, default='')
     phone = models.CharField(max_length=32, blank=True)
     delivery_address = models.CharField(max_length=512, blank=True, default='')
     delivery_distance_km = models.DecimalField(max_digits=8, decimal_places=2, null=True, blank=True)
     delivery_time = models.CharField(max_length=128, blank=True, default='')
     delivery_cost = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('0.00'))
-    status = models.CharField(max_length=32, default='pending')
+    status = models.CharField(max_length=32, choices=STATUS_CHOICES, default=STATUS_PENDING, db_index=True)
     split_count = models.PositiveIntegerField(default=1)
     total_amount = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('0.00'))
     created_at = models.DateTimeField(auto_now_add=True)
@@ -129,6 +157,7 @@ class OrderItem(models.Model):
 class MenuItem(models.Model):
     name = models.CharField(max_length=255, unique=True)
     category = models.CharField(max_length=64, default='All')
+    sku = models.CharField(max_length=64, blank=True, null=True, db_index=True, help_text='Optional stock-keeping unit')
     price = models.DecimalField(max_digits=10, decimal_places=2)
     food_cost = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('0.00'))
     description = models.TextField(blank=True, default='')
@@ -180,6 +209,20 @@ class AdminSessionLog(models.Model):
 
     def __str__(self):
         return f"{self.user.username} - {self.login_time}"
+
+
+class StaffActivity(models.Model):
+    employee = models.ForeignKey('Employee', on_delete=models.CASCADE, related_name='activities')
+    order = models.ForeignKey('Order', on_delete=models.SET_NULL, null=True, blank=True, related_name='staff_activities')
+    action = models.CharField(max_length=255)
+    details = models.JSONField(blank=True, null=True, default=dict)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    if TYPE_CHECKING:
+        id: int
+
+    def __str__(self):
+        return f"{self.employee.name} - {self.action} @ {self.created_at}"
 
 
 class StockLog(models.Model):
@@ -256,6 +299,8 @@ class Employee(models.Model):
     email = models.EmailField(blank=True)
     salary = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))
     account_number = models.CharField(max_length=100, blank=True, default='')
+    special_id = models.CharField(max_length=50, blank=True, default='', help_text='Special waiter ID number')
+    document = models.FileField(upload_to='employee-documents/', blank=True, null=True)
     status = models.CharField(max_length=32, default='active')
     created_at = models.DateTimeField(auto_now_add=True)
 

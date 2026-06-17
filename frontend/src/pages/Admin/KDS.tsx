@@ -25,6 +25,8 @@ interface Order {
   phone: string;
   total_amount: number;
   split_count: number;
+  waiter_name?: string;
+  waiter_id?: string | number;
 }
 
 const AdminKDS: React.FC = () => {
@@ -71,7 +73,26 @@ const AdminKDS: React.FC = () => {
   useEffect(() => {
     fetchQueue(true);
     const interval = setInterval(fetchQueue, 5000); // Refresh every 5 seconds
-    return () => clearInterval(interval);
+
+    const eventSource = new EventSource(getApiUrl('/payments/stream/'));
+    eventSource.onmessage = (event) => {
+      try {
+        const payload = JSON.parse(event.data);
+        if (payload?.type && ['order_update', 'new_order', 'order_ready'].includes(payload.type)) {
+          fetchQueue();
+        }
+      } catch (err) {
+        // ignore parse errors
+      }
+    };
+    eventSource.onerror = () => {
+      eventSource.close();
+    };
+
+    return () => {
+      clearInterval(interval);
+      eventSource.close();
+    };
   }, [authToken]);
 
   if (!canAccess && !loading) {
@@ -142,6 +163,11 @@ const AdminKDS: React.FC = () => {
                   </span>
                 </div>
                 <p className="text-sm text-slate-400 mb-4">Table: {order.table} | {new Date(order.created_at).toLocaleTimeString()}</p>
+                {(order.waiter_name || order.waiter_id) && (
+                  <p className="text-sm text-slate-300 mb-4">
+                    Waiter: {order.waiter_name || 'Unknown'}{order.waiter_id ? ` (ID: ${order.waiter_id})` : ''}
+                  </p>
+                )}
                 <ul className="space-y-2 mb-6">
                   {order.items.map((item, idx) => (
                     <li key={idx} className="flex justify-between items-center text-slate-200">
@@ -156,18 +182,12 @@ const AdminKDS: React.FC = () => {
                   ))}
                 </ul>
               </div>
-              <div className="flex gap-3 mt-4">
+              <div className="mt-4">
                 <button
                   onClick={() => updateOrderStatus(order.order_id, 'ready')}
-                  className="flex-1 bg-[#d69e2e] text-[#1a365d] px-4 py-2 rounded-full font-semibold hover:bg-[#d69e2e]/80 transition-colors"
+                  className="w-full bg-[#d69e2e] text-[#1a365d] px-6 py-3 rounded-full font-semibold hover:bg-[#d69e2e]/80 transition-colors"
                 >
                   Mark Ready
-                </button>
-                <button
-                  onClick={() => updateOrderStatus(order.order_id, 'served')}
-                  className="flex-1 bg-blue-600 text-white px-4 py-2 rounded-full font-semibold hover:bg-blue-700 transition-colors"
-                >
-                  Mark Served
                 </button>
               </div>
             </div>

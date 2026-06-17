@@ -3,15 +3,9 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "install:all": "npm install --legacy-peer-deps && pip install -r ../backend/tastybites/requirements.txt",
     "build": "vite build",
-    "dev:client": "cross-env VITE_GOOGLE_MAPS_API_KEY=YOUR_ACTUAL_KEY_HERE vite",
-    "dev:server": "python ../backend/tastybites/manage.py runserver 0.0.0.0:8000",
-    "dev": "concurrently \"npm run dev:client\" \"npm run dev:server\"",
-    "migrate": "python ../backend/tastybites/manage.py migrate",
-    "makemigrations": "python ../backend/tastybites/manage.py makemigrations",
+    "preview": "vite preview",
     "test": "vitest",
-    "test:ui": "vitest --ui --workspace=client",
     "test:run": "vitest run --workspace=client"
   },
   "engines": {

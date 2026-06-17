@@ -1,8 +1,10 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
+import { getStaffName, getStaffId } from "@/lib/staff-session";
 import { Flame, BadgeCheck, Sparkles, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import Receipt from "./Receipt";
 import { getApiUrl } from "@/lib/api";
+import { formatImageUrl } from '@/lib/image';
 import Restaurant3DBackground from "../../Restaurant3DBackground";
 
 
@@ -14,6 +16,7 @@ type MenuItem = {
   spicy?: boolean;
   description: string;
   image_url?: string; // Added image_url for consistency
+  sku?: string;
 };
 
 type CartItem = {
@@ -21,6 +24,7 @@ type CartItem = {
   price: number;
   quantity: number;
   modifiers: string[];
+  menu_item_id?: number;
 };
 
 export const DEFAULT_MENU_ITEMS: MenuItem[] = [
@@ -120,14 +124,6 @@ const MenuSection = () => {
     };
   }, []);
 
-  const formatImageUrl = (url?: string) => {
-    if (!url) return '';
-    if (url.startsWith('http')) return url;
-    const baseUrl = (import.meta.env.VITE_API_URL || 'http://localhost:8000').replace(/\/api\/?$/, '');
-    const path = url.startsWith('/') ? url : `/${url}`;
-    return `${baseUrl}${path}`;
-  };
-
   const handleCancelTransaction = async () => {
     if (pollTimerRef.current) {
       window.clearTimeout(pollTimerRef.current);
@@ -181,6 +177,7 @@ const MenuSection = () => {
       {
         name: menuItem.name,
         price: menuItem.price,
+        menu_item_id: (menuItem as any).id,
         quantity: Math.max(1, activeQuantity),
         modifiers: activeModifiers
           .split(",")
@@ -264,13 +261,14 @@ const MenuSection = () => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          items: allItems.map((item) => ({
-            name: item.name,
-            price: item.price,
-            quantity: item.quantity,
-            modifiers: item.modifiers,
-            seat_number: 1,
-          })),
+            items: allItems.map((item) => ({
+              menu_item_id: (item as any).menu_item_id || (item as any).id || undefined,
+              name: item.name,
+              price: item.price,
+              quantity: item.quantity,
+              modifiers: item.modifiers,
+              seat_number: 1,
+            })),
           table_number: orderType === "table" ? tableNumber.trim() : "",
           delivery_address: orderType === "delivery" ? deliveryAddress.trim() : "",
           split_count: 1,
@@ -278,6 +276,8 @@ const MenuSection = () => {
           split_phones: [],
           order_type: orderType,
           payment_method: paymentMethod,
+          waiter_name: getStaffName() || undefined,
+          waiter_id: getStaffId() || undefined,
         }),
       });
 
@@ -295,10 +295,11 @@ const MenuSection = () => {
       }
 
       setCurrentOrderId(data.order_id);
-      const receiptData = { 
-        ...data, 
-        items: allItems, 
+      const receiptData = {
+        ...data,
+        items: allItems,
         total_amount: data.total_amount || totalBeforePayment,
+        cashier_notified: true,
       };
 
       if (paymentMethod === "mpesa") {
@@ -401,7 +402,10 @@ const MenuSection = () => {
       } else {
         // Cash payment - generate immediately as it is considered settled
         setAwaitingMpesaConfirm(false);
-        setLastOrder(receiptData);
+        setLastOrder({
+          ...receiptData,
+          cashier_notified: true,
+        });
         toast({
           title: "Order created",
           description: `Order ${data.order_id} created and marked as paid via Cash.`,
@@ -461,6 +465,7 @@ const MenuSection = () => {
                   <h3 className="font-display text-2xl text-slate-100 group-hover:text-primary transition-colors">
                     {item.name}
                   </h3>
+                  {item.sku && <span className="text-xs text-slate-500 ml-2">{`SKU: ${item.sku}`}</span>}
                   <div className="flex items-center gap-1">
                     {item.spicy && <Flame className="w-4 h-4 text-primary" />}
                     {item.popular && <BadgeCheck className="w-4 h-4 text-secondary" />}

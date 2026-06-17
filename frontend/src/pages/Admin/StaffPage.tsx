@@ -1,11 +1,11 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { ShoppingCart, UtensilsCrossed, Clock, CheckCircle, TrendingUp, Bell, LayoutGrid, Users, LogOut, Home, Monitor, CreditCard } from 'lucide-react';
 import { getApiUrl } from '@/lib/api';
 import { getAdminToken, isAdminSessionValid } from '@/lib/admin-session';
 import { getAuthHeaders } from '@/lib/auth';
 import { useToast } from '@/hooks/use-toast';
-import { clearStaffSession, getStaffRole, getStaffName, getStaffToken } from '@/lib/staff-session';
+import { clearStaffSession, getStaffRole, getStaffName, getStaffToken, getStaffId } from '@/lib/staff-session';
 
 interface Table {
   id: number;
@@ -34,6 +34,9 @@ const StaffPage: React.FC = () => {
   const [activities, setActivities] = useState<StaffActivity[]>([]);
   const [summary, setSummary] = useState<StaffSummary>({ orders_taken: 0, tables_served: 0, completed_orders: 0 });
   const [loadingActivities, setLoadingActivities] = useState(true); // New state for activities loading
+  const [refreshingActivities, setRefreshingActivities] = useState(false); // background refresh indicator
+  const [shiftCheckLoading, setShiftCheckLoading] = useState(true); // Check if staff is on shift
+  const isFirstLoadRef = useRef(true);
   const navigate = useNavigate();
   const location = useLocation();
   const { toast } = useToast(); // Initialize useToast hook
@@ -49,6 +52,7 @@ const StaffPage: React.FC = () => {
   const canAccessKDS = isAdmin || ['chef', 'manager'].includes(roleLower);
   const canAccessCashier = isAdmin || ['cashier', 'manager'].includes(roleLower);
   const canSeeTables = isAdmin || ['waiter', 'cashier', 'manager'].includes(roleLower);
+  const isWaiter = roleLower === 'waiter'
 
   const handleStaffUnauthorized = async (response: Response) => {
     if (response.status !== 403) {
@@ -72,6 +76,48 @@ const StaffPage: React.FC = () => {
     return true
   }
 
+  // Check if staff member is on shift (verify auth is valid and they haven't been removed from shift)
+  useEffect(() => {
+    if (isAdmin) {
+      // Admins bypass shift check
+      setShiftCheckLoading(false)
+      return
+    }
+
+    if (!staffToken) {
+      // No staff token, not logged in
+      setShiftCheckLoading(false)
+      return
+    }
+
+    const checkShiftStatus = async () => {
+      try {
+        // Try to fetch staff activities - this will validate if token is still valid and staff is on shift
+        const res = await fetch(getApiUrl(`/payments/staff/activities/?role=${staffRole}`), {
+          headers: getAuthHeaders()
+        })
+
+        if (res.status === 403) {
+          // Unauthorized - likely removed from shift or token expired
+          handleStaffUnauthorized(res)
+          return
+        }
+
+        if (!res.ok) {
+          console.warn('Shift check returned status:', res.status)
+          // For now, allow access even if check fails - they might have network issues
+        }
+      } catch (error) {
+        console.error('Shift check error:', error)
+        // Don't block access on network errors
+      } finally {
+        setShiftCheckLoading(false)
+      }
+    }
+
+    checkShiftStatus()
+  }, [staffToken, isAdmin, staffRole])
+
   useEffect(() => {
     const fetchTables = async () => {
       try {
@@ -92,63 +138,126 @@ const StaffPage: React.FC = () => {
     fetchTables()
   }, [authToken, adminToken, location.pathname]) // Re-fetch tables if authToken changes or on route change
 
-  // New useEffect to fetch activities based on role
-  useEffect(() => {
-    const fetchActivities = async () => {
-      if (!staffRole) {
-        setLoadingActivities(false)
-        return
-      }
-
-      const headers = getAuthHeaders()
-      if (!headers.Authorization && !headers['X-ADMIN-TOKEN'] && !headers['X-STAFF-TOKEN']) {
-        setLoadingActivities(false)
-        return
-      }
-
-      setLoadingActivities(true)
-      console.debug('Staff activities fetch headers:', headers)
-      try {
-        const res = await fetch(getApiUrl(`/payments/staff/activities/?role=${staffRole}`), {
-          headers
-        })
-        if (await handleStaffUnauthorized(res)) {
-          return
-        }
-
-        if (res.ok) {
-          const data = await res.json()
-          setActivities(data.activities || [])
-          setSummary({
-            orders_taken: data.summary?.orders_taken ?? 0,
-            tables_served: data.summary?.tables_served ?? 0,
-            completed_orders: data.summary?.completed_orders ?? 0,
-          })
-        } else {
-          const errorText = await res.text()
-          console.error("Failed to fetch activities:", res.status, errorText)
-          if (res.status !== 404) {
-            toast({
-              title: "Activity Feed Error",
-              description: `Could not load staff activities. Server responded with ${res.status}.`,
-              variant: "destructive",
-            })
-          }
-          setActivities([])
-          setSummary({ orders_taken: 0, tables_served: 0, completed_orders: 0 })
-        }
-      } catch (error) {
-        console.error("Error fetching activities:", error)
-        setActivities([])
-        setSummary({ orders_taken: 0, tables_served: 0, completed_orders: 0 })
-      } finally {
-        setLoadingActivities(false)
-      }
+  const fetchActivities = async () => {
+    if (!staffRole) {
+      setLoadingActivities(false)
+      return
     }
+
+    const headers = getAuthHeaders()
+    if (!headers.Authorization && !headers['X-ADMIN-TOKEN'] && !headers['X-STAFF-TOKEN']) {
+      setLoadingActivities(false)
+      return
+    }
+
+    if (isFirstLoadRef.current) {
+      setLoadingActivities(true)
+    } else {
+      setRefreshingActivities(true)
+    }
+    console.debug('Staff activities fetch headers:', headers)
+    try {
+      const res = await fetch(getApiUrl(`/payments/staff/activities/?role=${staffRole}`), {
+        headers
+      })
+      if (await handleStaffUnauthorized(res)) {
+        return
+      }
+
+      if (res.ok) {
+        const data = await res.json()
+        setActivities(data.activities || [])
+        setSummary({
+          orders_taken: data.summary?.orders_taken ?? 0,
+          tables_served: data.summary?.tables_served ?? 0,
+          completed_orders: data.summary?.completed_orders ?? 0,
+        })
+      } else {
+        const errorText = await res.text()
+        console.error("Failed to fetch activities:", res.status, errorText)
+        if (res.status !== 404) {
+          toast({
+            title: "Activity Feed Error",
+            description: `Could not load staff activities. Server responded with ${res.status}.`,
+            variant: "destructive",
+          })
+        }
+      }
+    } catch (error) {
+      console.error("Error fetching activities:", error)
+      setActivities([])
+      setSummary({ orders_taken: 0, tables_served: 0, completed_orders: 0 })
+    } finally {
+      setLoadingActivities(false)
+      setRefreshingActivities(false)
+      isFirstLoadRef.current = false
+    }
+  }
+
+  useEffect(() => {
     fetchActivities()
     const interval = setInterval(fetchActivities, 10000)
     return () => clearInterval(interval)
   }, [staffRole, authToken, adminToken, staffToken, toast])
+
+  // SSE listener for order ready notifications (waiter only)
+  useEffect(() => {
+    const eventSource = new EventSource(getApiUrl('/payments/stream/'))
+    const staffId = getStaffId()
+    const isWaiter = roleLower === 'waiter'
+
+    eventSource.onmessage = (event) => {
+      try {
+        const payload = JSON.parse(event.data)
+
+        if (isWaiter && payload?.type === 'order_ready') {
+          const data = payload.data || {}
+          const waiterIdMatch = staffId && data.waiter_id && String(data.waiter_id) === String(staffId)
+          const waiterNameMatch = !waiterIdMatch && staffName && data.waiter_name && String(data.waiter_name).toLowerCase() === staffName.toLowerCase()
+
+          if (waiterIdMatch || waiterNameMatch) {
+            const orderLabel = data.order_id ? `Order #${String(data.order_id).substring(0, 6)}` : 'Your order'
+            const locationLabel = data.table || 'Order'
+
+            toast({
+              title: `🔔 ${orderLabel} is ready!`,
+              description: `${locationLabel} is ready to be picked up!`,
+              variant: 'default',
+            })
+
+            fetchActivities().catch(() => {
+              const newActivity: StaffActivity = {
+                action: 'Order Ready Notification',
+                description: `${locationLabel} ${orderLabel} is ready`,
+                order_id: data.order_id,
+                table: data.table,
+                time: data.created_at || new Date().toISOString(),
+              }
+              setActivities((prev) => [newActivity, ...prev].slice(0, 30))
+            })
+
+            try {
+              const audio = new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAAB9AAACABAAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj==')
+              audio.play().catch(() => {})
+            } catch (err) {
+              // Silently ignore audio errors
+            }
+          }
+        }
+      } catch (err) {
+        // Ignore parse errors
+      }
+    }
+
+    eventSource.onerror = () => {
+      eventSource.close()
+    }
+
+    return () => {
+      eventSource.close()
+    }
+  }, [toast, roleLower, staffName])
+
 
   const staffStats = [
     // Visible only to waiters
@@ -179,6 +288,7 @@ const StaffPage: React.FC = () => {
             <div className="flex items-center gap-2">
               <p className="text-sm text-slate-400 font-medium italic">Welcome back, {staffName || (isAdmin ? 'Administrator' : 'Team Member')}</p>
               {staffRole && <span className="bg-orange-500/10 text-orange-400 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border border-orange-500/20">{staffRole}</span>}
+
             </div>
             <h1 className="font-display text-4xl text-slate-100 mt-1 uppercase tracking-tight">Staff Workstation</h1>
           </div>
@@ -230,6 +340,35 @@ const StaffPage: React.FC = () => {
                 <span>Launch Cashier</span>
               </Link>
             </div>
+
+            <div className="mt-8 border-t border-slate-800 pt-8">
+              <div className="flex items-center justify-between mb-6">
+                <div>
+                  <p className="text-sm uppercase tracking-[0.3em] text-slate-500">Cashier Activity</p>
+                  <h3 className="text-2xl font-display text-slate-100">Recent cashier events</h3>
+                </div>
+                <TrendingUp className="text-slate-500" size={20} />
+              </div>
+
+              <div className="space-y-4">
+                {loadingActivities ? (
+                  <p className="text-slate-400 animate-pulse">Loading cashier activity...</p>
+                ) : activities.length === 0 ? (
+                  <p className="text-slate-400">No recent cashier activity available.</p>
+                ) : (
+                  activities.map((activity) => (
+                    <div key={activity.id} className="flex items-center justify-between p-4 bg-slate-800/50 rounded-xl border border-slate-800 hover:border-slate-700 transition-all">
+                      <div>
+                        <p className="font-semibold text-slate-200">{activity.action}</p>
+                        {activity.table && <p className="text-xs text-slate-400">Table: {activity.table}</p>}
+                        {activity.order_id && <p className="text-xs text-slate-400">Order: {activity.order_id}</p>}
+                      </div>
+                      <span className="text-xs text-slate-500 italic">{activity.time}</span>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
           </section>
         )}
 
@@ -253,80 +392,7 @@ const StaffPage: React.FC = () => {
           </div>
         )}
 
-        {/* Table Management Section */}
-        {canSeeTables && (
-          <section className="bg-slate-900 border border-slate-800 p-8 rounded-3xl space-y-6">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <LayoutGrid className="text-orange-500" size={24} />
-                <h3 className="font-display text-2xl text-slate-100">Table Overview</h3>
-              </div>
-              <p className="text-sm text-slate-400 italic">Select a table to start an order</p>
-            </div>
-
-            {loadingTables ? (
-              <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
-                {[...Array(6)].map((_, i) => (
-                  <div key={i} className="h-24 bg-slate-800 animate-pulse rounded-2xl" />
-                ))}
-              </div>
-            ) : (
-              <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
-                {tables.map((table) => (
-                  <button
-                    key={table.id}
-                    onClick={() => navigate(`/staff/pos?table=${table.number}`)}
-                    className={`p-4 rounded-2xl border text-left flex flex-col justify-between h-28 relative overflow-hidden transition-all hover:scale-[1.02] active:scale-95 group ${
-                      table.status === 'occupied' 
-                      ? 'bg-red-500/10 border-red-500/30 hover:border-red-500 shadow-[0_0_15px_-5px_rgba(239,68,68,0.3)]' 
-                      : table.status === 'bill_pending'
-                      ? 'bg-yellow-500/10 border-yellow-500/30 hover:border-yellow-500 shadow-[0_0_15px_-5px_rgba(234,179,8,0.3)]'
-                      : 'bg-emerald-500/10 border-emerald-500/30 hover:border-emerald-500'
-                    }`}
-                  >
-                    <span className="text-xs font-bold uppercase tracking-widest text-slate-500 group-hover:text-slate-300">Table</span>
-                    <span className="text-3xl font-display text-slate-100">{table.number}</span>
-                  <div className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full self-start ${
-                    table.status === 'occupied' ? 'bg-red-500 text-white' : 
-                    table.status === 'bill_pending' ? 'bg-yellow-500 text-black' : 
-                    'bg-emerald-500 text-white'
-                  }`}>
-                    {table.status === 'bill_pending' ? 'Bill Requested' : table.status}
-                    </div>
-                  </button>
-                ))}
-              </div>
-            )}
-          </section>
-        )}
-
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          {/* Recent Activity Feed */}
-          <section className="bg-slate-900 border border-slate-800 p-8 rounded-3xl space-y-6">
-            <div className="flex items-center justify-between">
-              <h3 className="font-display text-2xl text-slate-100">Recent Activity</h3>
-              <TrendingUp className="text-slate-500" size={20} />
-            </div>
-            <div className="space-y-4">
-              {loadingActivities ? (
-                <p className="text-slate-400 animate-pulse">Loading activities...</p>
-              ) : activities.length === 0 ? (
-                <p className="text-slate-400">No recent activities for your role.</p>
-              ) : (
-                activities.map((activity, i) => (
-                  <div key={i} className="flex items-center justify-between p-4 bg-slate-800/50 rounded-xl border border-slate-800 hover:border-slate-700 transition-all">
-                    <div>
-                      <p className="font-semibold text-slate-200">{activity.action}</p>
-                      {activity.table && <p className="text-xs text-slate-400">Table: {activity.table}</p>}
-                      {activity.order_id && <p className="text-xs text-slate-400">Order: {activity.order_id}</p>}
-                    </div>
-                    <span className="text-xs text-slate-500 italic">{activity.time}</span>
-                  </div>
-                ))
-              )}
-            </div>
-          </section>
-
           {/* Announcements & Shift Checklist */}
           <section className="bg-slate-900 border border-slate-800 p-8 rounded-3xl space-y-6">
             <div className="flex items-center gap-2">

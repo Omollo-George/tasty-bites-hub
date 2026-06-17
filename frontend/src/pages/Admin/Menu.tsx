@@ -2,6 +2,7 @@ import React, { useEffect, useState, useRef } from 'react'
 import { DEFAULT_MENU_ITEMS as CUSTOMER_DEFAULT_MENU_ITEMS } from '@/components/MenuSection'
 import { getApiUrl } from '@/lib/api'
 import { getAdminToken } from '@/lib/admin-session'
+import { formatImageUrl } from '@/lib/image'
 
 type TableItem = {
   id: number
@@ -48,18 +49,6 @@ const AdminMenu: React.FC = () => {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const editFileInputRef = useRef<HTMLInputElement>(null)
   const adminToken = getAdminToken() || '';
-
-  const formatImageUrl = (url?: string) => {
-    if (!url) return '';
-    if (url.startsWith('http://') || url.startsWith('https://')) return url;
-    if (url.startsWith('//')) return `${window.location.protocol}${url}`;
-    const baseUrl = (import.meta.env.VITE_API_URL || 'http://localhost:8000').replace(/\/api\/?$/, '');
-    const path = url.startsWith('/') ? url : `/${url}`;
-    if (path.startsWith('/media/')) {
-      return `${baseUrl}${path}`;
-    }
-    return `${baseUrl}/media${path}`;
-  };
 
   const fetchTables = async () => {
     try {
