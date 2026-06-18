@@ -61,3 +61,41 @@ jobs:
           echo "✅ Docker image pushed successfully to Docker Hub!"
           echo "Image: ${{ env.DOCKER_USERNAME }}/${{ steps.repo.outputs.name }}:latest"
           echo "Next step: Deploy to Sevalla from this image"
+
+  deploy-to-sevalla:
+    name: Deploy to Sevalla (optional)
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    env:
+      DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+      SEVALLA_API_URL: ${{ secrets.SEVALLA_API_URL }}
+      SEVALLA_API_TOKEN: ${{ secrets.SEVALLA_API_TOKEN }}
+      SEVALLA_APP: ${{ secrets.SEVALLA_APP }}
+    if: github.event_name != 'pull_request'
+    steps:
+      - name: Check for Sevalla configuration
+        run: |
+          if [ -z "${{ env.SEVALLA_API_URL }}" ] || [ -z "${{ env.SEVALLA_API_TOKEN }}" ] || [ -z "${{ env.DOCKER_USERNAME }}" ]; then
+            echo "⚠️ Sevalla API or Docker credentials not configured. Skipping automated deploy."
+            echo "To enable automated deploy, set repository secrets: SEVALLA_API_URL, SEVALLA_API_TOKEN, and DOCKER_USERNAME."
+            exit 0
+          fi
+
+      - name: Trigger Sevalla deploy via API
+        run: |
+          REPO_NAME=$(echo "$GITHUB_REPOSITORY" | cut -d'/' -f2)
+          IMAGE_NAME="${{ env.DOCKER_USERNAME }}/$REPO_NAME:latest"
+          echo "Triggering Sevalla deploy for image: ${IMAGE_NAME}"
+          HTTP_CODE=$(curl -s -o /tmp/resp_body -w "%{http_code}" -X POST "${{ env.SEVALLA_API_URL }}" \
+            -H "Authorization: Bearer ${{ env.SEVALLA_API_TOKEN }}" \
+            -H 'Content-Type: application/json' \
+            -d "{ \"image\": \"${IMAGE_NAME}\", \"app\": \"${{ env.SEVALLA_APP }}\" }") || true
+          BODY=$(cat /tmp/resp_body || true)
+          echo "Sevalla response HTTP code: $HTTP_CODE"
+          echo "Response body: $BODY"
+          if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "201" ] || [ "$HTTP_CODE" = "202" ]; then
+            echo "✅ Sevalla accepted the deploy request (HTTP $HTTP_CODE)."
+          else
+            echo "⚠️ Sevalla deploy request returned HTTP $HTTP_CODE. Check the API URL, token, and Sevalla logs."
+            exit 1
+          fi
