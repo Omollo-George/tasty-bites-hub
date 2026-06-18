@@ -32,6 +32,14 @@ jobs:
           echo "Listing frontend/src/lib:" 
           ls -la frontend/src/lib || true
 
+      - name: Debug - show Dockerfile and commit
+        run: |
+          echo "Repo commit: $(git rev-parse HEAD)"
+          echo "Dockerfile FROM lines:"
+          grep '^FROM ' Dockerfile || true
+          echo "Dockerfile head:"
+          head -n 20 Dockerfile
+
       - name: Skip Docker Hub push if credentials are missing
         if: github.event_name != 'pull_request' && (env.DOCKER_USERNAME == '' || env.DOCKER_PASSWORD == '')
         run: |
