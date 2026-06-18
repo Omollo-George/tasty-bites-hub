@@ -21,6 +21,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -34,7 +36,12 @@ jobs:
 
       - name: Debug - show Dockerfile and commit
         run: |
+          echo "GITHUB_REF=${GITHUB_REF}"
+          echo "GITHUB_SHA=${GITHUB_SHA}"
           echo "Repo commit: $(git rev-parse HEAD)"
+          echo "Repo current branch: $(git branch --show-current)"
+          echo "Repo status:" 
+          git status --short
           echo "Dockerfile FROM lines:"
           grep '^FROM ' Dockerfile || true
           echo "Dockerfile head:"
