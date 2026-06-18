@@ -2,9 +2,10 @@
 ### Stage 1: build the frontend
 FROM node:20-alpine AS frontend-build
 WORKDIR /app
-COPY package.json package-lock.json* ./
-COPY vite.config.ts index.html ./
-COPY src ./src
+COPY frontend/package.json frontend/package-lock.json* ./
+COPY frontend/vite.config.ts frontend/index.html frontend/postcss.config.js frontend/tailwind.config.ts ./
+COPY frontend/src ./src
+COPY frontend/public ./public
 RUN npm install --legacy-peer-deps
 RUN npm run build
 
@@ -19,18 +20,18 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Python dependencies
-COPY tastybites/requirements.txt ./tastybites/requirements.txt
+COPY backend/tastybites/requirements.txt ./requirements.txt
 RUN pip install --upgrade pip
-RUN pip install -r tastybites/requirements.txt
+RUN pip install -r requirements.txt
 
-# Copy the entire project
-COPY . .
+# Copy the entire backend project
+COPY backend/tastybites . 
 
 # Copy built frontend files into Django staticfiles directory
 COPY --from=frontend-build /app/dist ./staticfiles
 
 # Collect static so Whitenoise can serve it
-RUN python tastybites/manage.py collectstatic --noinput || true
+RUN python manage.py collectstatic --noinput || true
 
 ENV PORT=8000
 EXPOSE 8000
