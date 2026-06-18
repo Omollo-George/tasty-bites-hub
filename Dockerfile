@@ -1,6 +1,7 @@
 # Multi-stage Dockerfile: build frontend with Node, then build Python backend
 ### Stage 1: build the frontend
-FROM node:20-alpine AS frontend-build
+# Use a Debian-based Node image to avoid native/binary issues that occur on Alpine
+FROM node:20-bullseye-slim AS frontend-build
 WORKDIR /app
 COPY frontend/package.json frontend/package-lock.json* ./
 COPY frontend/vite.config.ts frontend/index.html frontend/postcss.config.js frontend/tailwind.config.ts ./
