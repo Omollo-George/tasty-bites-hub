@@ -16,7 +16,7 @@ ENV NODE_OPTIONS=--max_old_space_size=8192
 RUN npm run build
 
 ### Stage 2: build the Python runtime and copy static assets
-FROM python:3.11-slim
+FROM python:3.12-slim
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 WORKDIR /app
