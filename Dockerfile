@@ -2,16 +2,16 @@
 ### Stage 1: build the frontend
 # Use a Debian-based Node image to avoid native/binary issues that occur on Alpine
 FROM node:20-bullseye-slim AS frontend-build
-WORKDIR /app
+WORKDIR /app/frontend
 COPY frontend/package.json frontend/package-lock.json* ./
 COPY frontend/vite.config.ts frontend/index.html frontend/postcss.config.js frontend/tailwind.config.ts ./
-COPY frontend/tsconfig.json frontend/tsconfig.app.json ./
+COPY frontend/tsconfig.json frontend/tsconfig.app.json frontend/tsconfig.node.json ./
 COPY frontend/Restaurant3DBackground.jsx ./
 COPY frontend/src ./src
 COPY frontend/public ./public
 RUN npm install --legacy-peer-deps
 # Verify lib files were copied
-RUN ls -la src/lib/ || echo "WARNING: lib directory missing"
+RUN ls -la /app/frontend/src/lib/ || echo "WARNING: lib directory missing"
 # Increase Node heap size for Vite build to avoid OOM in CI
 ENV NODE_OPTIONS=--max_old_space_size=8192
 RUN npm run build
@@ -35,7 +35,7 @@ RUN pip install -r requirements.txt
 COPY backend/tastybites . 
 
 # Copy built frontend files into Django staticfiles directory
-COPY --from=frontend-build /app/dist ./staticfiles
+COPY --from=frontend-build /app/frontend/dist ./staticfiles
 
 # Collect static so Whitenoise can serve it
 RUN python manage.py collectstatic --noinput || true
