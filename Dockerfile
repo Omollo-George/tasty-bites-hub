@@ -8,6 +8,8 @@ COPY frontend/tsconfig.json frontend/tsconfig.app.json ./
 COPY frontend/src ./src
 COPY frontend/public ./public
 RUN npm install --legacy-peer-deps
+# Verify lib files were copied
+RUN ls -la src/lib/ || echo "WARNING: lib directory missing"
 # Increase Node heap size for Vite build to avoid OOM in CI
 ENV NODE_OPTIONS=--max_old_space_size=8192
 RUN npm run build
