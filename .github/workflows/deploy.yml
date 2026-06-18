@@ -25,7 +25,7 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Debug: show frontend files
+      - name: Debug - show frontend files
         run: |
           echo "Listing frontend/src (should include lib folder):"
           ls -la frontend/src || true
