@@ -84,13 +84,20 @@ jobs:
       - name: Trigger Sevalla deploy via API
         run: |
           REPO_NAME=$(echo "$GITHUB_REPOSITORY" | cut -d'/' -f2)
-          IMAGE_NAME="${{ env.DOCKER_USERNAME }}/$REPO_NAME:latest"
+          DOCKER_USER="${{ env.DOCKER_USERNAME }}"
+          if [ -z "$DOCKER_USER" ]; then
+            echo "⚠️ DOCKER_USERNAME not set in secrets; falling back to GITHUB_ACTOR: $GITHUB_ACTOR"
+            DOCKER_USER="$GITHUB_ACTOR"
+          fi
+          IMAGE_NAME="$DOCKER_USER/$REPO_NAME:latest"
           echo "Triggering Sevalla deploy for image: ${IMAGE_NAME}"
+          # ensure resp file exists to avoid cat errors
+          : > /tmp/resp_body
           HTTP_CODE=$(curl -s -o /tmp/resp_body -w "%{http_code}" -X POST "${{ env.SEVALLA_API_URL }}" \
             -H "Authorization: Bearer ${{ env.SEVALLA_API_TOKEN }}" \
             -H 'Content-Type: application/json' \
-            -d "{ \"image\": \"${IMAGE_NAME}\", \"app\": \"${{ env.SEVALLA_APP }}\" }") || true
-          BODY=$(cat /tmp/resp_body || true)
+            -d "{ \"image\": \"${IMAGE_NAME}\", \"app\": \"${{ env.SEVALLA_APP }}\" }") || HTTP_CODE=000
+          BODY=$(cat /tmp/resp_body 2>/dev/null || true)
           echo "Sevalla response HTTP code: $HTTP_CODE"
           echo "Response body: $BODY"
           if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "201" ] || [ "$HTTP_CODE" = "202" ]; then
