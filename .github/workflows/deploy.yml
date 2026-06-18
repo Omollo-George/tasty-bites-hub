@@ -45,20 +45,14 @@ jobs:
           context: .
           push: ${{ github.event_name != 'pull_request' }}
           tags: |
-            ${{ secrets.DOCKER_USERNAME }}/${{ steps.repo.outputs.name }}:latest
-            ${{ secrets.DOCKER_USERNAME }}/${{ steps.repo.outputs.name }}:${{ github.sha }}
             ghcr.io/${{ github.repository_owner }}/${{ steps.repo.outputs.name }}:latest
             ghcr.io/${{ github.repository_owner }}/${{ steps.repo.outputs.name }}:${{ github.sha }}
-          cache-from: |
-            type=registry,ref=${{ secrets.DOCKER_USERNAME }}/${{ steps.repo.outputs.name }}:buildcache
-            type=registry,ref=ghcr.io/${{ github.repository_owner }}/${{ steps.repo.outputs.name }}:buildcache
-          cache-to: |
-            type=registry,ref=${{ secrets.DOCKER_USERNAME }}/${{ steps.repo.outputs.name }}:buildcache,mode=max
-            type=registry,ref=ghcr.io/${{ github.repository_owner }}/${{ steps.repo.outputs.name }}:buildcache,mode=max
+          cache-from: type=registry,ref=ghcr.io/${{ github.repository_owner }}/${{ steps.repo.outputs.name }}:buildcache
+          cache-to: type=registry,ref=ghcr.io/${{ github.repository_owner }}/${{ steps.repo.outputs.name }}:buildcache,mode=max
 
       - name: Image build successful
         if: github.event_name != 'pull_request'
         run: |
-          echo "✅ Docker image pushed successfully!"
-          echo "Image: ${{ secrets.DOCKER_USERNAME }}/${{ steps.repo.outputs.name }}:latest"
+          echo "✅ Docker image pushed successfully to GHCR!"
+          echo "Image: ghcr.io/${{ github.repository_owner }}/${{ steps.repo.outputs.name }}:latest"
           echo "Next step: Deploy to Sevalla from this image"
