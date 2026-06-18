@@ -7,6 +7,7 @@ COPY frontend/vite.config.ts frontend/index.html frontend/postcss.config.js fron
 COPY frontend/src ./src
 COPY frontend/public ./public
 RUN npm install --legacy-peer-deps
+ENV NODE_OPTIONS=--max_old_space_size=4096
 RUN npm run build
 
 ### Stage 2: build the Python runtime and copy static assets
