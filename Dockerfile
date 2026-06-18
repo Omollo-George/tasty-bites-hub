@@ -5,6 +5,7 @@ WORKDIR /app
 COPY frontend/package.json frontend/package-lock.json* ./
 COPY frontend/vite.config.ts frontend/index.html frontend/postcss.config.js frontend/tailwind.config.ts ./
 COPY frontend/tsconfig.json frontend/tsconfig.app.json ./
+COPY frontend/Restaurant3DBackground.jsx ./
 COPY frontend/src ./src
 COPY frontend/public ./public
 RUN npm install --legacy-peer-deps

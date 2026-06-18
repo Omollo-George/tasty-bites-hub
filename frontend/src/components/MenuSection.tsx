@@ -5,7 +5,7 @@ import { useToast } from "@/hooks/use-toast";
 import Receipt from "./Receipt";
 import { getApiUrl } from "@/lib/api";
 import { formatImageUrl } from '@/lib/image';
-import Restaurant3DBackground from "../../Restaurant3DBackground";
+import Restaurant3DBackground from "../../Restaurant3DBackground.jsx";
 
 
 type MenuItem = {
