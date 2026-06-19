@@ -127,8 +127,14 @@ jobs:
       SEVALLA_API_URL: ${{ secrets.SEVALLA_API_URL }}
       SEVALLA_API_TOKEN: ${{ secrets.SEVALLA_API_TOKEN }}
       SEVALLA_APP: ${{ secrets.SEVALLA_APP }}
-    if: github.event_name != 'pull_request' && secrets.SEVALLA_API_URL != '' && secrets.SEVALLA_API_TOKEN != '' && secrets.SEVALLA_APP != ''
+    if: github.event_name != 'pull_request'
     steps:
+      - name: Check Sevalla secrets
+        run: |
+          if [ -z "$SEVALLA_API_URL" ] || [ -z "$SEVALLA_API_TOKEN" ] || [ -z "$SEVALLA_APP" ]; then
+            echo "WARNING: Sevalla deploy secrets are missing. Skipping Sevalla deployment."
+            exit 0
+          fi
       - name: Check for Sevalla configuration
         run: |
           REPO_NAME=$(echo "$GITHUB_REPOSITORY" | cut -d'/' -f2)
