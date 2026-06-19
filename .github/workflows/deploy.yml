@@ -127,7 +127,7 @@ jobs:
       SEVALLA_API_URL: ${{ secrets.SEVALLA_API_URL }}
       SEVALLA_API_TOKEN: ${{ secrets.SEVALLA_API_TOKEN }}
       SEVALLA_APP: ${{ secrets.SEVALLA_APP }}
-    if: github.event_name != 'pull_request'
+    if: github.event_name != 'pull_request' && env.SEVALLA_API_URL != '' && env.SEVALLA_API_TOKEN != '' && env.SEVALLA_APP != ''
     steps:
       - name: Check for Sevalla configuration
         run: |
