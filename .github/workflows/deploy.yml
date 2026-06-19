@@ -23,6 +23,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          ref: ${{ github.sha }}
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -40,12 +41,14 @@ jobs:
           echo "GITHUB_SHA=${GITHUB_SHA}"
           echo "Repo commit: $(git rev-parse HEAD)"
           echo "Repo current branch: $(git branch --show-current)"
-          echo "Repo status:" 
+          echo "Repo status:"
           git status --short
           echo "Dockerfile FROM lines:"
           grep '^FROM ' Dockerfile || true
           echo "Dockerfile head:"
           head -n 20 Dockerfile
+          echo "Workflow file head:"
+          head -n 30 .github/workflows/deploy.yml
 
       - name: Skip Docker Hub push if credentials are missing
         if: github.event_name != 'pull_request' && (env.DOCKER_USERNAME == '' || env.DOCKER_PASSWORD == '')
