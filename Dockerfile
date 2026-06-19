@@ -10,8 +10,8 @@ COPY frontend/Restaurant3DBackground.jsx ./
 COPY frontend/src ./src
 COPY frontend/public ./public
 RUN npm install --legacy-peer-deps
-# Verify lib files were copied
-RUN ls -la /app/frontend/src/lib/ || echo "WARNING: lib directory missing"
+# Verify lib files were copied and fail fast if missing
+RUN if [ ! -d /app/frontend/src/lib ]; then echo "ERROR: frontend/src/lib is missing from build context" >&2; exit 1; fi && ls -la /app/frontend/src/lib/
 # Increase Node heap size for Vite build to avoid OOM in CI
 ENV NODE_OPTIONS=--max_old_space_size=8192
 RUN npm run build
