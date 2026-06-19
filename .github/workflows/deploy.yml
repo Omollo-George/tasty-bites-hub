@@ -50,14 +50,15 @@ jobs:
           echo "Workflow file head:"
           head -n 30 .github/workflows/deploy.yml
 
-      - name: Skip Docker Hub push if credentials are missing
+      - name: Fail if Docker Hub credentials are missing
         if: github.event_name != 'pull_request' && (env.DOCKER_USERNAME == '' || env.DOCKER_PASSWORD == '')
         run: |
-          echo "⚠️ Docker Hub credentials are not configured. Skipping login and push."
+          echo "⚠️ Docker Hub credentials are not configured. Failing build so the image cannot be deployed with missing credentials."
           echo "Set DOCKER_USERNAME and DOCKER_PASSWORD in repository secrets to enable publishing."
+          exit 1
 
       - name: Log in to Docker Hub
-        if: github.event_name != 'pull_request' && env.DOCKER_USERNAME != '' && env.DOCKER_PASSWORD != ''
+        if: github.event_name != 'pull_request'
         uses: docker/login-action@v3
         with:
           username: ${{ env.DOCKER_USERNAME }}
