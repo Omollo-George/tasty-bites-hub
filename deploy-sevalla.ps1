@@ -85,36 +85,55 @@ if (-not $SecretKey) {
 Write-Status "Step 3: Building Docker image..." "Cyan"
 Set-Location "c:\Users\omoll\OneDrive\Desktop\tasty-bites-hub"
 
-docker build -t tasty-bites:latest .
+$commitTag = "latest"
+if (Get-Command git -ErrorAction SilentlyContinue) {
+    try {
+        $commitTag = git rev-parse --short HEAD 2>$null
+    } catch {
+        Write-Info "Could not determine git commit hash, falling back to latest"
+        $commitTag = "latest"
+    }
+}
+
+$localImage = "tasty-bites:$commitTag"
+$remoteImage = "$DockerUsername/tasty-bites:$commitTag"
+
+docker build -t $localImage .
 if ($LASTEXITCODE -ne 0) {
     Write-Error-Custom "Docker build failed"
     exit 1
 }
-Write-Success "Docker image built successfully"
+Write-Success "Docker image built successfully: $localImage"
 
 # ============================================================================
 # STEP 4: Tag Image
 # ============================================================================
 
 Write-Status "Step 4: Tagging image for Docker Hub..." "Cyan"
-docker tag tasty-bites:latest "$DockerUsername/tasty-bites:latest"
+docker tag $localImage $remoteImage
 if ($LASTEXITCODE -ne 0) {
     Write-Error-Custom "Failed to tag image"
     exit 1
 }
-Write-Success "Image tagged as: $DockerUsername/tasty-bites:latest"
+Write-Success "Image tagged as: $remoteImage"
+
+docker tag $localImage "$DockerUsername/tasty-bites:latest" | Out-Null
+Write-Success "Also tagged latest as: $DockerUsername/tasty-bites:latest"
 
 # ============================================================================
 # STEP 5: Push to Docker Hub
 # ============================================================================
 
 Write-Status "Step 5: Pushing image to Docker Hub (this may take 2-10 minutes)..." "Cyan"
-docker push "$DockerUsername/tasty-bites:latest"
+docker push $remoteImage
 if ($LASTEXITCODE -ne 0) {
     Write-Error-Custom "Failed to push to Docker Hub"
     exit 1
 }
-Write-Success "Image pushed to Docker Hub successfully"
+Write-Success "Image pushed to Docker Hub successfully: $remoteImage"
+
+docker push "$DockerUsername/tasty-bites:latest" | Out-Null
+Write-Success "Also pushed latest tag."
 
 # ============================================================================
 # STEP 6: Generate Environment File for Sevalla
