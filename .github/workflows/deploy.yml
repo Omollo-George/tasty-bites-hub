@@ -85,8 +85,10 @@ jobs:
         if: github.event_name != 'pull_request' && env.DOCKER_USERNAME != '' && env.DOCKER_PASSWORD != ''
         run: |
           echo "✅ Docker image pushed successfully to Docker Hub!"
-          echo "Image: ${{ env.DOCKER_USERNAME }}/${{ steps.repo.outputs.name }}:latest"
-          echo "Next step: Deploy to Sevalla from this image"
+          echo "Image tags:"
+          echo "  - ${{ env.DOCKER_USERNAME }}/${{ steps.repo.outputs.name }}:latest"
+          echo "  - ${{ env.DOCKER_USERNAME }}/${{ steps.repo.outputs.name }}:${{ github.sha }}"
+          echo "Next step: Deploy to Sevalla from the SHA-tagged image"
 
   deploy-to-sevalla:
     name: Deploy to Sevalla (optional)
@@ -107,7 +109,8 @@ jobs:
             echo "⚠️ DOCKER_USERNAME not set in secrets; falling back to GITHUB_ACTOR: $GITHUB_ACTOR"
             DOCKER_USER="$GITHUB_ACTOR"
           fi
-          IMAGE_NAME="$DOCKER_USER/$REPO_NAME:latest"
+          IMAGE_TAG="$GITHUB_SHA"
+          IMAGE_NAME="$DOCKER_USER/$REPO_NAME:${IMAGE_TAG}"
           echo "Triggering Sevalla deploy for image: ${IMAGE_NAME}"
 
           # Retry loop with timeouts and diagnostics
