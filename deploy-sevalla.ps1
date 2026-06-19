@@ -70,6 +70,10 @@ if (-not $DatabaseUrl) {
     $DatabaseUrl = Read-Host "Enter Sevalla PostgreSQL connection URL"
 }
 
+if (-not $Domain) {
+    $Domain = Read-Host "Enter your Sevalla domain (e.g., tasty-bites-abc123.sevalla.app)"
+}
+
 # Generate or use existing Secret Key
 $SecretKey = Read-Host "Enter DJANGO_SECRET_KEY (or press Enter to generate)"
 if (-not $SecretKey) {
@@ -98,7 +102,8 @@ if (Get-Command git -ErrorAction SilentlyContinue) {
 $localImage = "tasty-bites:$commitTag"
 $remoteImage = "$DockerUsername/tasty-bites-hub:$commitTag"
 
-docker build -t $localImage .
+Write-Status "Building Docker image with VITE_API_URL=https://$Domain..." "Cyan"
+docker build --build-arg VITE_API_URL=https://$Domain -t $localImage .
 if ($LASTEXITCODE -ne 0) {
     Write-Error-Custom "Docker build failed"
     exit 1

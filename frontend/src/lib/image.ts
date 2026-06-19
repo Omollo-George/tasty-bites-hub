@@ -18,7 +18,8 @@ export const formatImageUrl = (url?: string) => {
     return `${window.location.protocol}${trimmed}`
   }
 
-  const baseUrl = (import.meta.env.VITE_API_URL || 'http://localhost:8000').replace(/\/api\/?$/, '')
+  const envBase = import.meta.env.VITE_API_URL
+  const baseUrl = (envBase || (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:8000')).replace(/\/api\/?$/, '')
   let path = trimmed.startsWith('/') ? trimmed : `/${trimmed}`
 
   if (path.startsWith('/menu_items/')) {
