@@ -45,17 +45,32 @@ try {
 }
 
 # Build image
-Write-Info "Building Docker image 'tasty-bites:latest'..."
-$build = docker build -t tasty-bites:latest .
+$commitTag = "latest"
+if (Get-Command git -ErrorAction SilentlyContinue) {
+    try {
+        $commitTag = git rev-parse --short HEAD 2>$null
+    } catch {
+        Write-Info "Could not determine git commit hash, falling back to latest"
+        $commitTag = "latest"
+    }
+}
+
+$localImage = "tasty-bites:$commitTag"
+$targetImage = "$DockerUsername/tasty-bites:$commitTag"
+
+Write-Info "Building Docker image '$localImage'..."
+$build = docker build -t $localImage .
 if ($LASTEXITCODE -ne 0) { Write-ErrorMsg "Docker build failed."; exit 1 }
 Write-Success "Docker image built."
 
 # Tag image
-$targetImage = "$DockerUsername/tasty-bites:latest"
 Write-Info "Tagging image as $targetImage"
-docker tag tasty-bites:latest $targetImage
+docker tag $localImage $targetImage
 if ($LASTEXITCODE -ne 0) { Write-ErrorMsg "Tagging failed."; exit 1 }
-Write-Success "Image tagged."
+Write-Success "Image tagged as $targetImage."
+
+docker tag $localImage "$DockerUsername/tasty-bites:latest" | Out-Null
+Write-Success "Also tagged latest as: $DockerUsername/tasty-bites:latest"
 
 # Login to Docker Hub
 Write-Info "Logging in to Docker Hub as $DockerUsername"
@@ -68,6 +83,9 @@ Write-Info "Pushing image $targetImage to Docker Hub..."
 docker push $targetImage
 if ($LASTEXITCODE -ne 0) { Write-ErrorMsg "Docker push failed."; exit 1 }
 Write-Success "Image pushed to Docker Hub."
+
+docker push "$DockerUsername/tasty-bites:latest" | Out-Null
+Write-Success "Also pushed latest tag."
 
 # Trigger Sevalla deploy
 Write-Info "Triggering Sevalla deploy via webhook: $SevallaHook"
