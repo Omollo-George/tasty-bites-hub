@@ -36,6 +36,9 @@ RUN pip install -r requirements.txt
 # Copy the entire backend project
 COPY backend/tastybites . 
 
+# Run migrations during build (will use SQLite during build, actual DB on deployment)
+RUN python manage.py migrate --run-syncdb --noinput || true
+
 # Copy built frontend files into Django staticfiles directory
 COPY --from=frontend-build /app/frontend/dist ./staticfiles
 
