@@ -2,6 +2,8 @@
 ### Stage 1: build the frontend
 # Use a Debian-based Node image to avoid native/binary issues that occur on Alpine
 FROM node:20-bullseye-slim AS frontend-build
+ARG VITE_API_URL=http://localhost:8000
+ENV VITE_API_URL=${VITE_API_URL}
 WORKDIR /app/frontend
 COPY frontend/package.json frontend/package-lock.json* ./
 COPY frontend/vite.config.ts frontend/index.html frontend/postcss.config.js frontend/tailwind.config.ts ./
