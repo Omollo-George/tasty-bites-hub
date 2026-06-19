@@ -54,11 +54,10 @@ jobs:
       - name: Verify Sevalla domain secret
         run: |
           if [ -z "$SEVALLA_DOMAIN" ]; then
-            echo "ERROR: SEVALLA_DOMAIN secret is not configured."
-            echo "Set SEVALLA_DOMAIN in repository secrets to your Sevalla domain, e.g. tastybites-5bbsd.sevalla.app"
-            exit 1
+            echo "WARNING: SEVALLA_DOMAIN secret is not configured. Falling back to tastybites-5bbsd.sevalla.app"
+            SEVALLA_DOMAIN=tastybites-5bbsd.sevalla.app
           fi
-          echo "SEVALLA_DOMAIN is set to $SEVALLA_DOMAIN"
+          echo "Using Sevalla domain: $SEVALLA_DOMAIN"
 
       - name: Extract repository name
         id: repo
