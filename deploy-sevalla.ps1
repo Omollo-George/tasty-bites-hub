@@ -96,7 +96,7 @@ if (Get-Command git -ErrorAction SilentlyContinue) {
 }
 
 $localImage = "tasty-bites:$commitTag"
-$remoteImage = "$DockerUsername/tasty-bites:$commitTag"
+$remoteImage = "$DockerUsername/tasty-bites-hub:$commitTag"
 
 docker build -t $localImage .
 if ($LASTEXITCODE -ne 0) {
@@ -117,8 +117,8 @@ if ($LASTEXITCODE -ne 0) {
 }
 Write-Success "Image tagged as: $remoteImage"
 
-docker tag $localImage "$DockerUsername/tasty-bites:latest" | Out-Null
-Write-Success "Also tagged latest as: $DockerUsername/tasty-bites:latest"
+docker tag $localImage "$DockerUsername/tasty-bites-hub:latest" | Out-Null
+Write-Success "Also tagged latest as: $DockerUsername/tasty-bites-hub:latest"
 
 # ============================================================================
 # STEP 5: Push to Docker Hub
@@ -132,7 +132,7 @@ if ($LASTEXITCODE -ne 0) {
 }
 Write-Success "Image pushed to Docker Hub successfully: $remoteImage"
 
-docker push "$DockerUsername/tasty-bites:latest" | Out-Null
+docker push "$DockerUsername/tasty-bites-hub:latest" | Out-Null
 Write-Success "Also pushed latest tag."
 
 # ============================================================================
@@ -177,7 +177,7 @@ Write-Host "2. Select your Web Service: $SevallaApp" -ForegroundColor Cyan
 Write-Host ""
 Write-Host "3. Go to Deployment Settings and set:" -ForegroundColor Cyan
 Write-Host "   - Deployment Source: Container Image"
-Write-Host "   - Image URL: $DockerUsername/tasty-bites:latest"
+Write-Host "   - Image URL: $DockerUsername/tasty-bites-hub:latest"
 Write-Host ""
 Write-Host "4. Add Environment Variables:" -ForegroundColor Cyan
 Write-Host "   (Copy each line from below into Sevalla)"

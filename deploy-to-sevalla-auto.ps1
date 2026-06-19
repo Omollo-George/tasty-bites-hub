@@ -56,7 +56,7 @@ if (Get-Command git -ErrorAction SilentlyContinue) {
 }
 
 $localImage = "tasty-bites:$commitTag"
-$targetImage = "$DockerUsername/tasty-bites:$commitTag"
+$targetImage = "$DockerUsername/tasty-bites-hub:$commitTag"
 
 Write-Info "Building Docker image '$localImage'..."
 $build = docker build -t $localImage .
@@ -69,8 +69,8 @@ docker tag $localImage $targetImage
 if ($LASTEXITCODE -ne 0) { Write-ErrorMsg "Tagging failed."; exit 1 }
 Write-Success "Image tagged as $targetImage."
 
-docker tag $localImage "$DockerUsername/tasty-bites:latest" | Out-Null
-Write-Success "Also tagged latest as: $DockerUsername/tasty-bites:latest"
+docker tag $localImage "$DockerUsername/tasty-bites-hub:latest" | Out-Null
+Write-Success "Also tagged latest as: $DockerUsername/tasty-bites-hub:latest"
 
 # Login to Docker Hub
 Write-Info "Logging in to Docker Hub as $DockerUsername"
@@ -84,7 +84,7 @@ docker push $targetImage
 if ($LASTEXITCODE -ne 0) { Write-ErrorMsg "Docker push failed."; exit 1 }
 Write-Success "Image pushed to Docker Hub."
 
-docker push "$DockerUsername/tasty-bites:latest" | Out-Null
+docker push "$DockerUsername/tasty-bites-hub:latest" | Out-Null
 Write-Success "Also pushed latest tag."
 
 # Trigger Sevalla deploy
