@@ -7,11 +7,11 @@ if [ -z "${PORT}" ]; then
   PORT=8000
 fi
 
-if [ "${RUN_MIGRATIONS:-false}" = "true" ]; then
-  # Before running migrations, wait for the database to be ready. If the
-  # database does not become ready within the configured retries, fail when
-  # RUN_MIGRATIONS=true so CI/deployments don't proceed with partial state.
-  if [ -n "${DATABASE_URL:-}" ]; then
+DB_WAIT_RETRIES=${DB_WAIT_RETRIES:-30}
+DB_WAIT_DELAY=${DB_WAIT_DELAY:-2}
+
+wait_for_db() {
+  if [ -n "${DATABASE_URL:-}" ] && [ "${DB_WAIT_RETRIES}" -gt 0 ]; then
     echo "Waiting for database to become ready..."
     python - <<'PY'
 import os, time, sys
@@ -32,13 +32,14 @@ for i in range(max_retries):
         print(f"Database not ready ({i+1}/{max_retries}): {e}")
         time.sleep(delay)
 print('Database did not become ready in time', file=sys.stderr)
-# If migrations are required, signal failure so the deployment can be inspected.
-if os.environ.get('RUN_MIGRATIONS','false').lower() == 'true':
-    sys.exit(1)
-sys.exit(0)
+sys.exit(1)
 PY
   fi
+}
 
+wait_for_db
+
+if [ "${RUN_MIGRATIONS:-false}" = "true" ]; then
   echo "Running Django migrations..."
   python manage.py migrate --noinput
 fi
