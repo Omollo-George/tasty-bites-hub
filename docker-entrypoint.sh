@@ -7,8 +7,8 @@ if [ -z "${PORT}" ]; then
   PORT=8000
 fi
 
-DB_WAIT_RETRIES=${DB_WAIT_RETRIES:-30}
-DB_WAIT_DELAY=${DB_WAIT_DELAY:-2}
+DB_WAIT_RETRIES=${DB_WAIT_RETRIES:-60}
+DB_WAIT_DELAY=${DB_WAIT_DELAY:-3}
 
 wait_for_db() {
   if [ -n "${DATABASE_URL:-}" ] && [ "${DB_WAIT_RETRIES}" -gt 0 ]; then
