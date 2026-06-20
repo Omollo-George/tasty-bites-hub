@@ -13,6 +13,7 @@ from django.core.wsgi import get_wsgi_application
 
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'tastybites.settings')
 
+<<<<<<< HEAD
 # Optional DB readiness check at WSGI startup to avoid immediate runtime errors
 # when the database is transiently unavailable. Controlled via env vars:
 # DB_STARTUP_RETRIES (default 0 = no wait), DB_STARTUP_DELAY (seconds),
@@ -50,4 +51,6 @@ if DB_STARTUP_RETRIES > 0 and os.environ.get('DATABASE_URL'):
 				print(f"WSGI waiting for DB ({i+1}/{DB_STARTUP_RETRIES}): {e}")
 				time.sleep(DB_STARTUP_DELAY)
 
+=======
+>>>>>>> 17ad926bdef4d18c8374f33747670159bee73ce0
 application = get_wsgi_application()
