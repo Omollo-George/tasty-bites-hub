@@ -30,7 +30,8 @@ load_dotenv(BASE_DIR / '.env')
 SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY', 'django-insecure-_@p9bh$hzz=4m+xdxf^%xq*b=-fzly00i+priz4tl$we#3y*q%')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = os.environ.get('DJANGO_DEBUG', 'True') == 'True'
+DEBUG_VALUE = os.environ.get('DJANGO_DEBUG', os.environ.get('DEBUG', 'True'))
+DEBUG = str(DEBUG_VALUE).strip().lower() in ('1', 'true', 'yes', 'on')
 
 # Allow local/dev hosts by default; override via env var if needed
 ALLOWED_HOSTS = os.environ.get(
