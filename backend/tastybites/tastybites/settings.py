@@ -112,12 +112,20 @@ else:
     cleaned_db_url = None
 
 try:
-    DATABASES = {
-        'default': dj_database_url.config(
-            default=cleaned_db_url or f"sqlite:///{BASE_DIR / 'db.sqlite3'}",
-            conn_max_age=600
-        )
-    }
+    if cleaned_db_url:
+        DATABASES = {
+            'default': dj_database_url.parse(
+                cleaned_db_url,
+                conn_max_age=600
+            )
+        }
+    else:
+        DATABASES = {
+            'default': dj_database_url.config(
+                default=f"sqlite:///{BASE_DIR / 'db.sqlite3'}",
+                conn_max_age=600
+            )
+        }
 except Exception as e:
     # Don't crash on startup due to a malformed DATABASE_URL — log and fall back
     # to local sqlite so the process can start and we can inspect the environment.
