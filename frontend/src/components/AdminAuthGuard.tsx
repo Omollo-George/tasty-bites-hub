@@ -8,7 +8,7 @@ import {
   setAdminSessionExpiry,
   touchAdminSession,
 } from '@/lib/admin-session'
-import { getApiUrl } from '@/lib/api'
+import { getApiUrl, apiFetch } from '@/lib/api'
 
 const WARNING_THRESHOLD_MS = 60 * 1000
 
@@ -32,13 +32,8 @@ const AdminAuthGuard: React.FC<{ children: React.ReactNode }> = ({ children }) =
 
     const verify = async () => {
       try {
-        const res = await fetch(getApiUrl('/payments/admin/me/'), {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        })
-        if (res.ok) {
-          const data = await res.json()
+        try {
+          const data: any = await apiFetch('/payments/admin/me/', { headers: { Authorization: `Bearer ${token}` } })
           if (data && data.username) {
             const { setAdminUser } = await import('@/lib/admin-session')
             setAdminUser({
@@ -51,7 +46,7 @@ const AdminAuthGuard: React.FC<{ children: React.ReactNode }> = ({ children }) =
           }
           setAuthorized(true)
           setAdminSessionExpiry()
-        } else {
+        } catch (err) {
           clearAdminSession()
           setAuthorized(false)
         }
@@ -73,9 +68,7 @@ const AdminAuthGuard: React.FC<{ children: React.ReactNode }> = ({ children }) =
     const logout = async () => {
       const token = getAdminToken()
       if (token) {
-        await fetch(getApiUrl('/payments/admin/signout/'), {
-          headers: { Authorization: `Bearer ${token}` }
-        }).catch(() => {})
+        apiFetch('/payments/admin/signout/', { headers: { Authorization: `Bearer ${token}` } }).catch(() => {})
       }
       clearAdminSession()
       setAuthorized(false)
@@ -91,10 +84,7 @@ const AdminAuthGuard: React.FC<{ children: React.ReactNode }> = ({ children }) =
         if (now - lastServerTouch.current > 5 * 60 * 1000) {
           lastServerTouch.current = now
           const token = getAdminToken()
-          fetch(getApiUrl('/payments/admin/touch/'), {
-            method: 'POST',
-            headers: { Authorization: `Bearer ${token}` }
-          }).catch(() => {})
+          apiFetch('/payments/admin/touch/', { method: 'POST', headers: { Authorization: `Bearer ${token}` } }).catch(() => {})
           setShowTimeoutWarning(false)
         }
       }

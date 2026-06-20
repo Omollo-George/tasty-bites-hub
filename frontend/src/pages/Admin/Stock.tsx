@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useMemo } from 'react'; // Removed Fragment import
 import { Search, Filter, AlertTriangle, CheckCircle, XCircle, Trash2, Edit2, Plus } from 'lucide-react'; // Removed Fragment import
-import { getApiUrl } from '@/lib/api';
+import { getApiUrl, apiFetch } from '@/lib/api';
 import { getAdminToken } from '@/lib/admin-session';
 
 type MenuItemType = {
@@ -39,16 +39,8 @@ const AdminStock: React.FC = () => {
   const fetchMenuItems = async () => {
     setLoading(true);
     try {
-      const response = await fetch(getApiUrl('/payments/menu-items/'), {
-        headers: { Authorization: `Bearer ${adminToken}` }
-      });
-      
-      if (!response.headers.get("content-type")?.includes("application/json")) {
-        throw new Error(`Invalid server response (${response.status})`);
-      }
-      
-      const data = await response.json();
-      if (response.ok && Array.isArray(data.menu_items)) {
+      const data: any = await apiFetch('/payments/menu-items/', { headers: { Authorization: `Bearer ${adminToken}` } });
+      if (Array.isArray(data.menu_items)) {
         const enrichedItems = data.menu_items.map((item: MenuItemType) => ({ // Use MenuItemType for item
           ...item,
           // Defensive coding: safeguard against missing category or id to prevent render crashes
@@ -67,14 +59,12 @@ const AdminStock: React.FC = () => {
 
   const fetchMostConsumed = async () => {
     try {
-      const response = await fetch(getApiUrl('/payments/stock/most-consumed/'), {
-        headers: { Authorization: `Bearer ${adminToken}` }
-      });
-      
-      if (!response.headers.get("content-type")?.includes("application/json")) return;
-      
-      const data = await response.json();
-      if (response.ok) setMostConsumed(data.results || []);
+      try {
+        const mc: any = await apiFetch('/payments/stock/most-consumed/', { headers: { Authorization: `Bearer ${adminToken}` } });
+        setMostConsumed(mc.results || [])
+      } catch (e) {
+        // ignore non-critical
+      }
     } catch (error) {
       console.error('Failed to fetch most consumed stock:', error);
     }
@@ -112,7 +102,7 @@ const AdminStock: React.FC = () => {
 
     try {
       // 1. Update basic item metadata (Name, Price, etc.)
-      const metaRes = await fetch(getApiUrl(`/payments/menu-items/${editingItem.id}/update-price/`), {
+      const metaRes = await apiFetch(`/payments/menu-items/${editingItem.id}/update-price/`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -128,9 +118,8 @@ const AdminStock: React.FC = () => {
           spicy: editingItem.spicy,
         }),
       });
-
       // 2. Update stock levels
-      const stockRes = await fetch(getApiUrl(`/payments/menu-items/${editingItem.id}/update-stock/`), {
+      const stockRes = await apiFetch(`/payments/menu-items/${editingItem.id}/update-stock/`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -157,14 +146,11 @@ const AdminStock: React.FC = () => {
   const handleDeleteItem = async (id: number) => {
     if (!window.confirm('Are you sure you want to remove this item entirely? This cannot be undone.')) return;
     try {
-      const response = await fetch(getApiUrl(`/payments/menu-items/${id}/delete/`), {
-        method: 'DELETE',
-        headers: { Authorization: `Bearer ${adminToken}` },
-      });
-      if (response.ok) {
+      try {
+        await apiFetch(`/payments/menu-items/${id}/delete/`, { method: 'DELETE', headers: { Authorization: `Bearer ${adminToken}` } })
         await fetchMenuItems();
-      } else {
-        alert('Delete failed.');
+      } catch (error) {
+        await fetchMenuItems();
       }
     } catch (error) {
       console.error('Delete error:', error);
@@ -175,33 +161,21 @@ const AdminStock: React.FC = () => {
   const handleAddStock = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const response = await fetch(getApiUrl('/payments/admin/stock/add/'), {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${adminToken}`,
-        },
-        body: JSON.stringify(stockFormData),
-      });
-
-      if (response.ok) {
+      try {
+        await apiFetch('/payments/admin/stock/add/', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${adminToken}`,
+          },
+          body: JSON.stringify(stockFormData),
+        })
         await fetchMenuItems();
         setIsAddingStock(false);
-        setStockFormData({
-          item_id: '',
-          quantity: 0,
-          cost: 0,
-          created_at: new Date().toISOString().slice(0, 16)
-        });
-      } else {
-        let errorMsg = 'Failed to add stock.';
-        try {
-          const data = await response.json();
-          errorMsg = data.error || data.message || errorMsg;
-        } catch (e) {
-          errorMsg = `Server error (${response.status}): ${response.statusText}`;
-        }
-        alert(errorMsg);
+        setStockFormData({ item_id: '', quantity: 0, cost: 0, created_at: new Date().toISOString().slice(0, 16) });
+      } catch (err) {
+        const errorMsg = err?.body || err?.message || 'Failed to add stock.'
+        alert(errorMsg)
       }
     } catch (error) {
       console.error('Error adding stock:', error);

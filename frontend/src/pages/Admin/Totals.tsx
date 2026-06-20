@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import { getApiUrl } from '@/lib/api'
+import { getApiUrl, apiFetch } from '@/lib/api'
 import { getAdminToken } from '@/lib/admin-session'
 
 const Totals: React.FC = () => {
@@ -11,22 +11,10 @@ const Totals: React.FC = () => {
       const token = getAdminToken()
       const headers = { Authorization: `Bearer ${token}` }
       try {
-        const [o, c] = await Promise.all([
-          fetch(getApiUrl('/payments/orders/'), { headers }),
-          fetch(getApiUrl('/payments/config/'), { headers })
+        const [oj, cj] = await Promise.all([
+          apiFetch('/payments/orders/', { headers }),
+          apiFetch('/payments/config/', { headers })
         ])
-
-        if (!o.ok || !c.ok) {
-          console.error("Dashboard failed to load data:", o.status, c.status);
-          return;
-        }
-
-        if (!o.headers.get("content-type")?.includes("application/json") || !c.headers.get("content-type")?.includes("application/json")) {
-          throw new Error("Invalid response format");
-        }
-
-        const oj = await o.json()
-        const cj = await c.json()
         setOrders(oj.results || [])
         setRate(cj?.conversion_rate || 1)
       } catch (e) {

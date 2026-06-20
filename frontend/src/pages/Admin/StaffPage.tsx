@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { ShoppingCart, UtensilsCrossed, Clock, CheckCircle, TrendingUp, Bell, LayoutGrid, Users, LogOut, Home, Monitor, CreditCard } from 'lucide-react';
-import { getApiUrl } from '@/lib/api';
+import { getApiUrl, apiFetch } from '@/lib/api';
 import { getAdminToken, isAdminSessionValid } from '@/lib/admin-session';
 import { getAuthHeaders } from '@/lib/auth';
 import { useToast } from '@/hooks/use-toast';
@@ -93,19 +93,14 @@ const StaffPage: React.FC = () => {
     const checkShiftStatus = async () => {
       try {
         // Try to fetch staff activities - this will validate if token is still valid and staff is on shift
-        const res = await fetch(getApiUrl(`/payments/staff/activities/?role=${staffRole}`), {
-          headers: getAuthHeaders()
-        })
-
-        if (res.status === 403) {
-          // Unauthorized - likely removed from shift or token expired
-          handleStaffUnauthorized(res)
-          return
-        }
-
-        if (!res.ok) {
-          console.warn('Shift check returned status:', res.status)
-          // For now, allow access even if check fails - they might have network issues
+        try {
+          await apiFetch(`/payments/staff/activities/?role=${staffRole}`, { headers: getAuthHeaders() })
+        } catch (err: any) {
+          if (err?.status === 403) {
+            await handleStaffUnauthorized(err)
+            return
+          }
+          console.warn('Shift check returned error:', err)
         }
       } catch (error) {
         console.error('Shift check error:', error)
@@ -121,14 +116,16 @@ const StaffPage: React.FC = () => {
   useEffect(() => {
     const fetchTables = async () => {
       try {
-        const res = await fetch(getApiUrl('/payments/pos/tables/'), {
-          headers: getAuthHeaders()
-        })
-        if (await handleStaffUnauthorized(res)) {
-          return
+        try {
+          const data: any = await apiFetch('/payments/pos/tables/', { headers: getAuthHeaders() })
+          setTables(data.tables || [])
+        } catch (err: any) {
+          if (err?.status === 403) {
+            await handleStaffUnauthorized(err)
+            return
+          }
+          console.error("Failed to fetch tables:", err)
         }
-        const data = await res.json()
-        setTables(data.tables || [])
       } catch (error) {
         console.error("Failed to fetch tables:", error)
       } finally {
@@ -157,28 +154,25 @@ const StaffPage: React.FC = () => {
     }
     console.debug('Staff activities fetch headers:', headers)
     try {
-      const res = await fetch(getApiUrl(`/payments/staff/activities/?role=${staffRole}`), {
-        headers
-      })
-      if (await handleStaffUnauthorized(res)) {
-        return
-      }
-
-      if (res.ok) {
-        const data = await res.json()
+      try {
+        const data: any = await apiFetch(`/payments/staff/activities/?role=${staffRole}`, { headers })
         setActivities(data.activities || [])
         setSummary({
           orders_taken: data.summary?.orders_taken ?? 0,
           tables_served: data.summary?.tables_served ?? 0,
           completed_orders: data.summary?.completed_orders ?? 0,
         })
-      } else {
-        const errorText = await res.text()
-        console.error("Failed to fetch activities:", res.status, errorText)
-        if (res.status !== 404) {
+      } catch (err: any) {
+        if (err?.status === 403) {
+          await handleStaffUnauthorized(err)
+          return
+        }
+        const status = err?.status
+        console.error("Failed to fetch activities:", status, err?.body || err)
+        if (status !== 404) {
           toast({
             title: "Activity Feed Error",
-            description: `Could not load staff activities. Server responded with ${res.status}.`,
+            description: `Could not load staff activities. Server responded with ${status || 'error'}.`,
             variant: "destructive",
           })
         }
