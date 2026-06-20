@@ -1,4 +1,8 @@
+<<<<<<< HEAD
 d#!/usr/bin/env python3
+=======
+#!/usr/bin/env python3
+>>>>>>> 17ad926bdef4d18c8374f33747670159bee73ce0
 """
 Sevalla Deployment Configuration Generator
 Generates necessary environment variables and verifies deployment readiness
