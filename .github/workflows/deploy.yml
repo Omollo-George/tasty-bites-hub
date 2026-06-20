@@ -1,0 +1,209 @@
+name: Build and Push to Docker Hub
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  pull_request:
+    branches:
+      - main
+      - master
+  workflow_dispatch:  # Allow manual trigger
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+      DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+      DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
+      SEVALLA_DOMAIN: ${{ secrets.SEVALLA_DOMAIN }}
+      SEVALLA_API_URL: ${{ secrets.SEVALLA_API_URL }}
+      SEVALLA_API_TOKEN: ${{ secrets.SEVALLA_API_TOKEN }}
+      SEVALLA_APP: ${{ secrets.SEVALLA_APP }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.sha }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Debug - show frontend files
+        run: |
+          echo "Listing frontend/src (should include lib folder):"
+          ls -la frontend/src || true
+          echo "Listing frontend/src/lib:" 
+          ls -la frontend/src/lib || true
+
+      - name: Debug - show Dockerfile and commit
+        run: |
+          echo "GITHUB_REF=${GITHUB_REF}"
+          echo "GITHUB_SHA=${GITHUB_SHA}"
+          echo "Repo commit: $(git rev-parse HEAD)"
+          echo "Repo current branch: $(git branch --show-current)"
+          echo "Repo status:"
+          git status --short
+          echo "Dockerfile FROM lines:"
+          grep '^FROM ' Dockerfile || true
+          echo "Dockerfile head:"
+          head -n 20 Dockerfile
+          echo "Workflow file head:"
+          head -n 30 .github/workflows/deploy.yml
+
+      - name: Verify required deployment secrets
+        run: |
+          missing=""
+          echo "SEVALLA_DOMAIN set: $( [ -n "$SEVALLA_DOMAIN" ] && echo yes || echo no )"
+          echo "SEVALLA_API_URL set: $( [ -n "$SEVALLA_API_URL" ] && echo yes || echo no )"
+          echo "SEVALLA_API_TOKEN set: $( [ -n "$SEVALLA_API_TOKEN" ] && echo yes || echo no )"
+          echo "SEVALLA_APP set: $( [ -n "$SEVALLA_APP" ] && echo yes || echo no )"
+          if [ -z "$SEVALLA_DOMAIN" ]; then
+            echo "WARNING: SEVALLA_DOMAIN secret is not configured. Falling back to tastybites-5bbsd.sevalla.app"
+            SEVALLA_DOMAIN=tastybites-5bbsd.sevalla.app
+          fi
+          if [ "$GITHUB_EVENT_NAME" != "pull_request" ]; then
+            if [ -z "$DOCKER_USERNAME" ]; then missing="$missing DOCKER_USERNAME"; fi
+            if [ -z "$DOCKER_PASSWORD" ]; then missing="$missing DOCKER_PASSWORD"; fi
+          else
+            echo "Note: running on pull_request; Docker push and Sevalla deployment will be skipped if credentials are missing."
+          fi
+          if [ -n "$missing" ]; then
+            echo "ERROR: Missing required secrets:$missing"
+            echo "Set the missing secrets in repository Settings -> Secrets and variables -> Actions."
+            exit 1
+          fi
+          echo "Using Sevalla domain: $SEVALLA_DOMAIN"
+
+      - name: Extract repository name
+        id: repo
+        run: |
+          echo "name=$(echo ${{ github.repository }} | cut -d'/' -f2)" >> $GITHUB_OUTPUT
+
+      - name: Build Docker image
+        run: |
+          REPO_NAME=$(echo "$GITHUB_REPOSITORY" | cut -d'/' -f2)
+          IMAGE_TAG="$GITHUB_SHA"
+          IMAGE_NAME="$GITHUB_REPOSITORY:$IMAGE_TAG"
+          echo "Building Docker image $IMAGE_NAME"
+          docker build --file Dockerfile --build-arg VITE_API_URL=https://$SEVALLA_DOMAIN --tag "$IMAGE_NAME" .
+
+      - name: Log in to Docker Hub
+        if: github.event_name != 'pull_request' && env.DOCKER_USERNAME != '' && env.DOCKER_PASSWORD != ''
+        uses: docker/login-action@v3
+        with:
+          username: ${{ env.DOCKER_USERNAME }}
+          password: ${{ env.DOCKER_PASSWORD }}
+
+      - name: Push Docker image to Docker Hub
+        if: github.event_name != 'pull_request' && env.DOCKER_USERNAME != '' && env.DOCKER_PASSWORD != ''
+        run: |
+          REPO_NAME=$(echo "$GITHUB_REPOSITORY" | cut -d'/' -f2)
+          IMAGE_TAG="$GITHUB_SHA"
+          SOURCE_IMAGE="$GITHUB_REPOSITORY:$IMAGE_TAG"
+          TARGET_IMAGE="$DOCKER_USERNAME/$REPO_NAME:$IMAGE_TAG"
+          LATEST_IMAGE="$DOCKER_USERNAME/$REPO_NAME:latest"
+          docker tag "$SOURCE_IMAGE" "$TARGET_IMAGE"
+          docker push "$TARGET_IMAGE"
+          docker tag "$SOURCE_IMAGE" "$LATEST_IMAGE"
+          docker push "$LATEST_IMAGE"
+
+      - name: Image build summary
+        run: |
+          REPO_NAME=$(echo "$GITHUB_REPOSITORY" | cut -d'/' -f2)
+          IMAGE_TAG="$GITHUB_SHA"
+          SOURCE_IMAGE="$GITHUB_REPOSITORY:$IMAGE_TAG"
+          echo "✅ Docker image built successfully: $SOURCE_IMAGE"
+          if [ -n "$DOCKER_USERNAME" ] && [ -n "$DOCKER_PASSWORD" ]; then
+            echo "Docker Hub push attempted for:"
+            echo "  - $DOCKER_USERNAME/$REPO_NAME:latest"
+            echo "  - $DOCKER_USERNAME/$REPO_NAME:$IMAGE_TAG"
+          else
+            echo "⚠️ Docker Hub credentials missing: push was skipped."
+            echo "Set DOCKER_USERNAME and DOCKER_PASSWORD in repository secrets to publish the image."
+          fi
+
+  deploy-to-sevalla:
+    name: Deploy to Sevalla (optional)
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    env:
+      DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+      SEVALLA_API_URL: ${{ secrets.SEVALLA_API_URL }}
+      SEVALLA_API_TOKEN: ${{ secrets.SEVALLA_API_TOKEN }}
+      SEVALLA_APP: ${{ secrets.SEVALLA_APP }}
+    if: github.event_name != 'pull_request'
+    steps:
+      - name: Check Sevalla secrets
+        run: |
+          if [ -z "$SEVALLA_API_URL" ] || [ -z "$SEVALLA_API_TOKEN" ] || [ -z "$SEVALLA_APP" ]; then
+            echo "WARNING: Sevalla deploy secrets are missing. Skipping Sevalla deployment."
+            exit 0
+          fi
+      - name: Check for Sevalla configuration
+        run: |
+          REPO_NAME=$(echo "$GITHUB_REPOSITORY" | cut -d'/' -f2)
+          DOCKER_USER="${{ env.DOCKER_USERNAME }}"
+          if [ -z "$DOCKER_USER" ]; then
+            echo "⚠️ DOCKER_USERNAME not set in secrets; falling back to GITHUB_ACTOR: $GITHUB_ACTOR"
+            DOCKER_USER="$GITHUB_ACTOR"
+          fi
+          IMAGE_TAG="$GITHUB_SHA"
+          IMAGE_NAME="$DOCKER_USER/$REPO_NAME:${IMAGE_TAG}"
+          echo "Triggering Sevalla deploy for image: ${IMAGE_NAME}"
+
+          # Retry loop with timeouts and diagnostics
+          MAX_RETRIES=3
+          SLEEP_BASE=5
+          FINAL_HTTP=000
+          for i in $(seq 1 $MAX_RETRIES); do
+            echo "Attempt $i/$MAX_RETRIES..."
+            : > /tmp/resp_body
+            # use reasonable timeouts and capture HTTP code
+            HTTP_CODE=$(curl -sS -o /tmp/resp_body -w "%{http_code}" --connect-timeout 10 --max-time 30 -X POST "${{ env.SEVALLA_API_URL }}" \
+              -H "Authorization: Bearer ${{ env.SEVALLA_API_TOKEN }}" \
+              -H 'Content-Type: application/json' \
+              -d "{ \"image\": \"${IMAGE_NAME}\", \"app\": \"${{ env.SEVALLA_APP }}\" }") || HTTP_CODE=000
+            BODY=$(cat /tmp/resp_body 2>/dev/null || true)
+            echo "HTTP code: $HTTP_CODE"
+            if [ "$HTTP_CODE" = "000" ]; then
+              echo "No response from Sevalla (HTTP 000). Will retry after backoff."
+              sleep $((SLEEP_BASE * i))
+              FINAL_HTTP=000
+              continue
+            fi
+            # success range
+            if [ "$HTTP_CODE" -ge 200 ] && [ "$HTTP_CODE" -lt 300 ]; then
+              echo "✅ Sevalla accepted the deploy request (HTTP $HTTP_CODE)."
+              echo "Response body: $BODY"
+              FINAL_HTTP=$HTTP_CODE
+              break
+            fi
+            # client/server error — stop and fail
+            echo "Sevalla returned HTTP $HTTP_CODE"
+            echo "Response body: $BODY"
+            FINAL_HTTP=$HTTP_CODE
+            break
+          done
+
+          if [ "$FINAL_HTTP" = "000" ]; then
+            echo "\n⚠️ Sevalla endpoint appears unreachable from GitHub Actions (HTTP 000)."
+            echo "Diagnostics: printing curl verbose output to help troubleshoot.\n"
+            # produce verbose output to a file (will have masked secrets in Actions logs)
+            set +x
+            curl -v --connect-timeout 10 --max-time 30 -X POST "${{ env.SEVALLA_API_URL }}" \
+              -H "Authorization: Bearer ${{ env.SEVALLA_API_TOKEN }}" \
+              -H 'Content-Type: application/json' \
+              -d "{ \"image\": \"${IMAGE_NAME}\", \"app\": \"${{ env.SEVALLA_APP }}\" }" 2>&1 | sed -n '1,200p' || true
+            echo "\nSevalla deploy could not be reached. The job will continue without failing so CI can stay green."
+            exit 0
+          fi
+
+          # if we got here and code is >=400, fail the job so visible errors are surfaced
+          if [ "$FINAL_HTTP" -ge 400 ]; then
+            echo "Sevalla deploy failed with HTTP $FINAL_HTTP. Failing job."
+            exit 1
+          fi

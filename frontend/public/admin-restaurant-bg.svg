@@ -1,0 +1,96 @@
+<svg width="1920" height="1080" viewBox="0 0 1920 1080" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid slice">
+  <defs>
+    <linearGradient id="navyGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#0A1A2F"/>
+      <stop offset="100%" stop-color="#1A2F4F"/>
+    </linearGradient>
+    <linearGradient id="goldGrad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#C9A961"/>
+      <stop offset="100%" stop-color="#F4D03F"/>
+    </linearGradient>
+  </defs>
+  
+  <!-- Background -->
+  <rect width="1920" height="1080" fill="url(#navyGrad)"/>
+  
+  <!-- Marble floor tiles -->
+  <g opacity="0.25">
+    <rect x="0" y="680" width="1920" height="400" fill="#C9A961" opacity="0.08"/>
+    <g stroke="#C9A961" stroke-width="1.5" opacity="0.3">
+      <path d="M0 720 H1920 M0 780 H1920 M0 840 H1920 M0 900 H1920 M0 960 H1920 M0 1020 H1920"/>
+      <path d="M240 680 V1080 M480 680 V1080 M720 680 V1080 M960 680 V1080 M1200 680 V1080 M1440 680 V1080 M1680 680 V1080"/>
+    </g>
+  </g>
+  
+  <!-- Large chandelier -->
+  <g transform="translate(960, 180)">
+    <circle cx="0" cy="0" r="100" fill="none" stroke="url(#goldGrad)" stroke-width="5"/>
+    <circle cx="0" cy="0" r="65" fill="none" stroke="url(#goldGrad)" stroke-width="4"/>
+    <circle cx="-50" cy="25" r="12" fill="#F4D03F"/>
+    <circle cx="50" cy="25" r="12" fill="#F4D03F"/>
+    <circle cx="-25" cy="50" r="12" fill="#F4D03F"/>
+    <circle cx="25" cy="50" r="12" fill="#F4D03F"/>
+    <circle cx="0" cy="60" r="15" fill="#F4D03F"/>
+  </g>
+  
+  <!-- Small wall sconces -->
+  <g fill="#F4D03F" opacity="0.8">
+    <circle cx="300" cy="250" r="8"/>
+    <circle cx="1620" cy="250" r="8"/>
+    <circle cx="300" cy="450" r="8"/>
+    <circle cx="1620" cy="450" r="8"/>
+  </g>
+  
+  <!-- Tables with chairs - 4 sets -->
+  <g stroke="url(#goldGrad)" stroke-width="3" fill="#0A1A2F">
+    <!-- Table 1 -->
+    <g transform="translate(350, 750)">
+      <ellipse cx="0" cy="0" rx="140" ry="70"/>
+      <rect x="-25" y="-30" width="50" height="60" fill="url(#goldGrad)" opacity="0.9" rx="6"/>
+      <ellipse cx="-120" cy="20" rx="45" ry="55"/>
+      <ellipse cx="120" cy="20" rx="45" ry="55"/>
+      <ellipse cx="-70" cy="80" rx="45" ry="55"/>
+      <ellipse cx="70" cy="80" rx="45" ry="55"/>
+    </g>
+    
+    <!-- Table 2 -->
+    <g transform="translate(760, 780)">
+      <ellipse cx="0" cy="0" rx="140" ry="70"/>
+      <rect x="-25" y="-30" width="50" height="60" fill="url(#goldGrad)" opacity="0.9" rx="6"/>
+      <ellipse cx="-120" cy="20" rx="45" ry="55"/>
+      <ellipse cx="120" cy="20" rx="45" ry="55"/>
+    </g>
+    
+    <!-- Table 3 -->
+    <g transform="translate(1160, 780)">
+      <ellipse cx="0" cy="0" rx="140" ry="70"/>
+      <rect x="-25" y="-30" width="50" height="60" fill="url(#goldGrad)" opacity="0.9" rx="6"/>
+      <ellipse cx="-120" cy="20" rx="45" ry="55"/>
+      <ellipse cx="120" cy="20" rx="45" ry="55"/>
+    </g>
+    
+    <!-- Table 4 -->
+    <g transform="translate(1570, 750)">
+      <ellipse cx="0" cy="0" rx="140" ry="70"/>
+      <rect x="-25" y="-30" width="50" height="60" fill="url(#goldGrad)" opacity="0.9" rx="6"/>
+      <ellipse cx="-120" cy="20" rx="45" ry="55"/>
+      <ellipse cx="120" cy="20" rx="45" ry="55"/>
+      <ellipse cx="-70" cy="80" rx="45" ry="55"/>
+      <ellipse cx="70" cy="80" rx="45" ry="55"/>
+    </g>
+  </g>
+  
+  <!-- Bar counter at back -->
+  <rect x="400" y="500" width="1120" height="80" fill="#0A1A2F" stroke="url(#goldGrad)" stroke-width="4" rx="8"/>
+  <rect x="450" y="520" width="80" height="40" fill="url(#goldGrad)" opacity="0.7" rx="4"/>
+  <rect x="650" y="520" width="80" height="40" fill="url(#goldGrad)" opacity="0.7" rx="4"/>
+  <rect x="850" y="520" width="80" height="40" fill="url(#goldGrad)" opacity="0.7" rx="4"/>
+  <rect x="1050" y="520" width="80" height="40" fill="url(#goldGrad)" opacity="0.7" rx="4"/>
+  <rect x="1250" y="520" width="80" height="40" fill="url(#goldGrad)" opacity="0.7" rx="4"/>
+  
+  <!-- Wall panels -->
+  <g stroke="url(#goldGrad)" stroke-width="3" fill="none" opacity="0.4">
+    <rect x="150" y="80" width="450" height="550" rx="10"/>
+    <rect x="1320" y="80" width="450" height="550" rx="10"/>
+  </g>
+</svg>
