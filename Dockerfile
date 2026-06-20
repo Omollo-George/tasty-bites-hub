@@ -48,4 +48,7 @@ RUN python manage.py collectstatic --noinput || true
 ENV PORT=8000
 EXPOSE 8000
 
-CMD ["sh", "-c", "python manage.py migrate --noinput && gunicorn tastybites.wsgi:application --bind 0.0.0.0:${PORT:-8000} --workers 2 --timeout 120"]
+COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
+CMD ["sh", "-c", "gunicorn tastybites.wsgi:application --bind 0.0.0.0:${PORT:-8000} --workers 2 --timeout 120"]
