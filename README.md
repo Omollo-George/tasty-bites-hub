@@ -90,6 +90,12 @@ docker build -t tastybites:latest .
 docker run -e DJANGO_DEBUG=False -e DJANGO_SECRET_KEY=changeme -p 8000:8000 tastybites:latest
 ```
 
+Alternatively, if you have Docker Desktop with the Compose plugin installed, use:
+
+```bash
+docker compose up --build
+```
+
 For Sevalla you'll typically push an image to a container registry (Docker Hub, GHCR, or a private registry) and then configure your Sevalla service to pull and run that image. If you'd like, I can add a GitHub Actions workflow to build and push images to your registry.
 
 ## Can I connect a custom domain to my Lovable project?
