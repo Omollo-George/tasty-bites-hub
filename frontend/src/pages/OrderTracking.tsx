@@ -44,7 +44,14 @@ const OrderTracking: React.FC = () => {
       if (!res.ok) {
         throw new Error("Failed to fetch order details.");
       }
-      const data = await res.json();
+      const txt = await res.text();
+      let data: any = null
+      try {
+        data = txt ? JSON.parse(txt) : null
+      } catch (e) {
+        console.warn('Expected JSON for order details but received:', txt)
+        throw new Error('Invalid response from server')
+      }
       setOrder(data);
     } catch (err) {
       setError(err instanceof Error ? err.message : "An unexpected error occurred.");

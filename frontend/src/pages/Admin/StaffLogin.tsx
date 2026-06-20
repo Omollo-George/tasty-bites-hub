@@ -3,7 +3,7 @@ import { useLocation, useNavigate, Link } from 'react-router-dom'
 import { Eye, EyeOff, ShieldCheck, ArrowLeft, Users } from 'lucide-react'
 import { setStaffToken, setStaffTokenWithId } from '@/lib/staff-session'
 import { getAdminToken, isAdminSessionValid } from '@/lib/admin-session'
-import { getApiUrl } from '@/lib/api'
+import { getApiUrl, apiFetch } from '@/lib/api'
 import heroImage from '@/assets/hero-food.jpg'
 
 const StaffLogin: React.FC = () => {
@@ -57,21 +57,23 @@ const StaffLogin: React.FC = () => {
     }
 
     try {
-      const response = await fetch(getApiUrl('/payments/staff/signin/'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username: username.trim(), password: password.trim() }),
-      })
+      try {
+        const data: any = await apiFetch('/payments/staff/signin/', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username: username.trim(), password: password.trim() }),
+        })
 
-      const data = await response.json()
-      if (!response.ok) {
-        setError(data.error || 'Invalid staff credentials')
-      } else if (!data.token) {
-        setError('Login succeeded but no token was returned. Please restart the backend or contact support.')
-      } else {
-        const expiresAt = data.expires_at || new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString()
-        setStaffTokenWithId(data.token, data.name, data.role, expiresAt, data.id)
-        navigate(from, { replace: true })
+        if (!data || !data.token) {
+          setError(data?.error || 'Invalid staff credentials or no token returned')
+        } else {
+          const expiresAt = data.expires_at || new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString()
+          setStaffTokenWithId(data.token, data.name, data.role, expiresAt, data.id)
+          navigate(from, { replace: true })
+        }
+      } catch (err: any) {
+        const message = err?.body || err?.message || 'Connection Error: Please check if the server is running.'
+        setError(message)
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)

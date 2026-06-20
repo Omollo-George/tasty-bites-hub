@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { X, Star, Loader2 } from 'lucide-react';
-import { getApiUrl } from '@/lib/api';
+import { getApiUrl, apiFetch } from '@/lib/api';
 import { toast } from 'sonner';
 
 interface ReviewFormModalProps {
@@ -24,19 +24,18 @@ const ReviewFormModal: React.FC<ReviewFormModalProps> = ({ onClose, onSubmitSucc
 
     setLoading(true);
     try {
-      const response = await fetch(getApiUrl('/payments/reviews/create/'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          customer_name: customerName.trim() || null,
-          rating: rating,
-          comment: comment.trim() || null,
-        }),
-      });
-
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to submit review.');
+      try {
+        await apiFetch('/payments/reviews/create/', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            customer_name: customerName.trim() || null,
+            rating: rating,
+            comment: comment.trim() || null,
+          }),
+        })
+      } catch (err: any) {
+        throw new Error(err?.body || err?.message || 'Failed to submit review.')
       }
 
       toast.success("Review Submitted!", { description: "Thank you for your feedback!" });

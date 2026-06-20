@@ -19,4 +19,19 @@ export default defineConfig({
     emptyOutDir: true,
     chunkSizeWarningLimit: 1000,
   },
+  server: {
+    proxy: {
+      // Proxy API calls to the Django backend during local development
+      '/api': {
+        target: 'http://localhost:8000',
+        changeOrigin: true,
+        secure: false,
+      },
+      '/payments': {
+        target: 'http://localhost:8000',
+        changeOrigin: true,
+        secure: false,
+      },
+    },
+  },
 });

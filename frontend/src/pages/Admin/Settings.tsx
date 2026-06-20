@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getAdminToken } from '@/lib/admin-session'
-import { getApiUrl } from '@/lib/api'
+import { getApiUrl, apiFetch } from '@/lib/api'
 
 interface AdminUser {
   username: string
@@ -40,27 +40,18 @@ const AdminSettings: React.FC = () => {
       return
     }
 
-    const loadConfig = fetch(getApiUrl('/payments/config/'), {
-      headers: { Authorization: `Bearer ${token}` },
-    })
-      .then((res) => res.headers.get("content-type")?.includes("application/json") ? res.json() : Promise.reject("Invalid format"))
-      .then((data) => {
+    const loadConfig = apiFetch('/payments/config/', { headers: { Authorization: `Bearer ${token}` } })
+      .then((data: any) => {
         if (data?.delivery_rate_per_km != null) setDeliveryRatePerKm(Number(data.delivery_rate_per_km))
         if (data?.min_delivery_fee != null) setMinDeliveryFee(Number(data.min_delivery_fee))
       })
 
-    const loadUsers = fetch(getApiUrl('/payments/admin/users/'), {
-      headers: { Authorization: `Bearer ${token}` },
-    })
-      .then((res) => res.headers.get("content-type")?.includes("application/json") ? res.json() : Promise.reject("Invalid format"))
-      .then((data) => setUsers(data.users || []))
+    const loadUsers = apiFetch('/payments/admin/users/', { headers: { Authorization: `Bearer ${token}` } })
+      .then((data: any) => setUsers(data.users || []))
       .catch((err) => console.error('Failed to load admin users', err))
 
-    const loadLogs = fetch(getApiUrl('/payments/admin/session-logs/'), {
-      headers: { Authorization: `Bearer ${token}` },
-    })
-      .then((res) => res.headers.get("content-type")?.includes("application/json") ? res.json() : Promise.reject("Invalid format"))
-      .then((data) => setLogs(data.logs || []))
+    const loadLogs = apiFetch('/payments/admin/session-logs/', { headers: { Authorization: `Bearer ${token}` } })
+      .then((data: any) => setLogs(data.logs || []))
 
     Promise.all([loadConfig, loadUsers, loadLogs])
       .catch((err) => console.error(err))
@@ -78,7 +69,7 @@ const AdminSettings: React.FC = () => {
     setMessage('')
 
     try {
-      const response = await fetch(getApiUrl('/payments/admin/settings/'), {
+      const data: any = await apiFetch('/payments/admin/settings/', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -92,16 +83,7 @@ const AdminSettings: React.FC = () => {
         }),
       })
 
-      if (!response.headers.get("content-type")?.includes("application/json")) {
-        throw new Error("Invalid server response.");
-      }
-
-      const data = await response.json()
-      if (!response.ok) {
-        setMessage(data.error || 'Failed to save settings')
-      } else {
-        setMessage('Settings saved successfully.')
-      }
+      setMessage(data?.error ? data.error : 'Settings saved successfully.')
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
       setMessage(message)
@@ -121,27 +103,21 @@ const AdminSettings: React.FC = () => {
     setSaving(true)
 
     try {
-      const response = await fetch(getApiUrl('/payments/admin/users/'), {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ username: newUsername, password: newPassword }),
-      })
-
-      if (!response.headers.get("content-type")?.includes("application/json")) {
-        throw new Error("Invalid server response.");
-      }
-
-      const data = await response.json()
-      if (!response.ok) {
-        setUserMessage(data.error || 'Failed to create user')
-      } else {
+      try {
+        const data: any = await apiFetch('/payments/admin/users/', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ username: newUsername, password: newPassword }),
+        })
         setUsers((current) => [...current, { username: data.username }])
         setNewUsername('')
         setNewPassword('')
         setUserMessage('User created successfully.')
+      } catch (err: any) {
+        setUserMessage(err?.body || err?.message || 'Unable to create user')
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
@@ -162,23 +138,15 @@ const AdminSettings: React.FC = () => {
     setSaving(true)
 
     try {
-      const response = await fetch(getApiUrl(`/payments/admin/users/${encodeURIComponent(username)}/`), {
-        method: 'DELETE',
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      })
-
-      if (!response.headers.get("content-type")?.includes("application/json")) {
-        throw new Error("Invalid server response.");
-      }
-
-      const data = await response.json()
-      if (!response.ok) {
-        setUserMessage(data.error || 'Failed to remove user')
-      } else {
+      try {
+        const data: any = await apiFetch(`/payments/admin/users/${encodeURIComponent(username)}/`, {
+          method: 'DELETE',
+          headers: { Authorization: `Bearer ${token}` },
+        })
         setUsers((current) => current.filter((user) => user.username !== username))
         setUserMessage('User removed successfully.')
+      } catch (err: any) {
+        setUserMessage(err?.body || err?.message || 'Unable to remove user')
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
@@ -199,30 +167,21 @@ const AdminSettings: React.FC = () => {
     setSessionClearLoading(true)
 
     try {
-      const response = await fetch(getApiUrl('/payments/admin/clear-sessions/'), {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ password: sessionClearPassword }),
-      })
-
-      if (!response.headers.get("content-type")?.includes("application/json")) {
-        throw new Error("Invalid server response.");
-      }
-
-      const data = await response.json()
-      if (!response.ok) {
-        setSessionClearMessage(data.error || 'Failed to clear sessions')
-      } else {
-        setSessionClearMessage('All admin sessions cleared successfully.')
+      try {
+        const data: any = await apiFetch('/payments/admin/clear-sessions/', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ password: sessionClearPassword }),
+        })
+        setSessionClearMessage(data?.message || 'All admin sessions cleared successfully.')
         setSessionClearPassword('')
         setShowClearSessionsModal(false)
-        // Refresh the session logs
-        setTimeout(() => {
-          window.location.reload()
-        }, 1500)
+        setTimeout(() => window.location.reload(), 1500)
+      } catch (err: any) {
+        setSessionClearMessage(err?.body || err?.message || 'Unable to clear sessions')
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)

@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { Link, useSearchParams, Navigate } from 'react-router-dom';
-import { getApiUrl } from '@/lib/api';
+import { getApiUrl, apiFetch } from '@/lib/api';
 import { getAdminToken, isAdminSessionValid } from '@/lib/admin-session';
 import { getStaffRole, getStaffName, getStaffId } from '@/lib/staff-session';
 import { getAuthToken, getAuthHeaders } from '@/lib/auth'; // Import the new getAuthToken and getAuthHeaders
@@ -113,12 +113,21 @@ const EmployeeTable: React.FC = () => {
     const fetchData = async () => {
       try {
         // Fetch menu items without auth headers (public endpoint) to avoid token mismatch issues
-        const menuRes = await fetch(getApiUrl('/payments/menu-items/'));
-        const tablesRes = await fetch(getApiUrl('/payments/pos/tables/'), { headers: getAuthHeaders() });
-        const menuData = menuRes.ok ? await menuRes.json() : { menu_items: [] };
-        const tablesData = tablesRes.ok ? await tablesRes.json() : { tables: [] };
-        setMenuItems(menuData.menu_items || []);
-        setTables(tablesData.tables || []);
+        try {
+          const menuData: any = await apiFetch('/payments/menu-items/')
+          setMenuItems(menuData.menu_items || [])
+        } catch (err) {
+          console.error('Failed to load menu items', err)
+          setMenuItems([])
+        }
+
+        try {
+          const tablesData: any = await apiFetch('/payments/pos/tables/', { headers: getAuthHeaders() })
+          setTables(tablesData.tables || [])
+        } catch (err) {
+          console.error('Failed to load tables', err)
+          setTables([])
+        }
 
         // Auto-select table if provided in URL
         const urlTable = searchParams.get('table');
@@ -128,13 +137,8 @@ const EmployeeTable: React.FC = () => {
 
           // Fetch active order for this table to show existing items
           try { // Use authToken for auth
-            const orderRes = await fetch(getApiUrl(`/payments/pos/active-order/?table_number=${urlTable}`), {
-              headers: getAuthHeaders()
-            });
-            if (orderRes.ok) {
-              const orderData = await orderRes.json();
-              if (orderData.order) setActiveOrder(orderData.order);
-            }
+            const orderData: any = await apiFetch(`/payments/pos/active-order/?table_number=${urlTable}`, { headers: getAuthHeaders() })
+            if (orderData?.order) setActiveOrder(orderData.order)
           } catch (err) {
             console.error("Failed to fetch active order", err);
           }
