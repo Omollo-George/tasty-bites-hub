@@ -88,12 +88,42 @@ WSGI_APPLICATION = 'tastybites.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/6.0/ref/settings/#databases
 
-DATABASES = {
-    'default': dj_database_url.config(
-        default=f"sqlite:///{BASE_DIR / 'db.sqlite3'}",
-        conn_max_age=600
-    )
-}
+# Ensure a usable PORT env for runtime tools that may rely on it (avoid empty-string port errors)
+if os.environ.get('PORT', '').strip() == '':
+    os.environ['PORT'] = '8000'
+
+# Defensive DATABASE_URL handling: sanitize common accidental additions like
+# "port=8000" appended to the DATABASE_URL string and fall back to sqlite
+# if parsing fails so the app doesn't crash with a confusing "'' is not a valid port number" error.
+raw_db_url = os.environ.get('DATABASE_URL', '') or None
+if isinstance(raw_db_url, str):
+    # Remove query-like "port=123" fragments that some UIs accidentally append
+    import re
+    cleaned_db_url = re.sub(r'([\?&;\s]|^)port=\d+', '', raw_db_url)
+    cleaned_db_url = cleaned_db_url.strip()
+    if cleaned_db_url == '':
+        cleaned_db_url = None
+else:
+    cleaned_db_url = None
+
+try:
+    DATABASES = {
+        'default': dj_database_url.config(
+            default=f"sqlite:///{BASE_DIR / 'db.sqlite3'}",
+            url=cleaned_db_url,
+            conn_max_age=600
+        )
+    }
+except Exception as e:
+    # Don't crash on startup due to a malformed DATABASE_URL — log and fall back
+    # to local sqlite so the process can start and we can inspect the environment.
+    print('WARNING: could not parse DATABASE_URL:', str(e))
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': BASE_DIR / 'db.sqlite3',
+        }
+    }
 # Password validation
 # https://docs.djangoproject.com/en/6.0/ref/settings/#auth-password-validators
 
