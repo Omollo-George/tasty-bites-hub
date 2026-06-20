@@ -97,9 +97,14 @@ if os.environ.get('PORT', '').strip() == '':
 # if parsing fails so the app doesn't crash with a confusing "'' is not a valid port number" error.
 raw_db_url = os.environ.get('DATABASE_URL', '') or None
 if isinstance(raw_db_url, str):
-    # Remove query-like "port=123" fragments that some UIs accidentally append
     import re
-    cleaned_db_url = re.sub(r'([\?&;\s]|^)port=\d+', '', raw_db_url)
+    cleaned_db_url = raw_db_url.strip()
+    # Remove accidental query fragments like "port=", "port=123", ";port=123",
+    # or other UI-injected fragments that can break parsing. This removes
+    # occurrences of "port=" with optional digits and any leftover separators.
+    cleaned_db_url = re.sub(r'([\?&;\s]|^)port=\d*', '', cleaned_db_url)
+    # Also remove stray trailing separators left behind
+    cleaned_db_url = re.sub(r'[\?&;]+$', '', cleaned_db_url)
     cleaned_db_url = cleaned_db_url.strip()
     if cleaned_db_url == '':
         cleaned_db_url = None
