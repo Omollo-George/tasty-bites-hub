@@ -17,9 +17,9 @@ os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'tastybites.settings')
 # when the database is transiently unavailable. Controlled via env vars:
 # DB_STARTUP_RETRIES (default 10), DB_STARTUP_DELAY (seconds).
 try:
-	DB_STARTUP_RETRIES = int(os.environ.get('DB_STARTUP_RETRIES', '10'))
+	DB_STARTUP_RETRIES = int(os.environ.get('DB_STARTUP_RETRIES', '60'))
 except Exception:
-	DB_STARTUP_RETRIES = 10
+	DB_STARTUP_RETRIES = 60
 try:
 	DB_STARTUP_DELAY = float(os.environ.get('DB_STARTUP_DELAY', '3'))
 except Exception:
