@@ -51,5 +51,7 @@ urlpatterns = [
     path('payments/', include('payments.urls')),  # Frontend expects /payments/ endpoint
 ]
 
-if settings.DEBUG:
-    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+# Serve user-uploaded media files in all environments.
+# In production, this is acceptable for a simple deployment and ensures
+# uploaded food images are reachable at /media/... after upload.
+urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
