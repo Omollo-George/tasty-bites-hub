@@ -99,8 +99,14 @@ Write-Status "STEP 4: Generate secrets"
 
 # Django secret key
 Write-Status "Generating Django SECRET_KEY..."
-$SecretKey = python -c "from django.core.management.utils import get_random_secret_key; print(get_random_secret_key())"
-Write-Success "SECRET_KEY generated"
+try {
+    $SecretKey = & python -c 'from django.core.management.utils import get_random_secret_key; print(get_random_secret_key())' 2>$null
+    if (-not $SecretKey) { throw "Python did not return a SECRET_KEY" }
+    Write-Success "SECRET_KEY generated"
+} catch {
+    Write-Error-Custom "Failed to generate SECRET_KEY via python. Please ensure Python and Django are available locally."
+    $SecretKey = "change-me-in-production"
+}
 
 # Admin token
 Write-Status "Generating ADMIN_TOKEN..."
@@ -143,12 +149,14 @@ Write-Success "App deployed"
 # STEP 7: Run migrations
 Write-Host ""
 Write-Status "STEP 7: Run Django migrations and collectstatic"
-@"
+$sshScript = @'
 cd /app
 python manage.py migrate --noinput
 python manage.py collectstatic --noinput
-echo "Done"
-"@ | fly ssh console --app $AppName -t
+echo Done
+'@
+
+$sshScript | fly ssh console --app $AppName -t
 Write-Success "Migrations and static files complete"
 
 Write-Host ""
