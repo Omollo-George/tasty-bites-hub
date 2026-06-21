@@ -158,7 +158,17 @@ $EnvVars = @"
 DJANGO_SECRET_KEY=$SecretKey
 DEBUG=False
 DJANGO_SETTINGS_MODULE=tastybites.settings
-DATABASE_URL=$DatabaseUrl
+# Ensure DATABASE_URL includes sslmode=require when missing so Sevalla apps that
+# require SSL can connect. We only append if the URL does not already include sslmode.
+if ($DatabaseUrl -and $DatabaseUrl -notmatch 'sslmode=') {
+    if ($DatabaseUrl.Contains('?')) { $DatabaseUrlWithSSL = "$DatabaseUrl&sslmode=require" }
+    else { $DatabaseUrlWithSSL = "$DatabaseUrl?sslmode=require" }
+} else { $DatabaseUrlWithSSL = $DatabaseUrl }
+
+# Export PGSSLMODE for processes that read it (optional but useful)
+$PGSSLMODE = 'require'
+
+DATABASE_URL=$DatabaseUrlWithSSL
 ALLOWED_HOSTS=$Domain,.sevalla.app
 CORS_ALLOWED_ORIGINS=https://$Domain
 ADMIN_TOKEN=$AdminToken
