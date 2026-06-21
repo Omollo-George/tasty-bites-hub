@@ -22,9 +22,15 @@ if not db:
     sys.exit(0)
 max_retries = int(os.environ.get('DB_WAIT_RETRIES', '30'))
 delay = float(os.environ.get('DB_WAIT_DELAY', '2'))
+sslmode = os.environ.get('PGSSLMODE') or os.environ.get('DATABASE_SSL_REQUIRE')
+if sslmode and sslmode.strip().lower() in ('1', 'true', 'yes'):
+    sslmode = 'require'
 for i in range(max_retries):
     try:
-        conn = psycopg2.connect(db, connect_timeout=5)
+        connect_kwargs = {'dsn': db, 'connect_timeout': 5}
+        if sslmode:
+            connect_kwargs['sslmode'] = sslmode.strip()
+        conn = psycopg2.connect(**connect_kwargs)
         conn.close()
         print('Database is available')
         sys.exit(0)
