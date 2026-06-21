@@ -231,8 +231,26 @@ def _get_admin_token(request):
     return None
 
 
+def _get_token_from_request(request):
+    # Support both Authorization Bearer and custom admin token headers.
+    auth_header = request.headers.get('Authorization', '')
+    if auth_header.startswith('Bearer '):
+        return auth_header.split(' ', 1)[1].strip()
+    token = request.headers.get('X-ADMIN-TOKEN', '') or request.POST.get('admin_token', '') or request.GET.get('admin_token', '')
+    return token.strip() if token else None
+
+
 def _is_admin(request):
     return bool(_get_admin_token(request))
+
+
+def _debug_request_auth(request):
+    return {
+        'Authorization': request.headers.get('Authorization', ''),
+        'X-ADMIN-TOKEN': request.headers.get('X-ADMIN-TOKEN', ''),
+        'admin_token_post': request.POST.get('admin_token', ''),
+        'admin_token_get': request.GET.get('admin_token', ''),
+    }
 
 def _get_staff_token(request):
     token = _get_token_from_request(request)
@@ -692,16 +710,19 @@ def upload_image(request):
     if request.method != 'POST':
         return HttpResponseBadRequest('Only POST allowed')
     if not _is_admin(request):
-        return JsonResponse({'error': 'unauthorized'}, status=403)
+        return JsonResponse({'error': 'unauthorized', 'debug': _debug_request_auth(request)}, status=403)
     
     image_file = request.FILES.get('image')
     if not image_file:
         return JsonResponse({'error': 'no_image_provided'}, status=400)
     
-    path = default_storage.save(f'menu_items/{uuid.uuid4().hex}_{image_file.name}', image_file)
-    path = path.replace('\\', '/')
-    url = request.build_absolute_uri(f"{settings.MEDIA_URL}{path}")
-    return JsonResponse({'url': url, 'image_url': url, 'path': path})
+    try:
+        saved_path = default_storage.save(f'menu_items/{uuid.uuid4().hex}_{image_file.name}', image_file)
+        saved_path = saved_path.replace('\\', '/')
+        url = request.build_absolute_uri(f"{settings.MEDIA_URL}{saved_path}")
+        return JsonResponse({'url': url, 'image_url': url, 'path': saved_path})
+    except Exception as exc:
+        return JsonResponse({'error': 'upload_failed', 'details': str(exc)}, status=500)
 
 @csrf_exempt
 def staff_signin(request):
