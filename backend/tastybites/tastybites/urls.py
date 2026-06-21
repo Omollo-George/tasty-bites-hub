@@ -26,6 +26,15 @@ def health_check(request):
 
 
 def homepage(request):
+    # Try to serve the frontend `index.html` if it exists in STATIC_ROOT (production build).
+    try:
+        index_path = settings.STATIC_ROOT / 'index.html'
+        if index_path.exists():
+            return HttpResponse(index_path.read_text(encoding='utf-8'), content_type='text/html')
+    except Exception:
+        # Fall back to a simple backend index page when static index is not available
+        pass
+
     return HttpResponse(
         '<h1>Tasty Bites Backend</h1>'
         '<p>API is available at <a href="/api/health/">/api/health/</a> and <a href="/api/payments/">/api/payments/</a>.</p>',
