@@ -165,12 +165,12 @@ Write-Host "✓ Deployment Complete!" -ForegroundColor Green
 Write-Host "==========================================" -ForegroundColor Green
 Write-Host ""
 Write-Host "Next steps:" -ForegroundColor Yellow
-Write-Host "  Frontend: https://$AppDomain"
-Write-Host "  API: https://$AppDomain/api"
-Write-Host "  Admin: https://$AppDomain/admin"
+Write-Host ("  Frontend: https://{0}" -f $AppDomain)
+Write-Host ("  API: https://{0}/api" -f $AppDomain)
+Write-Host ("  Admin: https://{0}/admin" -f $AppDomain)
 Write-Host ""
 Write-Host "Useful commands:" -ForegroundColor Yellow
-Write-Host "  View logs: fly logs --app $AppName"
-Write-Host "  Restart app: fly restart --app $AppName"
-Write-Host "  SSH into app: fly ssh console --app $AppName"
+Write-Host ("  View logs: fly logs --app {0}" -f $AppName)
+Write-Host ("  Restart app: fly restart --app {0}" -f $AppName)
+Write-Host ("  SSH into app: fly ssh console --app {0}" -f $AppName)
 Write-Host ""
