@@ -13,7 +13,7 @@ function Write-Status {
 
 function Write-Success {
     param([string]$Message)
-    Write-Host "✓ $Message" -ForegroundColor Green
+    Write-Host "SUCCESS: $Message" -ForegroundColor Green
 }
 
 function Write-Error-Custom {
