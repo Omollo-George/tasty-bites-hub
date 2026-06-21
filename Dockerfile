@@ -36,6 +36,9 @@ RUN pip install -r requirements.txt
 # Copy the entire backend project
 COPY backend/tastybites . 
 
+# Copy diagnostic scripts so they're available in the container
+COPY scripts ./scripts
+
 # Run migrations during build (will use SQLite during build, actual DB on deployment)
 RUN python manage.py migrate --run-syncdb --noinput || true
 
