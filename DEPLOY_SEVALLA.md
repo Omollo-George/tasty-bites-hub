@@ -141,7 +141,8 @@ In Sevalla dashboard, go to **Settings → Environment Variables** and add these
 | `DJANGO_SECRET_KEY` | `<paste from Step 1>` | The secret key you generated |
 | `DEBUG` | `False` | Production mode |
 | `DJANGO_SETTINGS_MODULE` | `tastybites.settings` | Django module |
-| `DATABASE_URL` | `<your Sevalla DB URL>` | From Sevalla → Database → Connection String |
+| `DATABASE_URL` | `<your Sevalla DB URL>` | From Sevalla → Database → Connection String; append `?sslmode=require` if the string is missing SSL settings |
+| `PGSSLMODE` | `require` | Optional: set when your database requires SSL |
 | `ALLOWED_HOSTS` | `<your-sevalla-domain>,.sevalla.app` | Replace with your actual domain |
 | `CORS_ALLOWED_ORIGINS` | `https://<your-sevalla-domain>` | Replace with your actual domain |
 | `ADMIN_TOKEN` | `<generate a strong random string>` | Example: `super-secret-admin-2026` |

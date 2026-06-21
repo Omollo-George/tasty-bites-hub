@@ -96,6 +96,17 @@ if os.environ.get('PORT', '').strip() == '':
 # "port=8000" appended to the DATABASE_URL string and fall back to sqlite
 # if parsing fails so the app doesn't crash with a confusing "'' is not a valid port number" error.
 raw_db_url = os.environ.get('DATABASE_URL', '') or None
+def add_sslmode_if_requested(url):
+    if not url or 'sslmode=' in url:
+        return url
+    sslmode = os.environ.get('PGSSLMODE')
+    if not sslmode and os.environ.get('DATABASE_SSL_REQUIRE', '').strip().lower() in ('1', 'true', 'yes'):
+        sslmode = 'require'
+    if sslmode:
+        separator = '&' if '?' in url else '?'
+        return f'{url}{separator}sslmode={sslmode.strip()}'
+    return url
+
 if isinstance(raw_db_url, str):
     import re
     cleaned_db_url = raw_db_url.strip()
@@ -108,6 +119,8 @@ if isinstance(raw_db_url, str):
     cleaned_db_url = cleaned_db_url.strip()
     if cleaned_db_url == '':
         cleaned_db_url = None
+    else:
+        cleaned_db_url = add_sslmode_if_requested(cleaned_db_url)
 else:
     cleaned_db_url = None
 
