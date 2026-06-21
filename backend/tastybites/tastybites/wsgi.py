@@ -33,7 +33,12 @@ if DB_STARTUP_RETRIES > 0 and os.environ.get('DATABASE_URL'):
 	db = os.environ.get('DATABASE_URL')
 	for i in range(DB_STARTUP_RETRIES):
 		try:
-			conn = psycopg2.connect(db, connect_timeout=5)
+			# allow optional sslmode via PGSSLMODE or DATABASE_SSL_REQUIRE
+			sslmode = os.environ.get('PGSSLMODE') or os.environ.get('DATABASE_SSL_REQUIRE')
+			conn_args = {'dsn': db, 'connect_timeout': 5}
+			if sslmode and str(sslmode).strip().lower() in ('1', 'true', 'yes'):
+				conn_args['sslmode'] = 'require'
+			conn = psycopg2.connect(**conn_args)
 			conn.close()
 			break
 		except Exception as e:
