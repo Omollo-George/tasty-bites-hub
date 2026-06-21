@@ -4,7 +4,7 @@ kill_timeout = 5
 
 [build]
   dockerfile = "Dockerfile"
-  args = { VITE_API_URL = "https://tasty-bites-hub.fly.dev" }
+  args = { VITE_API_URL = "https://tasty-bites-hub.fly.dev", VITE_BASE = "/static/" }
 
 [env]
   PORT = "8000"
