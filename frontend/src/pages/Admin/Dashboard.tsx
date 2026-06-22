@@ -5,7 +5,7 @@ import AdminHeader from '@/components/AdminHeader'
 
 const Dashboard: React.FC = () => {
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex">
+    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col md:flex-row">
       <AdminSidebar />
       <div className="flex-1 flex flex-col">
         <div className="pt-8 px-6 md:px-10 max-w-7xl w-full mx-auto">
