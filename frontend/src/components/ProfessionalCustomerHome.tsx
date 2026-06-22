@@ -525,8 +525,8 @@ const ProfessionalCustomerHome = () => {
 
             <div className="space-y-6">
               <p className="text-sm uppercase tracking-[0.45em] text-orange-400 opacity-90">Premium food service, refined</p>
-              <h1 className="text-5xl sm:text-6xl md:text-7xl font-black tracking-tight text-white leading-tight">{data.hero.title}</h1>
-              <p className="mx-auto max-w-3xl text-base sm:text-lg md:text-xl text-slate-300 leading-relaxed">{data.hero.tagline} Discover a polished ordering experience tailored for modern restaurants and professional service.</p>
+              <h1 className="text-5xl sm:text-6xl md:text-7xl font-extrabold tracking-tight text-white leading-tight font-hero">{data.hero.title}</h1>
+              <p className="mx-auto max-w-3xl text-base sm:text-lg md:text-xl text-slate-300 leading-relaxed font-hero-sub">{data.hero.tagline} Discover a polished ordering experience tailored for modern restaurants and professional service.</p>
             </div>
 
             <div className="w-full max-w-3xl rounded-[2.5rem] border border-white/10 bg-slate-950/50 p-5 shadow-2xl shadow-black/40 backdrop-blur-xl">
@@ -590,46 +590,101 @@ const ProfessionalCustomerHome = () => {
         </section>
 
         {/* Category Grids */}
-        {data.categories.map((category) => {
-          const items = data.menu_by_category[category] || [];
-          return (
-            <section key={category} className="mb-20">
-              <div id={`category-${category}`} className="flex items-center gap-4 mb-10">
-                <h4 className="text-4xl font-black tracking-tight italic uppercase">{category}</h4>
-                <div className="h-[2px] flex-1 bg-gradient-to-r from-white/20 to-transparent" />
-              </div>
-              <div className="grid grid-cols-3 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-                {items
-                  .filter((i) => !featuredIds.has(i.id))
-                  .filter((i) =>
-                    i.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                    i.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                    i.category.toLowerCase().includes(searchQuery.toLowerCase())
-                  )
-                  .map((item, index) => (
-                    <ProItemCard
-                      key={`${category}-${item.id}-${index}`}
-                      item={item}
-                      currency={data.config.currency}
-                      compact
-                      onAdd={() => handleAddToCart(item)}
-                      formatImageUrl={formatImageUrl}
-                    />
-                  ))}
-              </div>
-            </section>
-          );
-        })}
+        {(() => {
+          const q = searchQuery.trim().toLowerCase();
+          if (q.length > 0) {
+            // collect matched items across categories
+            const matched: Array<any> = [];
+            for (const cat of data.categories) {
+              const items = data.menu_by_category[cat] || [];
+              for (const it of items) {
+                if (
+                  it.name.toLowerCase().includes(q) ||
+                  it.description.toLowerCase().includes(q) ||
+                  it.category.toLowerCase().includes(q)
+                ) {
+                  matched.push(it);
+                }
+              }
+            }
+
+            if (matched.length > 0) {
+              // determine most common category among matches
+              const counts: Record<string, number> = {};
+              for (const m of matched) counts[m.category] = (counts[m.category] || 0) + 1;
+              const primaryCategory = Object.keys(counts).sort((a, b) => counts[b] - counts[a])[0];
+
+              // render only that category (show full category list)
+              const items = data.menu_by_category[primaryCategory] || [];
+              return (
+                <section key={primaryCategory} className="mb-20">
+                  <div id={`category-${primaryCategory}`} className="flex items-center gap-4 mb-10">
+                    <h4 className="text-4xl font-black tracking-tight italic uppercase">{primaryCategory}</h4>
+                    <div className="h-[2px] flex-1 bg-gradient-to-r from-white/20 to-transparent" />
+                  </div>
+                  <div className="grid grid-cols-3 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+                    {items
+                      .filter((i) => !featuredIds.has(i.id))
+                      .map((item, index) => (
+                        <ProItemCard
+                          key={`${primaryCategory}-${item.id}-${index}`}
+                          item={item}
+                          currency={data.config.currency}
+                          compact
+                          onAdd={() => handleAddToCart(item)}
+                          formatImageUrl={formatImageUrl}
+                        />
+                      ))}
+                  </div>
+                </section>
+              );
+            }
+          }
+
+          // default: render all categories with item-level filtering
+          return data.categories.map((category) => {
+            const items = data.menu_by_category[category] || [];
+            return (
+              <section key={category} className="mb-20">
+                <div id={`category-${category}`} className="flex items-center gap-4 mb-10">
+                  <h4 className="text-4xl font-black tracking-tight italic uppercase">{category}</h4>
+                  <div className="h-[2px] flex-1 bg-gradient-to-r from-white/20 to-transparent" />
+                </div>
+                <div className="grid grid-cols-3 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+                  {items
+                    .filter((i) => !featuredIds.has(i.id))
+                    .filter((i) =>
+                      i.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                      i.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                      i.category.toLowerCase().includes(searchQuery.toLowerCase())
+                    )
+                    .map((item, index) => (
+                      <ProItemCard
+                        key={`${category}-${item.id}-${index}`}
+                        item={item}
+                        currency={data.config.currency}
+                        compact
+                        onAdd={() => handleAddToCart(item)}
+                        formatImageUrl={formatImageUrl}
+                      />
+                    ))}
+                </div>
+              </section>
+            );
+          });
+        })()}
       </main>
 
       {/* Customer Reviews Section */}
       <section id="reviews" className={`scroll-mt-32 max-w-7xl mx-auto px-6 py-20 relative z-20 transition-opacity duration-500 ${
         showCartModal || lastOrder || showReviewModal ? 'opacity-20 pointer-events-none' : 'opacity-100'
       }`}>
-        <div className="text-center mb-12">
-          <p className="font-body text-orange-500 text-sm font-semibold uppercase tracking-[0.2em] mb-2">What Our Customers Say</p>
-          <h2 className="font-display text-5xl md:text-6xl text-white">Customer Reviews</h2>
-        </div>
+            <div className="text-center mb-12">
+              <p className="font-body text-orange-500 text-sm font-semibold uppercase tracking-[0.2em] mb-2">What Our Customers Say</p>
+              <h2 className="font-display text-5xl md:text-6xl text-white">Customer Reviews</h2>
+            </div>
+
+            {/* chef illustration removed */}
 
         {reviews.length === 0 ? (
           <p className="text-center text-gray-400 text-lg">No reviews yet. Be the first to share your experience!</p>
