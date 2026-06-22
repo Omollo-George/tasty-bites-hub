@@ -15,7 +15,7 @@ function useCameraDrift({ ampRad = 0.08, zoomMin = 0.98, zoomMax = 1.02 }) {
   const groupRef = useRef();
 
   useFrame(({ clock, camera }) => {
-    const t = clock.getElapsedTime();
+    const t = clock.elapsedTime;
 
     // Side-to-side drift (approx ~5 degrees)
     const yaw = Math.sin(t * 0.22) * ampRad;
@@ -102,7 +102,7 @@ function WarmBokehLights({ count = 26 }) {
   const ref = useRef();
 
   useFrame(({ clock }) => {
-    const t = clock.getElapsedTime();
+    const t = clock.elapsedTime;
 
     // Subtle twinkle by moving points in place (single draw call)
     const pos = geometry.attributes.position;
@@ -305,7 +305,7 @@ function DustParticles({ amount = 300 }) {
   }, [count]);
 
   useFrame(({ clock }) => {
-    const t = clock.getElapsedTime();
+    const t = clock.elapsedTime;
     const geom = points.geometry;
     const pos = geom.attributes.position;
 
