@@ -19,7 +19,7 @@ const AdminSidebar: React.FC = () => {
   const token = getAdminToken()
 
   return (
-    <aside className="w-72 bg-slate-900 text-slate-300 border-r border-slate-700 p-6 min-h-screen sticky top-0">
+    <aside className="w-full md:w-72 bg-slate-900 text-slate-300 border-b border-slate-700 md:border-b-0 md:border-r p-6 min-h-[auto] md:min-h-screen md:sticky top-0">
       <div className="mb-10 px-4 flex flex-col gap-4">
         <TastyBitesIcon size={40} />
         <div>

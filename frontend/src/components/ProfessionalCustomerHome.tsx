@@ -516,10 +516,10 @@ const ProfessionalCustomerHome = () => {
           <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-orange-500/20 border border-orange-500/30 backdrop-blur-md text-orange-400 text-xs font-bold uppercase tracking-widest mb-6 animate-fade-in">
             <MapPin size={14} /> Now Delivering to your Location
           </div>
-          <h1 className="text-6xl md:text-8xl font-black mb-6 tracking-tighter leading-none">
+          <h1 className="text-5xl md:text-8xl font-black mb-6 tracking-tighter leading-none">
             {data.hero.title}
           </h1>
-          <p className="text-lg md:text-2xl text-gray-300 font-light mb-10 max-w-2xl mx-auto leading-relaxed">
+          <p className="text-base md:text-2xl text-gray-300 font-light mb-10 max-w-2xl mx-auto leading-relaxed">
             {data.hero.tagline}
           </p>
           

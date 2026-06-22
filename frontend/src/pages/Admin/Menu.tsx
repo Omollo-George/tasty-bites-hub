@@ -144,6 +144,7 @@ const AdminMenu: React.FC = () => {
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>, isEditing: boolean) => {
     const file = e.target.files?.[0]
     if (!file) return
+    e.target.value = ''
 
     const localPreviewUrl = URL.createObjectURL(file)
     if (isEditing) {
@@ -459,7 +460,7 @@ const AdminMenu: React.FC = () => {
                 <div className="flex gap-2 flex-wrap">
                   <input
                     placeholder="https://example.com/image.jpg"
-                    className="min-w-[240px] flex-1 rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-slate-100"
+                    className="min-w-0 w-full flex-1 rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-slate-100"
                     value={newItem.image_url}
                     onChange={e => {
                       const value = e.target.value
@@ -487,7 +488,7 @@ const AdminMenu: React.FC = () => {
                 {(newItemPreviewUrl || newItem.image_url) && (
                   <img
                     src={newItemPreviewUrl || formatImageUrl(newItem.image_url)}
-                    className="h-20 w-32 object-cover rounded-lg mt-2 border border-slate-700" 
+                    className="h-20 max-w-full w-full sm:w-32 object-cover rounded-lg mt-2 border border-slate-700" 
                     alt="Preview" 
                     onError={() => setNewItemPreviewError(true)}
                     onLoad={() => setNewItemPreviewError(false)}
@@ -598,7 +599,7 @@ const AdminMenu: React.FC = () => {
                 <p className="text-xs text-slate-500">Paste a browser-accessible image URL or upload a local file.</p>
                 <div className="flex gap-2 flex-wrap">
                   <input 
-                    className="min-w-[240px] flex-1 rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-slate-100" 
+                    className="min-w-0 w-full flex-1 rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-slate-100" 
                     value={editingItem.image_url || ''} 
                     onChange={e => {
                       const value = e.target.value
@@ -625,7 +626,7 @@ const AdminMenu: React.FC = () => {
                 {(editItemPreviewUrl || editingItem.image_url) && (
                   <img
                     src={editItemPreviewUrl || formatImageUrl(editingItem.image_url)}
-                    className="h-20 w-32 object-cover rounded-lg mt-2 border border-slate-700" 
+                    className="h-20 max-w-full w-full sm:w-32 object-cover rounded-lg mt-2 border border-slate-700" 
                     alt="Preview" 
                     onError={() => setEditItemPreviewError(true)}
                     onLoad={() => setEditItemPreviewError(false)}
