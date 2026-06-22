@@ -286,7 +286,7 @@ const StaffPage: React.FC = () => {
             </div>
             <h1 className="font-display text-4xl text-slate-100 mt-1 uppercase tracking-tight">Staff Workstation</h1>
           </div>
-          <div className="flex gap-3">
+          <div className="flex flex-wrap gap-3 justify-end">
              {isAdmin && (
               <Link to="/admin" className="flex items-center gap-2 bg-slate-800 border border-slate-700 text-slate-300 px-5 py-3 rounded-xl font-bold hover:bg-slate-700 transition-all active:scale-95">
                 <Monitor size={20} />

@@ -70,15 +70,15 @@ const AdminHome: React.FC = () => {
 
   return (
     <>
-      <div className="flex items-center justify-between mb-8">
+      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between mb-8">
         <div>
           <p className="text-sm text-slate-400">Overview</p>
           <h2 className="font-display text-3xl text-slate-100">Admin Dashboard</h2>
         </div>
-        <div className="flex gap-3">
+        <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
           <button
             onClick={downloadBackup}
-            className="rounded-xl border border-blue-900/50 bg-slate-900 px-4 py-2.5 text-sm font-semibold text-blue-400 transition-all hover:bg-blue-950/30 shadow-lg shadow-blue-900/10 flex items-center gap-2"
+            className="w-full sm:w-auto rounded-xl border border-blue-900/50 bg-slate-900 px-4 py-2.5 text-sm font-semibold text-blue-400 transition-all hover:bg-blue-950/30 shadow-lg shadow-blue-900/10 flex items-center justify-center gap-2"
           >
             <Download size={16} />
             Download Backup
@@ -86,7 +86,7 @@ const AdminHome: React.FC = () => {
           <button
             onClick={clearAllData}
             disabled={loading}
-            className="rounded-xl border border-red-900/50 bg-slate-900 px-4 py-2.5 text-sm font-semibold text-red-400 transition-all hover:bg-red-950/30 disabled:opacity-50 shadow-lg shadow-red-900/10"
+            className="w-full sm:w-auto rounded-xl border border-red-900/50 bg-slate-900 px-4 py-2.5 text-sm font-semibold text-red-400 transition-all hover:bg-red-950/30 disabled:opacity-50 shadow-lg shadow-red-900/10"
           >
             {loading ? 'Clearing...' : 'Clear All Operational Data'}
           </button>
