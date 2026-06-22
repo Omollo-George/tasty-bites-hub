@@ -389,7 +389,7 @@ const AdminMenu: React.FC = () => {
       </div>
 
       <div className="grid gap-6 lg:grid-cols-[0.9fr_1.1fr]">
-        <section className="bg-slate-900 p-8 rounded-2xl shadow-sm border border-slate-800">
+        <section className="bg-slate-900 p-6 sm:p-8 rounded-2xl shadow-sm border border-slate-800">
           <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <p className="text-sm text-slate-400">Table Manager</p>
@@ -451,7 +451,7 @@ const AdminMenu: React.FC = () => {
             <h3 className="font-semibold text-xl text-slate-100">Add New Food</h3>
           </div>
           
-          <div className="mb-8 rounded-2xl bg-slate-950 p-6 border border-slate-800">
+          <div className="mb-8 rounded-2xl bg-slate-950 p-6 sm:p-8 border border-slate-800">
             <h4 className="text-sm font-semibold mb-3 text-slate-100">Add New Item</h4>
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 mb-3">
               <input
@@ -489,7 +489,7 @@ const AdminMenu: React.FC = () => {
               <div className="sm:col-span-2 lg:col-span-3 flex flex-col gap-2">
                 <label className="text-xs font-semibold text-slate-400">Food Image</label>
                 <p className="text-xs text-slate-500">Enter a public image URL or upload a local image file from your computer.</p>
-                <div className="flex gap-2 flex-wrap">
+                <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
                   <input
                     placeholder="https://example.com/image.jpg"
                     className="min-w-0 w-full flex-1 rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-slate-100"
@@ -512,7 +512,7 @@ const AdminMenu: React.FC = () => {
                     type="button"
                     onClick={() => fileInputRef.current?.click()}
                     disabled={uploading}
-                    className="rounded-lg border border-slate-700 bg-slate-800 px-4 py-2 text-xs font-semibold text-slate-100 hover:bg-slate-700 transition-colors disabled:opacity-50"
+                    className="w-full sm:w-auto rounded-lg border border-slate-700 bg-slate-800 px-4 py-2 text-xs font-semibold text-slate-100 hover:bg-slate-700 transition-colors disabled:opacity-50"
                   >
                     {uploading ? 'Uploading...' : 'Upload Local File'}
                   </button>
@@ -577,11 +577,11 @@ const AdminMenu: React.FC = () => {
                       <p className="font-semibold text-slate-100">{item.name}</p>
                       <p className="text-sm text-slate-400">{item.category} • {item.description || 'No description'}</p>
                     </div>
-                    <div className="flex items-center gap-3">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
                       <span className="font-semibold text-slate-100">KES {item.price.toFixed(2)}</span>
                       <button
                         onClick={() => setEditingItem(item)}
-                        className="rounded-lg bg-slate-800 border border-slate-600 px-4 py-1.5 text-sm font-medium text-slate-200 hover:bg-slate-700 transition-colors"
+                        className="w-full sm:w-auto rounded-lg bg-slate-800 border border-slate-600 px-4 py-1.5 text-sm font-medium text-slate-200 hover:bg-slate-700 transition-colors"
                       >
                         Edit
                       </button>

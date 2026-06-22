@@ -307,19 +307,21 @@ const AdminEmployees: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <p className="text-sm text-muted-foreground">Personnel</p>
           <h2 className="font-display text-3xl">Employees Management</h2>
         </div>
-        <div className="flex items-center gap-4">
-          <input
-            type="text"
-            placeholder="Search by name or role..."
-            className="rounded-xl border border-slate-600 bg-slate-800 px-4 py-2.5 text-sm text-slate-200 outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 w-64 transition-all"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-          />
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+          <div className="min-w-0">
+            <input
+              type="text"
+              placeholder="Search by name or role..."
+              className="w-full rounded-xl border border-slate-600 bg-slate-800 px-4 py-2.5 text-sm text-slate-200 outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 transition-all"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+          </div>
           {selectedIds.length > 0 && (
             <div className="flex gap-2">
               <button 

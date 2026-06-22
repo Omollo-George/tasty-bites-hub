@@ -19,12 +19,12 @@ const AdminSidebar: React.FC = () => {
   const token = getAdminToken()
 
   return (
-    <aside className="w-full md:w-72 bg-slate-900 text-slate-300 border-b border-slate-700 md:border-b-0 md:border-r p-6 min-h-[auto] md:min-h-screen md:sticky top-0">
-      <div className="mb-10 px-4 flex flex-col gap-4">
-        <TastyBitesIcon size={40} />
+    <aside className="w-full md:w-72 bg-slate-900 text-slate-300 border-b border-slate-700 md:border-b-0 md:border-r p-4 md:p-6 min-h-[auto] md:min-h-screen md:sticky top-0 flex-shrink-0 overflow-y-auto">
+      <div className="mb-8 md:mb-10 px-2 md:px-4 flex flex-col gap-4">
+        <TastyBitesIcon size={36} />
         <div>
           <p className="text-[10px] uppercase tracking-[0.4em] text-[#d69e2e] font-bold mb-1">Hotel Management</p>
-          <h2 className="font-display text-2xl text-white tracking-tight">Tasty Bites Hub<span className="text-[#d69e2e]">.</span></h2>
+          <h2 className="font-display text-xl md:text-2xl text-white tracking-tight">Tasty Bites Hub<span className="text-[#d69e2e]">.</span></h2>
         </div>
       </div>
       <nav className="flex flex-col gap-3">

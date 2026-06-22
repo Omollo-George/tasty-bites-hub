@@ -512,19 +512,19 @@ const ProfessionalCustomerHome = () => {
         <img src={heroImage || data.hero.image_url} className="absolute inset-0 w-full h-full object-cover scale-105" alt="Hero" />
         <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-black/20 to-[#0a0a0b]" />
         
-        <div className="relative z-10 text-center px-4 max-w-4xl">
-          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-orange-500/20 border border-orange-500/30 backdrop-blur-md text-orange-400 text-xs font-bold uppercase tracking-widest mb-6 animate-fade-in">
+        <div className="relative z-10 text-center px-4 max-w-4xl mx-auto">
+          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-orange-500/20 border border-orange-500/30 backdrop-blur-md text-orange-400 text-[10px] font-bold uppercase tracking-widest mb-6 animate-fade-in">
             <MapPin size={14} /> Now Delivering to your Location
           </div>
-          <h1 className="text-5xl md:text-8xl font-black mb-6 tracking-tighter leading-none">
+          <h1 className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-black mb-6 tracking-tighter leading-tight">
             {data.hero.title}
           </h1>
-          <p className="text-base md:text-2xl text-gray-300 font-light mb-10 max-w-2xl mx-auto leading-relaxed">
+          <p className="text-sm sm:text-base md:text-lg text-gray-300 font-light mb-10 max-w-2xl mx-auto leading-relaxed">
             {data.hero.tagline}
           </p>
           
           {/* Glassmorphic CTA */}
-          <div className="flex flex-col md:flex-row items-center justify-center gap-4">
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
             <div className="relative w-full md:w-96 group">
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 group-focus-within:text-orange-500 transition-colors" size={20} />
               <input 
@@ -542,7 +542,7 @@ const ProfessionalCustomerHome = () => {
         </div>
       </header>
 
-      <main id="menu" className={`scroll-mt-32 max-w-7xl mx-auto px-6 -mt-20 relative z-20 transition-opacity duration-500 ${
+      <main id="menu" className={`scroll-mt-32 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 -mt-20 relative z-20 transition-opacity duration-500 ${
         showCartModal || lastOrder ? 'opacity-20 pointer-events-none' : 'opacity-100'
       }`}>
         {/* Category Navigation */}
@@ -565,7 +565,7 @@ const ProfessionalCustomerHome = () => {
               <Flame className="text-orange-500 fill-orange-500" /> Trending Now
             </h3>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
             {data.featured.map(item => ( // Pass onAdd to ProItemCard
               <ProItemCard key={item.id} item={item} currency={data.config.currency} onAdd={() => handleAddToCart(item)} formatImageUrl={formatImageUrl} />
             ))}
@@ -658,7 +658,7 @@ const ProItemCard = ({
   formatImageUrl
 }: { item: RawMenuItem; currency: string; compact?: boolean; onAdd: () => void; formatImageUrl: (url?: string) => string }) => (
   <div className="group relative bg-white/5 border border-white/10 rounded-[2.5rem] overflow-hidden backdrop-blur-sm transition-all duration-500 hover:bg-white/10 hover:border-white/20 hover:-translate-y-2">
-    <div className={`relative ${compact ? 'h-48' : 'h-64'} overflow-hidden`}>
+    <div className={`relative ${compact ? 'h-48' : 'h-56 sm:h-64'} overflow-hidden`}>
       <img 
         src={formatImageUrl(item.image_url)} 
         className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" 
