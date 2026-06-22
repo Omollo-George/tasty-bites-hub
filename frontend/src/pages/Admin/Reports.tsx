@@ -400,18 +400,20 @@ const Reports: React.FC = () => {
 
   return (
     <div className="space-y-8">
-      <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+      <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
         <div>
           <p className="text-sm text-slate-400">Reports</p>
           <h2 className="font-display text-3xl text-slate-100">Sales & Cost Insights</h2>
         </div>
-        <div className="flex items-center gap-3">
-          <label className="text-sm text-slate-400">Period Type</label>
-          <select
-            className="rounded-full border border-slate-700 bg-slate-800 px-4 py-2 text-sm text-slate-200"
-            value={selectedPeriodType}
-            onChange={(event) => setSelectedPeriodType(event.target.value as 'day' | 'week' | 'month' | 'year' | 'custom')}
-          >
+        <div className="flex flex-col gap-3 w-full xl:w-auto">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            <div className="min-w-0">
+              <label className="text-sm text-slate-400">Period Type</label>
+              <select
+                className="w-full rounded-full border border-slate-700 bg-slate-800 px-4 py-2 text-sm text-slate-200"
+                value={selectedPeriodType}
+                onChange={(event) => setSelectedPeriodType(event.target.value as 'day' | 'week' | 'month' | 'year' | 'custom')}
+              >
             <option value="day">Day</option>
             <option value="week">Week (Mon-Sun)</option>
             <option value="month">Month</option>
@@ -419,45 +421,45 @@ const Reports: React.FC = () => {
             <option value="custom">Custom Range</option>
           </select>
           {selectedPeriodType === 'custom' ? (
-            <>
+            <React.Fragment>
               <label className="text-sm text-slate-400">Start Date</label>
               <input
                 type="date"
                 value={customStartDate}
                 onChange={(event) => setCustomStartDate(event.target.value)}
-                className="rounded-full border border-slate-700 bg-slate-800 px-4 py-2 text-sm text-slate-200"
+                className="w-full rounded-full border border-slate-700 bg-slate-800 px-4 py-2 text-sm text-slate-200"
               />
               <label className="text-sm text-slate-400">End Date</label>
               <input
                 type="date"
                 value={customEndDate}
                 onChange={(event) => setCustomEndDate(event.target.value)}
-                className="rounded-full border border-slate-700 bg-slate-800 px-4 py-2 text-sm text-slate-200"
+                className="w-full rounded-full border border-slate-700 bg-slate-800 px-4 py-2 text-sm text-slate-200"
               />
-            </>
+            </React.Fragment>
           ) : (
-            <>
+            <React.Fragment>
               <label className="text-sm text-slate-400">Date</label>
               <input
                 type="date"
                 value={selectedDate}
                 onChange={(event) => setSelectedDate(event.target.value)}
-                className="rounded-full border border-slate-700 bg-slate-800 px-4 py-2 text-sm text-slate-200"
+                className="w-full rounded-full border border-slate-700 bg-slate-800 px-4 py-2 text-sm text-slate-200"
               />
-            </>
+            </React.Fragment>
           )}
           <button
             type="button"
             onClick={fetchReport}
             disabled={loading}
-            className="rounded-full border border-slate-700 bg-slate-800 px-5 py-2 text-sm font-semibold text-slate-100 hover:bg-slate-700 transition-transform disabled:cursor-not-allowed disabled:opacity-50"
+            className="w-full rounded-full border border-slate-700 bg-slate-800 px-5 py-2 text-sm font-semibold text-slate-100 hover:bg-slate-700 transition-transform disabled:cursor-not-allowed disabled:opacity-50"
           >
             {loading ? 'Refreshing…' : 'Refresh Report'}
           </button>
           <button
             type="button"
             onClick={downloadReport}
-            className="rounded-full bg-hero-gradient px-5 py-2 text-sm font-semibold text-primary-foreground hover:scale-105 transition-transform"
+            className="w-full rounded-full bg-hero-gradient px-5 py-2 text-sm font-semibold text-primary-foreground hover:scale-105 transition-transform"
           >
             Download CSV
           </button>
@@ -738,6 +740,8 @@ const Reports: React.FC = () => {
           </table>
         </div>
       </section>
+    </div>
+    </div>
     </div>
   )
 }

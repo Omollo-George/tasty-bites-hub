@@ -184,7 +184,7 @@ const AdminStock: React.FC = () => {
   };
 
   return (
-    <>
+    <React.Fragment>
       <div className="space-y-6">
       {/* Header Section */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -276,18 +276,19 @@ const AdminStock: React.FC = () => {
       </div>
 
       <div className="bg-slate-900 rounded-2xl shadow-sm overflow-hidden border border-slate-800">
-        <table className="w-full text-left border-collapse">
-          <thead className="bg-slate-950">
-            <tr className="text-[11px] font-bold uppercase tracking-wider text-slate-400 border-b border-slate-800">
-              <th className="px-6 py-4">Item Details</th>
-              <th className="px-6 py-4 text-center">Current Stock</th>
-              <th className="px-6 py-4 text-center">Min Level</th>
-              <th className="px-6 py-4">Pricing</th>
-              <th className="px-6 py-4">Status</th>
-              <th className="px-6 py-4 text-right">Actions</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-800">
+        <div className="overflow-x-auto">
+          <table className="min-w-[780px] w-full text-left border-collapse">
+            <thead className="bg-slate-950">
+              <tr className="text-[11px] font-bold uppercase tracking-wider text-slate-400 border-b border-slate-800">
+                <th className="px-6 py-4">Item Details</th>
+                <th className="px-6 py-4 text-center">Current Stock</th>
+                <th className="px-6 py-4 text-center">Min Level</th>
+                <th className="px-6 py-4">Pricing</th>
+                <th className="px-6 py-4">Status</th>
+                <th className="px-6 py-4 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-800">
             {loading ? (
               <tr><td colSpan={6} className="px-6 py-12 text-center text-slate-400">Loading inventory data...</td></tr>
             ) : filteredItems.length === 0 ? (
@@ -373,7 +374,7 @@ const AdminStock: React.FC = () => {
                   {menuItems.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
                 </select>
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-slate-400 mb-1">Quantity</label>
                   <input
@@ -519,7 +520,8 @@ const AdminStock: React.FC = () => {
         </div>
         </div>
       )}
-    </>
+    </div>
+    </React.Fragment>
   );
 };
 

@@ -346,11 +346,12 @@ const OrdersTable: React.FC = () => {
 
       {/* Orders Table */}
       {loading ? <p className="text-slate-400">Loading...</p> : (
-      <table className="w-full text-left table-fixed">
+      <div className="overflow-x-auto rounded-3xl border border-slate-700 bg-slate-900/10">
+        <table className="min-w-[820px] w-full text-left">
 
-        <thead>
-          <tr className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
-            <th className="py-2" style={{width: '28%'}}>Order</th>
+          <thead>
+            <tr className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+              <th className="py-2" style={{width: '28%'}}>Order</th>
             <th style={{width: '20%'}}>Items</th>
             <th style={{width: '8%'}}>Qty</th>
             <th style={{width: '14%'}}>Amount</th>
@@ -395,7 +396,8 @@ const OrdersTable: React.FC = () => {
             </tr>
           ))}
         </tbody>
-      </table>) }
+      </table>
+      </div>) }
     </div>
   )
 }
