@@ -509,47 +509,51 @@ const ProfessionalCustomerHome = () => {
         </div>
       </nav>
 
-      {/* Hero Section with Parallax Depth */}
-      <header id="home" className={`relative h-[85vh] flex items-center justify-center overflow-hidden transition-opacity duration-500 ${
+      {/* Hero Section with Premium Brand Presentation */}
+      <header id="home" className={`relative min-h-[85vh] flex items-center justify-center overflow-hidden transition-opacity duration-500 ${
         showCartModal || lastOrder ? 'opacity-20 pointer-events-none' : 'opacity-100'
       }`}>
-        <img src={heroImage || data.hero.image_url} className="absolute inset-0 w-full h-full object-cover scale-105" alt="Hero" />
-        <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-black/20 to-[#0a0a0b]" />
-        
-        <div className="relative z-10 text-center px-4 max-w-4xl mx-auto">
-          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-orange-500/20 border border-orange-500/30 backdrop-blur-md text-orange-400 text-[10px] font-bold uppercase tracking-widest mb-6 animate-fade-in">
-            <MapPin size={14} /> Now Delivering to your Location
-          </div>
-          <h1 className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-black mb-6 tracking-tighter leading-tight">
-            {data.hero.title}
-          </h1>
-          <p className="text-sm sm:text-base md:text-lg text-gray-300 font-light mb-10 max-w-2xl mx-auto leading-relaxed">
-            {data.hero.tagline}
-          </p>
-          
-          {/* Glassmorphic CTA */}
-          <div className="flex flex-col items-center gap-4 sm:flex-row sm:justify-center">
-            <div className="relative w-full md:w-96 group">
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 group-focus-within:text-orange-500 transition-colors" size={20} />
-              <input 
-                type="text" 
-                placeholder="Search the menu..." 
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full bg-white/10 border border-white/10 backdrop-blur-xl rounded-2xl py-4 pl-12 pr-4 outline-none focus:ring-2 focus:ring-orange-500/50 transition-all"
-              />
+        <img src={heroImage || data.hero.image_url} className="absolute inset-0 w-full h-full object-cover object-center scale-[1.08] transition-transform duration-1000" alt="Hero" />
+        <div className="absolute inset-0 bg-gradient-to-br from-slate-950/85 via-black/50 to-slate-950/95" />
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,_rgba(249,115,22,0.16),_transparent_20%),radial-gradient(circle_at_bottom_right,_rgba(255,255,255,0.08),_transparent_18%)] pointer-events-none" />
+
+        <div className="relative z-10 w-full px-4 sm:px-6 lg:px-8">
+          <div className="mx-auto flex max-w-6xl flex-col items-center text-center gap-9 py-16">
+            <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-slate-950/40 px-5 py-3 text-xs uppercase tracking-[0.35em] text-orange-300 shadow-lg shadow-orange-500/10 backdrop-blur-xl">
+              <MapPin size={14} /> Now Delivering to your Location
             </div>
-            <button onClick={() => scrollToCategory(data.categories[0])} className="w-full md:w-auto px-8 py-4 bg-orange-600 hover:bg-orange-500 rounded-2xl font-bold shadow-lg shadow-orange-600/20 transition-all hover:-translate-y-1"> {/* This button now scrolls to the first category */}
-              Find Food
-            </button>
-          </div>
-          <div className="mt-6 flex flex-col sm:flex-row items-center justify-center gap-3">
-            <Link to="/staff/login" className="w-full sm:w-auto rounded-2xl border border-white/20 bg-white/10 px-6 py-3 text-sm font-semibold text-white transition hover:bg-white/15">
-              Staff Login
-            </Link>
-            <Link to="/admin/login" className="w-full sm:w-auto rounded-2xl bg-orange-600 px-6 py-3 text-sm font-semibold text-white transition hover:bg-orange-500">
-              Admin Login
-            </Link>
+
+            <div className="space-y-6">
+              <p className="text-sm uppercase tracking-[0.45em] text-orange-400 opacity-90">Premium food service, refined</p>
+              <h1 className="text-5xl sm:text-6xl md:text-7xl font-black tracking-tight text-white leading-tight">{data.hero.title}</h1>
+              <p className="mx-auto max-w-3xl text-base sm:text-lg md:text-xl text-slate-300 leading-relaxed">{data.hero.tagline} Discover a polished ordering experience tailored for modern restaurants and professional service.</p>
+            </div>
+
+            <div className="w-full max-w-3xl rounded-[2.5rem] border border-white/10 bg-slate-950/50 p-5 shadow-2xl shadow-black/40 backdrop-blur-xl">
+              <div className="grid gap-4 sm:grid-cols-[1fr_auto] items-center">
+                <div className="relative">
+                  <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
+                  <input
+                    type="text"
+                    placeholder="Search the menu..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="w-full rounded-3xl border border-white/10 bg-white/5 py-4 pl-14 pr-4 text-white placeholder:text-slate-500 outline-none focus:border-orange-400 focus:bg-white/10 focus:ring-2 focus:ring-orange-500/15 transition"
+                  />
+                </div>
+                <button
+                  onClick={() => scrollToCategory(data.categories[0])}
+                  className="inline-flex items-center justify-center rounded-3xl bg-orange-500 px-8 py-4 text-sm font-semibold text-white shadow-lg shadow-orange-500/20 transition hover:bg-orange-400"
+                >
+                  Find Food
+                </button>
+              </div>
+              <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
+                <button type="button" onClick={() => scrollToCategory(data.categories[0])} className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-white transition hover:bg-white/10">Browse Menu</button>
+                <button type="button" onClick={handleRewardsClick} className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-white transition hover:bg-white/10">Rewards</button>
+                <Link to="/track" className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-white transition hover:bg-white/10">My Orders</Link>
+              </div>
+            </div>
           </div>
         </div>
       </header>
