@@ -461,21 +461,25 @@ const MenuSection = () => {
                 key={item.name}
                 className="bg-slate-900 rounded-xl p-6 shadow-card hover:shadow-[#d69e2e]/10 transition-shadow border border-slate-800 group"
               >
-                <div className="flex items-start justify-between mb-2">
-                  <h3 className="font-display text-2xl text-slate-100 group-hover:text-primary transition-colors">
-                    {item.name}
-                  </h3>
-                  {item.sku && <span className="text-xs text-slate-500 ml-2">{`SKU: ${item.sku}`}</span>}
-                  <div className="flex items-center gap-1">
+                <div className="flex flex-col gap-3 mb-2 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="min-w-0">
+                    <h3 className="font-display text-2xl text-slate-100 group-hover:text-primary transition-colors break-words">
+                      {item.name}
+                    </h3>
+                    {item.sku && <span className="block text-xs text-slate-500 mt-1">{`SKU: ${item.sku}`}</span>}
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
                     {item.spicy && <Flame className="w-4 h-4 text-primary" />}
                     {item.popular && <BadgeCheck className="w-4 h-4 text-secondary" />}
                   </div>
                 </div>
                 <p className="text-slate-400 text-sm mb-4">{item.description}</p>
 
-                <div className="flex items-center justify-between">
-                  {item.image_url && <img src={formatImageUrl(item.image_url)} alt={item.name} className="w-16 h-16 object-cover rounded-lg mr-4" />}
-                  <span className="font-display text-3xl text-gradient">{formatCurrency(item.price * rate)}</span>
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex flex-1 items-center gap-4 min-w-0">
+                    {item.image_url && <img src={formatImageUrl(item.image_url)} alt={item.name} className="w-16 h-16 object-cover rounded-lg" />}
+                    <span className="font-display text-3xl text-gradient break-words">{formatCurrency(item.price * rate)}</span>
+                  </div>
 
                   {activeItem === item.name ? (
                     <div className="flex flex-col gap-3 w-full max-w-sm">
