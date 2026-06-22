@@ -180,7 +180,8 @@ const AdminMenu: React.FC = () => {
       console.log('Image upload response data:', data || text)
 
       if (response.ok) {
-        const imageUrl = data?.url || data?.image_url || data?.image || ''
+        const rawImageUrl = data?.url || data?.image_url || data?.image || data?.path || ''
+        const imageUrl = rawImageUrl && !rawImageUrl.startsWith('http') ? formatImageUrl(rawImageUrl) : rawImageUrl
         if (imageUrl) {
           if (isEditing && editingItem) {
             setEditingItem({ ...editingItem, image_url: imageUrl })

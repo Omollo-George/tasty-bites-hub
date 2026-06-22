@@ -492,6 +492,8 @@ const ProfessionalCustomerHome = () => {
               Contact
             </a>
             <Link to="/track" className="hover:text-white transition-colors">My Orders</Link>
+            <Link to="/staff/login" className="hover:text-white transition-colors">Staff</Link>
+            <Link to="/admin/login" className="hover:text-white transition-colors">Admin</Link>
           </div>
           <button onClick={() => setShowReviewModal(true)} className="p-3 rounded-full bg-white/5 border border-white/10 backdrop-blur-md hover:bg-orange-500 transition-all group relative"><MessageSquareText size={20} className="group-hover:scale-110 transition-transform" /></button>
           <button onClick={() => setShowCartModal(true)} className="p-3 rounded-full bg-white/5 border border-white/10 backdrop-blur-md hover:bg-orange-500 transition-all group relative">
@@ -502,6 +504,14 @@ const ProfessionalCustomerHome = () => {
               </span>
             )}
           </button>
+        </div>
+        <div className="flex flex-wrap gap-3 mt-3 px-4 md:hidden justify-center">
+          <Link to="/staff/login" className="px-4 py-3 rounded-2xl bg-white/10 text-white border border-white/15 text-sm font-semibold hover:bg-white/15 transition-colors w-full sm:w-auto text-center">
+            Staff Workstation
+          </Link>
+          <Link to="/admin/login" className="px-4 py-3 rounded-2xl bg-orange-600 text-white text-sm font-semibold hover:bg-orange-500 transition-colors w-full sm:w-auto text-center">
+            Admin Portal
+          </Link>
         </div>
       </nav>
 
@@ -524,7 +534,7 @@ const ProfessionalCustomerHome = () => {
           </p>
           
           {/* Glassmorphic CTA */}
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+          <div className="flex flex-col items-center gap-4 sm:flex-row sm:justify-center">
             <div className="relative w-full md:w-96 group">
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 group-focus-within:text-orange-500 transition-colors" size={20} />
               <input 
@@ -538,6 +548,14 @@ const ProfessionalCustomerHome = () => {
             <button onClick={() => scrollToCategory(data.categories[0])} className="w-full md:w-auto px-8 py-4 bg-orange-600 hover:bg-orange-500 rounded-2xl font-bold shadow-lg shadow-orange-600/20 transition-all hover:-translate-y-1"> {/* This button now scrolls to the first category */}
               Find Food
             </button>
+          </div>
+          <div className="mt-6 flex flex-col sm:flex-row items-center justify-center gap-3">
+            <Link to="/staff/login" className="w-full sm:w-auto rounded-2xl border border-white/20 bg-white/10 px-6 py-3 text-sm font-semibold text-white transition hover:bg-white/15">
+              Staff Login
+            </Link>
+            <Link to="/admin/login" className="w-full sm:w-auto rounded-2xl bg-orange-600 px-6 py-3 text-sm font-semibold text-white transition hover:bg-orange-500">
+              Admin Login
+            </Link>
           </div>
         </div>
       </header>
