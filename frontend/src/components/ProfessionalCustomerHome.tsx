@@ -235,6 +235,10 @@ const ProfessionalCustomerHome = () => {
 
   const cartTotalItems = useMemo(() => cart.reduce((total, item) => total + item.quantity, 0), [cart]);
   const cartTotalPrice = useMemo(() => cart.reduce((total, item) => total + (item.price * item.quantity), 0), [cart]);
+  const featuredIds = useMemo(
+    () => new Set(data?.featured.map((item) => item.id) ?? []),
+    [data],
+  );
 
   const handleRedeemPoints = () => {
     if (points < 100) {
@@ -492,8 +496,6 @@ const ProfessionalCustomerHome = () => {
               Contact
             </a>
             <Link to="/track" className="hover:text-white transition-colors">My Orders</Link>
-            <Link to="/staff/login" className="hover:text-white transition-colors">Staff</Link>
-            <Link to="/admin/login" className="hover:text-white transition-colors">Admin</Link>
           </div>
           <button onClick={() => setShowReviewModal(true)} className="p-3 rounded-full bg-white/5 border border-white/10 backdrop-blur-md hover:bg-orange-500 transition-all group relative"><MessageSquareText size={20} className="group-hover:scale-110 transition-transform" /></button>
           <button onClick={() => setShowCartModal(true)} className="p-3 rounded-full bg-white/5 border border-white/10 backdrop-blur-md hover:bg-orange-500 transition-all group relative">
@@ -504,14 +506,6 @@ const ProfessionalCustomerHome = () => {
               </span>
             )}
           </button>
-        </div>
-        <div className="flex flex-wrap gap-3 mt-3 px-4 md:hidden justify-center">
-          <Link to="/staff/login" className="px-4 py-3 rounded-2xl bg-white/10 text-white border border-white/15 text-sm font-semibold hover:bg-white/15 transition-colors w-full sm:w-auto text-center">
-            Staff Workstation
-          </Link>
-          <Link to="/admin/login" className="px-4 py-3 rounded-2xl bg-orange-600 text-white text-sm font-semibold hover:bg-orange-500 transition-colors w-full sm:w-auto text-center">
-            Admin Portal
-          </Link>
         </div>
       </nav>
 
@@ -600,20 +594,23 @@ const ProfessionalCustomerHome = () => {
                 <div className="h-[2px] flex-1 bg-gradient-to-r from-white/20 to-transparent" />
               </div>
               <div className="grid grid-cols-3 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-                {items.filter(i => 
-                  i.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                  i.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                  i.category.toLowerCase().includes(searchQuery.toLowerCase())
-                ).map((item, index) => (
-                  <ProItemCard 
-                    key={`${category}-${item.id}-${index}`} 
-                    item={item} 
-                    currency={data.config.currency} 
-                    compact 
-                    onAdd={() => handleAddToCart(item)} 
-                    formatImageUrl={formatImageUrl} 
-                  />
-                ))}
+                {items
+                  .filter((i) => !featuredIds.has(i.id))
+                  .filter((i) =>
+                    i.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                    i.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                    i.category.toLowerCase().includes(searchQuery.toLowerCase())
+                  )
+                  .map((item, index) => (
+                    <ProItemCard
+                      key={`${category}-${item.id}-${index}`}
+                      item={item}
+                      currency={data.config.currency}
+                      compact
+                      onAdd={() => handleAddToCart(item)}
+                      formatImageUrl={formatImageUrl}
+                    />
+                  ))}
               </div>
             </section>
           );
@@ -678,7 +675,8 @@ const ProItemCard = ({
   <div className="group relative bg-white/10 border border-white/10 backdrop-blur-xl rounded-[2rem] overflow-hidden shadow-2xl shadow-black/25 transition-all duration-300 hover:-translate-y-0.5 hover:border-white/20 hover:bg-white/15">
     <div className={`relative ${compact ? 'h-24' : 'h-32 sm:h-36'} overflow-hidden`}>
       <img 
-        src={formatImageUrl(item.image_url)} 
+        src={item.image_url ? formatImageUrl(item.image_url) : 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=500&q=80'} 
+        onError={(event) => { event.currentTarget.src = 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=500&q=80' }}
         className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" 
         alt={item.name} 
       />
