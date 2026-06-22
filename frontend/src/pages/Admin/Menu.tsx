@@ -3,6 +3,7 @@ import { DEFAULT_MENU_ITEMS as CUSTOMER_DEFAULT_MENU_ITEMS } from '@/components/
 import { getApiUrl } from '@/lib/api'
 import { getAdminToken } from '@/lib/admin-session'
 import { formatImageUrl } from '@/lib/image'
+import { useToast } from '@/hooks/use-toast'
 
 type TableItem = {
   id: number
@@ -24,6 +25,7 @@ type MenuItemType = {
 }
 
 const AdminMenu: React.FC = () => {
+  const { toast } = useToast()
   const [tables, setTables] = useState<TableItem[]>([])
   const [menuItems, setMenuItems] = useState<MenuItemType[]>([])
   const [tableNumber, setTableNumber] = useState('')
@@ -153,6 +155,11 @@ const AdminMenu: React.FC = () => {
       setNewItemPreviewUrl(localPreviewUrl)
     }
 
+    if (!adminToken) {
+      alert('Please sign in as admin before uploading an image.')
+      return
+    }
+
     setUploading(true)
     const formData = new FormData()
     formData.append('image', file)
@@ -163,10 +170,17 @@ const AdminMenu: React.FC = () => {
         headers: { Authorization: `Bearer ${adminToken}` },
         body: formData,
       })
-      const data = await response.json()
-      console.log('Image upload response data:', data); // Log the response for debugging
+      const text = await response.text()
+      let data: any = null
+      try {
+        data = text ? JSON.parse(text) : null
+      } catch (parseError) {
+        console.warn('Upload response was not JSON:', parseError, text)
+      }
+      console.log('Image upload response data:', data || text)
+
       if (response.ok) {
-        const imageUrl = data.url || data.image_url || data.image; // Handle different backend property names
+        const imageUrl = data?.url || data?.image_url || data?.image || ''
         if (imageUrl) {
           if (isEditing && editingItem) {
             setEditingItem({ ...editingItem, image_url: imageUrl })
@@ -177,14 +191,32 @@ const AdminMenu: React.FC = () => {
             setNewItemPreviewUrl(imageUrl)
             setNewItemPreviewError(false)
           }
+          toast({
+            title: 'Image uploaded',
+            description: 'Your image is ready to use in the menu item.',
+          })
         } else {
-          alert('Upload successful, but no image URL returned from server.')
+          toast({
+            title: 'Missing image URL',
+            description: 'Upload succeeded but server returned no image URL.',
+            variant: 'destructive',
+          })
         }
       } else {
-        alert(data.error || 'Upload failed')
+        const message = data?.error || data?.details || text || 'Upload failed'
+        toast({
+          title: 'Upload Failed',
+          description: String(message),
+          variant: 'destructive',
+        })
       }
     } catch (err) {
-      alert('Error uploading image')
+      console.error('Image upload failed:', err)
+      toast({
+        title: 'Image Upload Failed',
+        description: 'Please check the server connection and try again.',
+        variant: 'destructive',
+      })
     } finally {
       setUploading(false)
     }
