@@ -565,7 +565,7 @@ const ProfessionalCustomerHome = () => {
               <Flame className="text-orange-500 fill-orange-500" /> Trending Now
             </h3>
           </div>
-      <div className="grid grid-cols-3 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
             {data.featured.map(item => ( // Pass onAdd to ProItemCard
               <ProItemCard key={item.id} item={item} currency={data.config.currency} onAdd={() => handleAddToCart(item)} formatImageUrl={formatImageUrl} />
             ))}
@@ -581,7 +581,7 @@ const ProfessionalCustomerHome = () => {
                 <h4 className="text-4xl font-black tracking-tight italic uppercase">{category}</h4>
                 <div className="h-[2px] flex-1 bg-gradient-to-r from-white/20 to-transparent" />
               </div>
-              <div className="grid grid-cols-3 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
                 {items.filter(i => 
                   i.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
                   i.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -657,32 +657,30 @@ const ProItemCard = ({
   onAdd,
   formatImageUrl
 }: { item: RawMenuItem; currency: string; compact?: boolean; onAdd: () => void; formatImageUrl: (url?: string) => string }) => (
-  <div className="group relative bg-white/5 border border-white/10 rounded-2xl overflow-hidden backdrop-blur-sm transition-all duration-500 hover:bg-white/10 hover:border-white/20 hover:-translate-y-1">
-    <div className={`relative ${compact ? 'h-32' : 'h-40 sm:h-48'} overflow-hidden`}>
+  <div className="group relative bg-slate-950/80 border border-slate-700 rounded-[2rem] overflow-hidden shadow-2xl shadow-black/20 transition-transform duration-300 hover:-translate-y-1 hover:border-orange-400 hover:bg-slate-900">
+    <div className={`relative ${compact ? 'h-28' : 'h-36 sm:h-40'} overflow-hidden`}>
       <img 
         src={formatImageUrl(item.image_url)} 
-        className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" 
+        className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" 
         alt={item.name} 
       />
-      <div className="absolute top-2 left-2 flex flex-wrap gap-1">
-        {item.popular && <span className="px-2 py-0.5 rounded-full bg-white/20 backdrop-blur-md border border-white/30 text-[8px] font-black uppercase tracking-tighter flex items-center gap-0.5"><Star size={8} fill="currentColor" /> Pop</span>}
-        {item.spicy && <span className="px-2 py-0.5 rounded-full bg-red-500/20 backdrop-blur-md border border-red-500/30 text-[8px] font-black uppercase tracking-tighter text-red-400">Hot</span>}
+      <div className="absolute top-3 left-3 flex flex-wrap gap-1">
+        {item.popular && <span className="px-2 py-1 rounded-full bg-orange-500/15 text-[10px] font-bold uppercase tracking-[0.2em] text-orange-200 border border-orange-500/30">Pop</span>}
+        {item.spicy && <span className="px-2 py-1 rounded-full bg-red-500/15 text-[10px] font-bold uppercase tracking-[0.2em] text-red-200 border border-red-500/30">Hot</span>}
       </div>
     </div>
     
-    <div className="p-3">
-      <div className="flex flex-col gap-1 mb-2">
-        <h5 className="text-sm font-bold group-hover:text-orange-500 transition-colors break-words line-clamp-1">{item.name}</h5>
-        <span className="text-sm font-black text-right sm:text-left">{formatCurrency(item.price, currency)}</span>
+    <div className="p-4 space-y-3">
+      <div className="space-y-1">
+        <h5 className="text-sm sm:text-base font-semibold text-white group-hover:text-orange-300 transition-colors line-clamp-1">{item.name}</h5>
+        <p className="text-sm font-bold text-orange-400">{formatCurrency(item.price, currency)}</p>
       </div>
-      <p className="text-gray-400 text-xs font-light leading-tight mb-3 line-clamp-1">
-        {item.description}
-      </p>
+      <p className="text-slate-400 text-[11px] sm:text-xs leading-tight line-clamp-2">{item.description}</p>
       <button 
         onClick={(e) => { e.stopPropagation(); onAdd(); }}
-        className="w-full py-2 px-2 rounded-lg bg-white text-black font-bold text-xs flex items-center justify-center gap-1 transition-all hover:bg-orange-500 hover:text-white"
+        className="w-full rounded-2xl bg-white text-slate-900 font-semibold text-xs sm:text-sm py-2 flex items-center justify-center gap-2 transition-all duration-200 hover:bg-orange-500 hover:text-white"
       >
-        <ShoppingCart size={12} /> Add
+        <ShoppingCart size={14} /> Add
       </button>
     </div>
   </div>
