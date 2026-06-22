@@ -565,7 +565,7 @@ const ProfessionalCustomerHome = () => {
               <Flame className="text-orange-500 fill-orange-500" /> Trending Now
             </h3>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
             {data.featured.map(item => ( // Pass onAdd to ProItemCard
               <ProItemCard key={item.id} item={item} currency={data.config.currency} onAdd={() => handleAddToCart(item)} formatImageUrl={formatImageUrl} />
             ))}
@@ -664,16 +664,16 @@ const ProItemCard = ({
         className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" 
         alt={item.name} 
       />
-      <div className="absolute top-4 left-4 flex gap-2">
+      <div className="absolute top-4 left-4 flex flex-wrap gap-2">
         {item.popular && <span className="px-3 py-1 rounded-full bg-white/20 backdrop-blur-md border border-white/30 text-[10px] font-black uppercase tracking-tighter flex items-center gap-1"><Star size={10} fill="currentColor" /> Popular</span>}
         {item.spicy && <span className="px-3 py-1 rounded-full bg-red-500/20 backdrop-blur-md border border-red-500/30 text-[10px] font-black uppercase tracking-tighter text-red-400">Spicy 🌶️</span>}
       </div>
     </div>
     
     <div className="p-6">
-      <div className="flex justify-between items-start mb-2">
-        <h5 className="text-xl font-bold group-hover:text-orange-500 transition-colors">{item.name}</h5>
-        <span className="text-lg font-black">{formatCurrency(item.price, currency)}</span>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between mb-2">
+        <h5 className="text-xl font-bold group-hover:text-orange-500 transition-colors break-words">{item.name}</h5>
+        <span className="text-lg font-black text-right sm:text-left">{formatCurrency(item.price, currency)}</span>
       </div>
       <p className="text-gray-400 text-sm font-light leading-relaxed mb-6 line-clamp-2">
         {item.description}
