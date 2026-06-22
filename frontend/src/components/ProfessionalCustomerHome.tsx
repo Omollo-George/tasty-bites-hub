@@ -69,6 +69,8 @@ const ProfessionalCustomerHome = () => {
   const [cart, setCart] = useState<CartItem[]>([]); // Cart state
   const [phoneNumber, setPhoneNumber] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
+  const [suggestions, setSuggestions] = useState<any[]>([]);
+  const [activeSuggestion, setActiveSuggestion] = useState<number>(-1);
   const [showCartModal, setShowCartModal] = useState(false); // State to control cart modal visibility
   const [lastOrder, setLastOrder] = useState<OrderReceipt | null>(null); // State to show receipt after checkout
   const [processing, setProcessing] = useState(false);
@@ -166,6 +168,27 @@ const ProfessionalCustomerHome = () => {
       });
     }
   };
+
+  const allMenuItems = useMemo(() => {
+    if (!data) return [];
+    return Object.values(data.menu_by_category).flat();
+  }, [data]);
+
+  useEffect(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) {
+      setSuggestions([]);
+      setActiveSuggestion(-1);
+      return;
+    }
+
+    const matches = allMenuItems
+      .filter((it: any) => it.name.toLowerCase().includes(q) || it.description.toLowerCase().includes(q))
+      .slice(0, 8);
+
+    setSuggestions(matches);
+    setActiveSuggestion(-1);
+  }, [searchQuery, allMenuItems]);
 
   const handleRewardsClick = () => {
     toast.info("Your Loyalty Status", {
@@ -538,8 +561,43 @@ const ProfessionalCustomerHome = () => {
                     placeholder="Search the menu..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    className="w-full rounded-3xl border border-white/10 bg-white/5 py-4 pl-14 pr-4 text-white placeholder:text-slate-500 outline-none focus:border-orange-400 focus:bg-white/10 focus:ring-2 focus:ring-orange-500/15 transition"
+                      onKeyDown={(e) => {
+                        if (e.key === 'ArrowDown') {
+                          e.preventDefault();
+                          setActiveSuggestion((s) => Math.min(s + 1, suggestions.length - 1));
+                        } else if (e.key === 'ArrowUp') {
+                          e.preventDefault();
+                          setActiveSuggestion((s) => Math.max(s - 1, 0));
+                        } else if (e.key === 'Enter') {
+                          if (activeSuggestion >= 0 && suggestions[activeSuggestion]) {
+                            const sel = suggestions[activeSuggestion];
+                            setSearchQuery(sel.name);
+                            scrollToCategory(sel.category);
+                          }
+                        }
+                      }}
+                      className="w-full rounded-3xl border border-white/10 bg-white/5 py-4 pl-14 pr-4 text-white placeholder:text-slate-500 outline-none focus:border-orange-400 focus:bg-white/10 focus:ring-2 focus:ring-orange-500/15 transition"
                   />
+
+                    {suggestions.length > 0 && (
+                      <div className="absolute left-0 right-0 mt-2 z-50">
+                        <div className="bg-slate-900/95 border border-white/10 rounded-xl shadow-xl overflow-hidden">
+                          {suggestions.map((s, i) => (
+                            <button
+                              key={s.id}
+                              onMouseDown={(ev) => { ev.preventDefault(); setSearchQuery(s.name); scrollToCategory(s.category); setSuggestions([]); }}
+                              className={`w-full text-left px-4 py-3 hover:bg-slate-800 transition flex items-center justify-between ${i === activeSuggestion ? 'bg-slate-800' : ''}`}
+                            >
+                              <div>
+                                <div className="font-semibold text-white truncate max-w-[320px]">{s.name}</div>
+                                <div className="text-xs text-slate-400">{s.category} • {formatCurrency(s.price, data.config.currency)}</div>
+                              </div>
+                              <div className="text-slate-400 text-xs">Add</div>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                 </div>
                 <button
                   onClick={() => scrollToCategory(data.categories[0])}
