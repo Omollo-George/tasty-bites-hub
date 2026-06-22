@@ -519,6 +519,7 @@ const ProfessionalCustomerHome = () => {
               Contact
             </a>
             <Link to="/track" className="hover:text-white transition-colors">My Orders</Link>
+            <Link to="/account" className="hover:text-white transition-colors">Account</Link>
           </div>
           <button onClick={() => setShowReviewModal(true)} className="p-3 rounded-full bg-white/5 border border-white/10 backdrop-blur-md hover:bg-orange-500 transition-all group relative"><MessageSquareText size={20} className="group-hover:scale-110 transition-transform" /></button>
           <button onClick={() => setShowCartModal(true)} className="p-3 rounded-full bg-white/5 border border-white/10 backdrop-blur-md hover:bg-orange-500 transition-all group relative">
