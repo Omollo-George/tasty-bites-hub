@@ -25,6 +25,15 @@ import OrderTracking from "./pages/OrderTracking";
 import StaffPage from "./pages/Admin/StaffPage";
 import StaffLogin from "./pages/Admin/StaffLogin";
 import StaffAuthGuard from "./components/StaffAuthGuard";
+import AccountIndex from "./pages/Customer/AccountIndex";
+import Orders from "./pages/Customer/Orders";
+import Inbox from "./pages/Customer/Inbox";
+import Reviews from "./pages/Customer/Reviews";
+import Vouchers from "./pages/Customer/Vouchers";
+import Wishlist from "./pages/Customer/Wishlist";
+import Following from "./pages/Customer/Following";
+import RecentlyViewed from "./pages/Customer/RecentlyViewed";
+import Settings from "./pages/Customer/Settings";
 
 const queryClient = new QueryClient();
 
@@ -56,6 +65,17 @@ const App = () => (
               <Route path="settings" element={<AdminSettings />} />
             </Route>
             <Route path="/track/:orderId?" element={<OrderTracking />} /> {/* New Customer Tracking Route */}
+            <Route path="/account/*" element={<Outlet />}>
+              <Route index element={<AccountIndex />} />
+              <Route path="orders" element={<Orders />} />
+              <Route path="inbox" element={<Inbox />} />
+              <Route path="reviews" element={<Reviews />} />
+              <Route path="vouchers" element={<Vouchers />} />
+              <Route path="wishlist" element={<Wishlist />} />
+              <Route path="following" element={<Following />} />
+              <Route path="settings" element={<Settings />} />
+              <Route path="recent" element={<RecentlyViewed />} />
+            </Route>
             
             {/* Staff Workstation Group - Separated from Admin Sidebar Layout */}
             <Route path="/staff/login" element={<StaffLogin />} />
