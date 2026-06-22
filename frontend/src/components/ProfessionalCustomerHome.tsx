@@ -553,6 +553,19 @@ const ProfessionalCustomerHome = () => {
                 <button type="button" onClick={handleRewardsClick} className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-white transition hover:bg-white/10">Rewards</button>
                 <Link to="/track" className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-white transition hover:bg-white/10">My Orders</Link>
               </div>
+              <div className="mt-4 overflow-x-auto no-scrollbar">
+                <div className="flex gap-4 py-2">
+                  {data.categories.map((cat, idx) => (
+                    <button
+                      key={cat}
+                      onClick={() => scrollToCategory(cat)}
+                      className={`whitespace-nowrap px-6 py-2 rounded-2xl border transition-all duration-300 font-bold ${idx === 0 ? 'bg-white text-black border-white' : 'bg-white/5 border-white/10 backdrop-blur-md hover:bg-white/10'}`}
+                    >
+                      {cat}
+                    </button>
+                  ))}
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -561,18 +574,6 @@ const ProfessionalCustomerHome = () => {
       <main id="menu" className={`scroll-mt-32 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 -mt-20 relative z-20 transition-opacity duration-500 ${
         showCartModal || lastOrder ? 'opacity-20 pointer-events-none' : 'opacity-100'
       }`}>
-        {/* Category Navigation */}
-        <div className="flex gap-4 overflow-x-auto pb-12 no-scrollbar">
-          {data.categories.map((cat, idx) => (
-            <button 
-              key={cat} 
-              onClick={() => scrollToCategory(cat)}
-              className={`whitespace-nowrap px-8 py-4 rounded-2xl border transition-all duration-300 font-bold ${idx === 0 ? 'bg-white text-black border-white' : 'bg-white/5 border-white/10 backdrop-blur-md hover:bg-white/10'}`}
-            >
-              {cat}
-            </button>
-          ))}
-        </div>
 
         {/* Featured Section */}
         <section className="mb-20">
