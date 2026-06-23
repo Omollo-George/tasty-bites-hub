@@ -79,10 +79,13 @@ const Reports: React.FC = () => {
   const fetchReport = async () => {
     setLoading(true)
     const token = getAdminToken()
+    const url = getApiUrl(`/payments/reports/summary/?${makeReportParams().toString()}`)
+    console.log('Fetching report from:', url, 'Token:', token ? 'present' : 'missing')
     try {
-      const res = await fetch(getApiUrl(`/payments/reports/summary/?${makeReportParams().toString()}`), {
+      const res = await fetch(url, {
         headers: { Authorization: `Bearer ${token}` }
       })
+      console.log('Report response status:', res.status)
       if (!res.headers.get("content-type")?.includes("application/json")) {
         // If the response is not JSON, it's likely a server error page or misconfiguration
         const errorText = await res.text();
@@ -90,6 +93,7 @@ const Reports: React.FC = () => {
         throw new Error("Invalid server response format. Check backend logs.");
       }
       const json = await res.json()
+      console.log('Report data received:', json)
       if (res.ok) {
         setData(json);
       } else {
@@ -97,7 +101,7 @@ const Reports: React.FC = () => {
         setData(null); // Clear previous data on error
       }
     } catch (error) {
-      console.error(error)
+      console.error('Error fetching report:', error)
       setData(null); // Clear previous data on error
     } finally {
       setLoading(false)
@@ -136,16 +140,20 @@ const Reports: React.FC = () => {
 
   const fetchWastage = async () => {
     const token = getAdminToken()
+    const url = getApiUrl(`/payments/reports/wastage/?${makeReportParams().toString()}`)
+    console.log('Fetching wastage logs from:', url)
     try {
-      const res = await fetch(getApiUrl(`/payments/reports/wastage/?${makeReportParams().toString()}`), {
+      const res = await fetch(url, {
         headers: { Authorization: `Bearer ${token}` }
       })
+      console.log('Wastage response status:', res.status)
       if (!res.headers.get("content-type")?.includes("application/json")) {
         const errorText = await res.text();
         console.error("Invalid response format from /reports/wastage/", res.status, errorText);
         throw new Error("Invalid server response format. Check backend logs.");
       }
       const json = await res.json()
+      console.log('Wastage data received:', json)
       if (res.ok) {
         setWastageLogs(json.wastage || []);
       } else {
@@ -153,26 +161,30 @@ const Reports: React.FC = () => {
         setWastageLogs([]); // Clear previous logs on error
       }
     } catch (error) {
-      console.error(error)
+      console.error('Error fetching wastage:', error)
       setWastageLogs([]); // Clear previous logs on error
     }
   }
 
   const fetchMisc = async () => {
     const token = getAdminToken()
+    const url = getApiUrl(`/payments/reports/miscellaneous/?${makeReportParams().toString()}`)
+    console.log('Fetching miscellaneous logs from:', url)
     try {
-      const res = await fetch(getApiUrl(`/payments/reports/miscellaneous/?${makeReportParams().toString()}`), {
+      const res = await fetch(url, {
         headers: { Authorization: `Bearer ${token}` }
       })
+      console.log('Miscellaneous response status:', res.status)
       if (!res.headers.get("content-type")?.includes("application/json")) {
         throw new Error("Invalid server response format.");
       }
       const json = await res.json()
+      console.log('Miscellaneous data received:', json)
       if (res.ok) {
         setMiscLogs(json.miscellaneous || []);
       }
     } catch (error) {
-      console.error(error)
+      console.error('Error fetching miscellaneous logs:', error)
     }
   }
 
@@ -400,69 +412,82 @@ const Reports: React.FC = () => {
 
   return (
     <div className="space-y-8">
-      <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
-        <div>
+      <div className="grid gap-6 xl:grid-cols-[0.75fr_0.25fr] xl:items-end">
+        <div className="space-y-2">
           <p className="text-sm text-slate-400">Reports</p>
           <h2 className="font-display text-3xl text-slate-100">Sales & Cost Insights</h2>
+          {!data && !loading && <p className="text-xs text-yellow-400 mt-2">⚠️ No data loaded. Click "Refresh Report" to fetch data.</p>}
         </div>
-        <div className="flex flex-col gap-3 w-full xl:w-auto">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-            <div className="min-w-0">
+
+        <div className="grid gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-slate-900 p-5 rounded-xl border border-slate-700">
+            <div>
               <label className="text-sm text-slate-400">Period Type</label>
               <select
                 className="w-full rounded-full border border-slate-700 bg-slate-800 px-4 py-2 text-sm text-slate-200"
                 value={selectedPeriodType}
                 onChange={(event) => setSelectedPeriodType(event.target.value as 'day' | 'week' | 'month' | 'year' | 'custom')}
               >
-            <option value="day">Day</option>
-            <option value="week">Week (Mon-Sun)</option>
-            <option value="month">Month</option>
-            <option value="year">Year</option>
-            <option value="custom">Custom Range</option>
-          </select>
-          {selectedPeriodType === 'custom' ? (
-            <React.Fragment>
-              <label className="text-sm text-slate-400">Start Date</label>
-              <input
-                type="date"
-                value={customStartDate}
-                onChange={(event) => setCustomStartDate(event.target.value)}
-                className="w-full rounded-full border border-slate-700 bg-slate-800 px-4 py-2 text-sm text-slate-200"
-              />
-              <label className="text-sm text-slate-400">End Date</label>
-              <input
-                type="date"
-                value={customEndDate}
-                onChange={(event) => setCustomEndDate(event.target.value)}
-                className="w-full rounded-full border border-slate-700 bg-slate-800 px-4 py-2 text-sm text-slate-200"
-              />
-            </React.Fragment>
-          ) : (
-            <React.Fragment>
-              <label className="text-sm text-slate-400">Date</label>
-              <input
-                type="date"
-                value={selectedDate}
-                onChange={(event) => setSelectedDate(event.target.value)}
-                className="w-full rounded-full border border-slate-700 bg-slate-800 px-4 py-2 text-sm text-slate-200"
-              />
-            </React.Fragment>
-          )}
-          <button
-            type="button"
-            onClick={fetchReport}
-            disabled={loading}
-            className="w-full rounded-full border border-slate-700 bg-slate-800 px-5 py-2 text-sm font-semibold text-slate-100 hover:bg-slate-700 transition-transform disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {loading ? 'Refreshing…' : 'Refresh Report'}
-          </button>
-          <button
-            type="button"
-            onClick={downloadReport}
-            className="w-full rounded-full bg-hero-gradient px-5 py-2 text-sm font-semibold text-primary-foreground hover:scale-105 transition-transform"
-          >
-            Download CSV
-          </button>
+                <option value="day">Day</option>
+                <option value="week">Week (Mon-Sun)</option>
+                <option value="month">Month</option>
+                <option value="year">Year</option>
+                <option value="custom">Custom Range</option>
+              </select>
+            </div>
+            <div>
+              {selectedPeriodType === 'custom' ? (
+                <div className="space-y-3">
+                  <div>
+                    <label className="text-sm text-slate-400">Start Date</label>
+                    <input
+                      type="date"
+                      value={customStartDate}
+                      onChange={(event) => setCustomStartDate(event.target.value)}
+                      className="w-full rounded-full border border-slate-700 bg-slate-800 px-4 py-2 text-sm text-slate-200"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm text-slate-400">End Date</label>
+                    <input
+                      type="date"
+                      value={customEndDate}
+                      onChange={(event) => setCustomEndDate(event.target.value)}
+                      className="w-full rounded-full border border-slate-700 bg-slate-800 px-4 py-2 text-sm text-slate-200"
+                    />
+                  </div>
+                </div>
+              ) : (
+                <div>
+                  <label className="text-sm text-slate-400">Date</label>
+                  <input
+                    type="date"
+                    value={selectedDate}
+                    onChange={(event) => setSelectedDate(event.target.value)}
+                    className="w-full rounded-full border border-slate-700 bg-slate-800 px-4 py-2 text-sm text-slate-200"
+                  />
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <button
+              type="button"
+              onClick={fetchReport}
+              disabled={loading}
+              className="w-full rounded-full border border-slate-700 bg-slate-800 px-5 py-2 text-sm font-semibold text-slate-100 hover:bg-slate-700 transition-transform disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {loading ? 'Refreshing…' : 'Refresh Report'}
+            </button>
+            <button
+              type="button"
+              onClick={downloadReport}
+              className="w-full rounded-full bg-hero-gradient px-5 py-2 text-sm font-semibold text-primary-foreground hover:scale-105 transition-transform"
+            >
+              Download CSV
+            </button>
+          </div>
         </div>
       </div>
 
@@ -740,8 +765,6 @@ const Reports: React.FC = () => {
           </table>
         </div>
       </section>
-    </div>
-    </div>
     </div>
   )
 }

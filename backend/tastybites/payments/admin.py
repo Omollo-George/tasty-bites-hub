@@ -1,5 +1,9 @@
 from django.contrib import admin
-from .models import Transaction, Table, Order, OrderItem, WastageLog, AdminUser, AdminToken, AppSettings, MiscellaneousExpense, MenuItem
+from .models import (
+    Transaction, Table, Order, OrderItem, WastageLog, AdminUser, AdminToken, 
+    AppSettings, MiscellaneousExpense, MenuItem, Employee, Review, StaffActivity, 
+    StaffToken, StockLog, AdminSessionLog
+)
 
 # Register your models here.
 
@@ -89,3 +93,49 @@ class AppSettingsAdmin(admin.ModelAdmin):
     list_display = ('default_phone', 'conversion_rate', 'delivery_rate_per_km', 'min_delivery_fee', 'base_currency', 'display_currency', 'updated_at')
     def has_add_permission(self, request):
         return not AppSettings.objects.exists()
+
+@admin.register(Employee)
+class EmployeeAdmin(admin.ModelAdmin):
+    list_display = ('name', 'role', 'username', 'phone', 'email', 'salary', 'status', 'created_at')
+    list_filter = ('role', 'status', 'created_at')
+    search_fields = ('name', 'username', 'phone', 'email', 'special_id')
+    readonly_fields = ('created_at',)
+
+@admin.register(Review)
+class ReviewAdmin(admin.ModelAdmin):
+    list_display = ('customer_name', 'rating', 'comment', 'created_at')
+    list_filter = ('rating', 'created_at')
+    search_fields = ('customer_name', 'comment')
+    readonly_fields = ('created_at',)
+
+@admin.register(StaffActivity)
+class StaffActivityAdmin(admin.ModelAdmin):
+    list_display = ('employee', 'action', 'order', 'created_at')
+    list_filter = ('employee', 'created_at', 'action')
+    search_fields = ('employee__name', 'action', 'order__order_id')
+    readonly_fields = ('created_at',)
+
+@admin.register(StaffToken)
+class StaffTokenAdmin(admin.ModelAdmin):
+    list_display = ('employee', 'token', 'created_at', 'expires_at', 'get_is_valid')
+    list_filter = ('created_at', 'expires_at')
+    search_fields = ('employee__name', 'token')
+    readonly_fields = ('token', 'created_at', 'get_is_valid')
+
+    @admin.display(boolean=True, description='Valid')
+    def get_is_valid(self, obj):
+        return obj.is_valid()
+
+@admin.register(StockLog)
+class StockLogAdmin(admin.ModelAdmin):
+    list_display = ('item', 'quantity', 'cost', 'created_at')
+    list_filter = ('item', 'created_at')
+    search_fields = ('item__name',)
+    readonly_fields = ('created_at',)
+
+@admin.register(AdminSessionLog)
+class AdminSessionLogAdmin(admin.ModelAdmin):
+    list_display = ('user', 'login_time', 'logout_time')
+    list_filter = ('login_time', 'logout_time')
+    search_fields = ('user__username',)
+    readonly_fields = ('login_time',)

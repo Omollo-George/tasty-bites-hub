@@ -30,13 +30,14 @@ load_dotenv(BASE_DIR / '.env')
 SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY', 'django-insecure-_@p9bh$hzz=4m+xdxf^%xq*b=-fzly00i+priz4tl$we#3y*q%')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG_VALUE = os.environ.get('DJANGO_DEBUG', os.environ.get('DEBUG', 'True'))
+# Default to False for production safety; only enable if explicitly set
+DEBUG_VALUE = os.environ.get('DJANGO_DEBUG', os.environ.get('DEBUG', 'False'))
 DEBUG = str(DEBUG_VALUE).strip().lower() in ('1', 'true', 'yes', 'on')
 
 # Allow local/dev hosts by default; override via env var if needed
 ALLOWED_HOSTS = os.environ.get(
     'ALLOWED_HOSTS',
-    '127.0.0.1,localhost,[::1],.sevalla.app,.sevalla.page,.onrender.com,tastybites-backend-oj7lu-hdnu8.sevalla.app,tastybites-oj7lu-hdnu8.sevalla.app'
+    '127.0.0.1,localhost,[::1],.sevalla.app,.sevalla.page,.onrender.com,tastybites-backend-oj7lu-hdnu8.sevalla.app,tastybites-oj7lu-hdnu8.sevalla.app,.fly.dev,tasty-bites-hub.fly.dev'
 ).replace(' ', '').replace(';', ',').split(',')
 
 
@@ -216,7 +217,7 @@ CORS_ALLOW_HEADERS = list(default_headers) + ['Authorization', 'X-ADMIN-TOKEN', 
 # CSRF Trusted Origins for production
 CSRF_TRUSTED_ORIGINS = os.environ.get(
     'CSRF_TRUSTED_ORIGINS',
-    'http://localhost:5173,http://127.0.0.1:5173'
+    'http://localhost:5173,http://127.0.0.1:5173,https://tasty-bites-hub.fly.dev'
 ).replace(' ', '').replace(';', ',').split(',')
 # MPESA callback URL can be overridden via environment variable.
 
