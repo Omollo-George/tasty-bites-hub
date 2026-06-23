@@ -15,7 +15,7 @@ Including another URLconf
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
 from django.contrib import admin
-from django.urls import path, include
+from django.urls import path, include, re_path
 from django.http import JsonResponse, HttpResponse
 from django.conf import settings
 from django.conf.urls.static import static
@@ -43,12 +43,13 @@ def homepage(request):
 
 urlpatterns = [
     path('', homepage, name='homepage'),
-    path('admin/', admin.site.urls),
+    path('django-admin/', admin.site.urls),
     path('api/', health_check, name='api_root'),
     path('api/health/', health_check, name='health_check'),
     path('api/health', health_check), # No slash for compatibility
     path('api/payments/', include('payments.urls')),
     path('payments/', include('payments.urls')),  # Frontend expects /payments/ endpoint
+    re_path(r'^(?!(api/|payments/|media/|django-admin/)).*$', homepage),
 ]
 
 # Serve user-uploaded media files in all environments.

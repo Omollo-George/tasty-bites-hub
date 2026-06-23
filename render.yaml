@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: tasty-bites-hub
+    env: docker
+    plan: starter
+    region: oregon
+    dockerfilePath: Dockerfile
+    healthCheckPath: /api/health/
+
+databases:
+  - name: tasty-bites-hub-db
+    plan: starter
+    databaseName: tastybites
+    region: oregon
