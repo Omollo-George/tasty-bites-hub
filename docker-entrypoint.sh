@@ -6,6 +6,7 @@ set -e
 if [ -z "${PORT}" ]; then
   PORT=8000
 fi
+export PORT
 
 DB_WAIT_RETRIES=${DB_WAIT_RETRIES:-60}
 DB_WAIT_DELAY=${DB_WAIT_DELAY:-3}
