@@ -14,7 +14,11 @@
   ],
   "routes": [
     {
-      "src": "^/api/(.*)$",
+      "src": "^/api(/.*)?$",
+      "dest": "/backend/api/index.py"
+    },
+    {
+      "src": "^/payments(/.*)?$",
       "dest": "/backend/api/index.py"
     },
     {
