@@ -22,11 +22,31 @@
       "dest": "/backend/api/index.py"
     },
     {
+      "src": "^/assets/(.*)$",
+      "dest": "/frontend/assets/$1"
+    },
+    {
+      "src": "^/favicon\\.svg$",
+      "dest": "/frontend/favicon.svg"
+    },
+    {
+      "src": "^/logo\\.svg$",
+      "dest": "/frontend/logo.svg"
+    },
+    {
+      "src": "^/robots\\.txt$",
+      "dest": "/frontend/robots.txt"
+    },
+    {
+      "src": "^/_redirects$",
+      "dest": "/frontend/_redirects"
+    },
+    {
       "handle": "filesystem"
     },
     {
       "src": "^/(.*)$",
-      "dest": "/index.html"
+      "dest": "/frontend/index.html"
     }
   ]
 }
