@@ -157,7 +157,7 @@ const EmployeeTable: React.FC = () => {
     if (typeof window === 'undefined' || !window.EventSource) return;
     let es: EventSource | null = null;
     try {
-      es = new EventSource(getApiUrl('/payments/stream/'));
+      es = new EventSource('/payments/stream/');
       es.onmessage = (ev) => {
         try {
           const payload = JSON.parse(ev.data || '{}');

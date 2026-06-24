@@ -1,8 +1,53 @@
 export const getApiUrl = (path: string) => {
-  const envBase = import.meta.env.VITE_API_URL
-  const baseUrl = envBase || (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:8000')
-  const cleanedBase = baseUrl.replace(/\/$/, '')
-  return `${cleanedBase}${path}`
+  const normalizedPath = path.startsWith('/') ? path : `/${path}`
+
+  const normalizeLocalhost = (value: string) =>
+    value.replace(
+      /^https:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i,
+      (_match, host, port = '') => `http://${host}${port}`
+    )
+
+  const isLocalHttps = (value: string) =>
+    /^https:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(value)
+
+  const defaultLocalBackend = 'http://127.0.0.1:8000'
+
+  const envBase = import.meta.env.VITE_API_URL?.trim()
+  if (import.meta.env.DEV) {
+    if (envBase) {
+      const cleanedBase = envBase.replace(/\/$/, '')
+      const safeBase = normalizeLocalhost(cleanedBase)
+      return `${safeBase}${normalizedPath}`
+    }
+
+    if (typeof window !== 'undefined') {
+      const pageOrigin = window.location.origin.replace(/\/$/, '')
+      if (isLocalHttps(pageOrigin)) {
+        return `${defaultLocalBackend}${normalizedPath}`
+      }
+    }
+
+    return normalizedPath
+  }
+
+  if (envBase) {
+    const cleanedBase = envBase.replace(/\/$/, '')
+    const safeBase = normalizeLocalhost(cleanedBase)
+    return `${safeBase}${normalizedPath}`
+  }
+
+  if (typeof window === 'undefined') {
+    return `${defaultLocalBackend}${normalizedPath}`
+  }
+
+  const pageOrigin = window.location.origin.replace(/\/$/, '')
+  const normalizedOrigin = normalizeLocalhost(pageOrigin)
+
+  if (isLocalHttps(pageOrigin)) {
+    return `${defaultLocalBackend}${normalizedPath}`
+  }
+
+  return `${normalizedOrigin}${normalizedPath}`
 }
 
 export async function apiFetch(path: string, options?: RequestInit) {

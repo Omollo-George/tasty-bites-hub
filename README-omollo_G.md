@@ -80,7 +80,7 @@ This project is pre-configured for automated deployment on **Render** (as indica
     - Set `DJANGO_SECRET_KEY` and other secrets from `generate_secrets.py`.
 4.  **Deployment**: Vercel will build the frontend into `dist` and host the Django app as a serverless function via `backend/api/index.py`.
 
-## Deploying to Sevalla (Docker)
+## Deploying with Docker
 
 This repository includes a multi-stage `Dockerfile` that builds the frontend with Node and then builds the Python/Django backend. The frontend `dist` output is copied into Django's `staticfiles` folder so Whitenoise can serve assets in production.
 
@@ -91,9 +91,9 @@ docker build -t tastybites:latest .
 docker run -e DJANGO_DEBUG=False -e DJANGO_SECRET_KEY=changeme -p 8000:8000 tastybites:latest
 ```
 
-For Sevalla you'll typically push an image to a container registry (Docker Hub, GHCR, or a private registry) and then configure your Sevalla service to pull and run that image. If you'd like, I can add a GitHub Actions workflow to build and push images to your registry.
+For Vercel, use the root `vercel.json` configuration and set production environment variables in the Vercel dashboard.
 
-## Can I connect a custom domain to my Lovable project?
+## Can I connect a custom domain to my Vercel project?
 
 Yes, you can!
 

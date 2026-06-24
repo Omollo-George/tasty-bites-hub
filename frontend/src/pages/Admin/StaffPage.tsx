@@ -196,7 +196,7 @@ const StaffPage: React.FC = () => {
 
   // SSE listener for order ready notifications (waiter only)
   useEffect(() => {
-    const eventSource = new EventSource(getApiUrl('/payments/stream/'))
+    const eventSource = new EventSource('/payments/stream/')
     const staffId = getStaffId()
     const isWaiter = roleLower === 'waiter'
 

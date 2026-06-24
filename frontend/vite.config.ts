@@ -24,17 +24,23 @@ export default defineConfig({
     chunkSizeWarningLimit: 1000,
   },
   server: {
+    host: '127.0.0.1',
+    port: 5173,
+    strictPort: true,
+    https: false,
     proxy: {
       // Proxy API calls to the Django backend during local development
       '/api': {
-        target: 'http://localhost:8000',
+        target: 'http://127.0.0.1:8000',
         changeOrigin: true,
         secure: false,
+        ws: true,
       },
       '/payments': {
-        target: 'http://localhost:8000',
+        target: 'http://127.0.0.1:8000',
         changeOrigin: true,
         secure: false,
+        ws: true,
       },
     },
   },

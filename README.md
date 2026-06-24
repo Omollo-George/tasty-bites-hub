@@ -72,14 +72,53 @@ This project is pre-configured for automated deployment on **Render** (as indica
 
 ### Deploying to Vercel (Full Stack)
 1.  **Connect Repo**: Connect your repository to Vercel.
-2.  **Framework**: Vercel will detect Vite, but `vercel.json` will override it to handle the Python backend.
-3.  **Environment Variables**:
-    - Set `VITE_API_URL` to `/api` (or your full Vercel URL).
+2.  **Framework**: Vercel will detect Vite automatically, but the repository root `vercel.json` overrides build configuration to use `frontend/package.json` for the static frontend and `backend/api/index.py` for the Python backend.
+3.  **Root files**:
+    - `vercel.json` is configured to build the frontend and route `/api/*` and `/payments/*` requests to the Django backend.
+    - `backend/api/index.py` loads the Django WSGI application from `backend/tastybites`.
+    - `requirements.txt` in the repo root provides the Python packages needed by Vercel.
+4.  **Environment Variables**:
+    - Set `VITE_API_URL` to `/api` for same-origin routing in production.
     - Set `DATABASE_URL` to your external PostgreSQL instance.
-    - Set `DJANGO_SECRET_KEY` and other secrets from `generate_secrets.py`.
-4.  **Deployment**: Vercel will build the frontend into `dist` and host the Django app as a serverless function via `api/index.py`.
+    - Set `DJANGO_SECRET_KEY`, `DJANGO_DEBUG=False`, and other secrets from `generate_secrets.py`.
+5.  **Deployment**: Vercel will build the frontend into `dist` and host the Django app as a serverless function via `backend/api/index.py`.
+### Local development (recommended)
 
-## Deploying to Sevalla (Docker)
+For local development, start backend and frontend separately so the Vite dev server can proxy requests cleanly.
+
+1. Start Django backend:
+
+```bash
+cd backend/tastybites
+python manage.py runserver 8000
+```
+
+2. Start frontend dev server:
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+3. Open the app in your browser at:
+
+```text
+http://127.0.0.1:5173
+```
+
+> Important: do not open the backend URL directly in the browser. The frontend dev server must be used for local development so `/payments/...` requests proxy over HTTP.
+>
+> If Vite cannot bind to port `5173`, stop the process using that port and restart the frontend.
+
+The frontend will proxy API requests to `http://127.0.0.1:8000` using `frontend/.env.development`.
+
+Alternatively, run the helper script from the repo root:
+
+```powershell
+./start-local.ps1
+```
+## Deploying with Docker
 
 This repository includes a multi-stage `Dockerfile` that builds the frontend with Node and then builds the Python/Django backend. The frontend `dist` output is copied into Django's `staticfiles` folder so Whitenoise can serve assets in production.
 
@@ -96,9 +135,7 @@ Alternatively, if you have Docker Desktop with the Compose plugin installed, use
 docker compose up --build
 ```
 
-For Sevalla you'll typically push an image to a container registry (Docker Hub, GHCR, or a private registry) and then configure your Sevalla service to pull and run that image. If you'd like, I can add a GitHub Actions workflow to build and push images to your registry.
-
-## Can I connect a custom domain to my Lovable project?
+## Can I connect a custom domain to my Vercel project?
 
 Yes, you can!
 

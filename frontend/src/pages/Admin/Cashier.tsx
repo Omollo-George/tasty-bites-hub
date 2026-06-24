@@ -76,7 +76,7 @@ export default function Cashier() {
     fetchPendingBills();
     const interval = setInterval(fetchPendingBills, 3000);
 
-    const eventSource = new EventSource(getApiUrl('/payments/stream/'));
+    const eventSource = new EventSource('/payments/stream/');
     eventSource.onmessage = (event) => {
       try {
         const payload = JSON.parse(event.data);
