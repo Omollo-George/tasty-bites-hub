@@ -1120,36 +1120,43 @@ def customer_home(request):
     if request.method != 'GET':
         return HttpResponseBadRequest('Only GET allowed')
 
-    _ensure_menu_items(seed=True)
-    # Include items with 0 stock but mark them as unavailable for a pro "catalog" feel
-    items = MenuItem.objects.all()
-    
-    categories = list(items.values_list('category', flat=True).distinct().order_by('category'))
-    featured = items.filter(popular=True).order_by('?')[:5]
-    
-    grouped_menu = {}
-    for cat in categories:
-        grouped_menu[cat] = [_serialize_menu_item(i) for i in items.filter(category=cat)]
+    try:
+        _ensure_menu_items(seed=True)
+        # Include items with 0 stock but mark them as unavailable for a pro "catalog" feel
+        items = MenuItem.objects.all()
+        
+        categories = list(items.values_list('category', flat=True).distinct().order_by('category'))
+        featured = items.filter(popular=True).order_by('?')[:5]
+        
+        grouped_menu = {}
+        for cat in categories:
+            grouped_menu[cat] = [_serialize_menu_item(i) for i in items.filter(category=cat)]
 
-    return JsonResponse({
-        'hero': {
-            'title': 'TASTY BITES HUB',
-            'tagline': 'CRAFTED WITH PASSION, DELIVERED WITH PRECISION.',
-            'image_url': 'https://images.unsplash.com/photo-1514356015730-0739d598061f?q=80&w=1600',
-            'accent_color': '#f97316'
-        },
-        'categories': categories,
-        'featured': [_serialize_menu_item(i) for i in featured],
-        'menu_by_category': grouped_menu,
-        'config': {
-            'currency': 'KES',
-            'delivery_min': float(AppSettings.current().min_delivery_fee)
-        }
-    })
+        settings_obj = AppSettings.current()
+        return JsonResponse({
+            'hero': {
+                'title': 'TASTY BITES HUB',
+                'tagline': 'CRAFTED WITH PASSION, DELIVERED WITH PRECISION.',
+                'image_url': 'https://images.unsplash.com/photo-1514356015730-0739d598061f?q=80&w=1600',
+                'accent_color': '#f97316'
+            },
+            'categories': categories,
+            'featured': [_serialize_menu_item(i) for i in featured],
+            'menu_by_category': grouped_menu,
+            'config': {
+                'currency': 'KES',
+                'delivery_min': float(settings_obj.min_delivery_fee)
+            }
+        })
+    except Exception as exc:
+        logger.exception('customer_home failed')
+        return JsonResponse(
+            {'error': 'Unable to load home data at this time. Please try again later.'},
+            status=500
+        )
 
 
-
-def menu_items(request):
+ def menu_items(request):
 
     if request.method != 'GET':
         return HttpResponseBadRequest('Only GET allowed')
