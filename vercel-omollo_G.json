@@ -1,5 +1,6 @@
 {
-  "version": 2,
+  "version": 3,
+  "name": "tasty-bites-hub",
   "builds": [
     {
       "src": "frontend/package.json",
@@ -9,7 +10,7 @@
     {
       "src": "backend/api/index.py",
       "use": "@vercel/python",
-      "config": { "runtime": "python3.11" }
+      "config": { "runtime": "python3.12" }
     }
   ],
   "routes": [
