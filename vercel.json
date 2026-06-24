@@ -14,22 +14,18 @@
   ],
   "routes": [
     {
-      "src": "/api/(.*)",
+      "src": "^/api/(.*)$",
       "dest": "/backend/api/index.py"
     },
     {
-      "src": "/payments/(.*)",
-      "dest": "/backend/api/index.py"
-    },
-    {
-      "src": "/payments",
+      "src": "^/payments(?:/.*)?$",
       "dest": "/backend/api/index.py"
     },
     {
       "handle": "filesystem"
     },
     {
-      "src": "/(.*)",
+      "src": "^/(.*)$",
       "dest": "/index.html"
     }
   ]
