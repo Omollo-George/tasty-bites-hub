@@ -176,7 +176,7 @@ const OrdersTable: React.FC = () => {
   useEffect(() => {
     let es: EventSource | null = null;
     try {
-      es = new EventSource(getApiUrl('/payments/stream/'));
+      es = new EventSource('/payments/stream/');
       es.onmessage = (e) => {
         try {
           const payload = JSON.parse(e.data);

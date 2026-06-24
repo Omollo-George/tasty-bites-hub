@@ -1,12 +1,17 @@
 #!/bin/sh
 set -e
 
-# If PORT is unset or empty (some platforms inject an empty string),
-# ensure we set a sane default to avoid "'' is not a valid port number" errors.
-if [ -z "${PORT}" ]; then
+# If PORT is unset, empty, or only whitespace, set a sane default to avoid
+# "'' is not a valid port number" errors.
+if [ -z "$(printf '%s' "${PORT}" | tr -d '[:space:]')" ]; then
   PORT=8000
 fi
 export PORT
+
+echo "Runtime PORT value:'${PORT}'"
+if [ -z "$(printf '%s' "${PORT}" | tr -d '[:space:]')" ]; then
+  echo "PORT was empty or whitespace, defaulting to 8000"
+fi
 
 DB_WAIT_RETRIES=${DB_WAIT_RETRIES:-60}
 DB_WAIT_DELAY=${DB_WAIT_DELAY:-3}

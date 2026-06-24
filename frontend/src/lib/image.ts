@@ -18,8 +18,18 @@ export const formatImageUrl = (url?: string) => {
     return `${window.location.protocol}${trimmed}`
   }
 
-  const envBase = import.meta.env.VITE_API_URL
-  const baseUrl = (envBase || (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:8000')).replace(/\/api\/?$/, '')
+  const normalizeLocalhost = (value: string) =>
+    value.replace(
+      /^https:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i,
+      (_match, host, port = '') => `http://${host}${port}`
+    )
+
+  const envBase = import.meta.env.VITE_API_URL?.trim()
+  const defaultOrigin = typeof window !== 'undefined'
+    ? normalizeLocalhost(window.location.origin.replace(/\/$/, ''))
+    : 'http://localhost:8000'
+  const baseUrl = (envBase || defaultOrigin).replace(/\/api\/?$/, '')
+
   let path = trimmed.startsWith('/') ? trimmed : `/${trimmed}`
 
   if (path.startsWith('/menu_items/')) {

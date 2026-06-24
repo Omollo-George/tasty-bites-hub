@@ -74,7 +74,7 @@ const AdminKDS: React.FC = () => {
     fetchQueue(true);
     const interval = setInterval(fetchQueue, 5000); // Refresh every 5 seconds
 
-    const eventSource = new EventSource(getApiUrl('/payments/stream/'));
+    const eventSource = new EventSource('/payments/stream/');
     eventSource.onmessage = (event) => {
       try {
         const payload = JSON.parse(event.data);

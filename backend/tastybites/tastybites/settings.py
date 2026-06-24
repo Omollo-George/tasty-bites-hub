@@ -11,6 +11,7 @@ https://docs.djangoproject.com/en/6.0/ref/settings/
 """
 
 import os
+import sys
 from pathlib import Path
 import dj_database_url
 from dotenv import load_dotenv
@@ -37,8 +38,12 @@ DEBUG = str(DEBUG_VALUE).strip().lower() in ('1', 'true', 'yes', 'on')
 # Allow local/dev hosts by default; override via env var if needed
 ALLOWED_HOSTS = os.environ.get(
     'ALLOWED_HOSTS',
-    '127.0.0.1,localhost,[::1],.sevalla.app,.sevalla.page,.onrender.com,tastybites-backend-oj7lu-hdnu8.sevalla.app,tastybites-oj7lu-hdnu8.sevalla.app,.fly.dev,tasty-bites-hub.fly.dev'
+    '127.0.0.1,localhost,[::1],.vercel.app,.onrender.com,.fly.dev'
 ).replace(' ', '').replace(';', ',').split(',')
+
+# Force local development mode when running manage.py directly without explicit DEBUG env.
+if 'runserver' in sys.argv and os.environ.get('DJANGO_DEBUG', '').strip() == '':
+    DEBUG = True
 
 
 # Application definition
@@ -208,16 +213,21 @@ if not CORS_ALLOW_ALL_ORIGINS:
     # Ensure we handle multiple origins, trim whitespace, and remove trailing slashes
     CORS_ALLOWED_ORIGINS = [url.strip().rstrip('/') for url in frontend_url.split(',') if url.strip()] 
     if not CORS_ALLOWED_ORIGINS:
-        # Default to localhost:5173 for development (Vite's default port)
-        CORS_ALLOWED_ORIGINS = ['http://localhost:5173', 'http://127.0.0.1:5173']
+        # Default to local Vite development origins.
+        CORS_ALLOWED_ORIGINS = [
+            'http://localhost:5173',
+            'http://127.0.0.1:5173',
+            'http://localhost:5174',
+            'http://127.0.0.1:5174',
+        ]
 
 CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOW_HEADERS = list(default_headers) + ['Authorization', 'X-ADMIN-TOKEN', 'X-STAFF-TOKEN']
 
-# CSRF Trusted Origins for production
+# CSRF Trusted Origins for production and local development.
 CSRF_TRUSTED_ORIGINS = os.environ.get(
     'CSRF_TRUSTED_ORIGINS',
-    'http://localhost:5173,http://127.0.0.1:5173,https://tasty-bites-hub.fly.dev'
+    'http://localhost:5173,http://127.0.0.1:5173,https://localhost:5173,https://127.0.0.1:5173,http://localhost:5174,http://127.0.0.1:5174,https://localhost:5174,https://127.0.0.1:5174,https://tasty-bites-hub.fly.dev'
 ).replace(' ', '').replace(';', ',').split(',')
 # MPESA callback URL can be overridden via environment variable.
 
@@ -256,14 +266,14 @@ if not DEBUG:
     # This prevents ERR_SSL_PROTOCOL_ERROR during local testing with DEBUG=False
     SECURE_SSL_REDIRECT = os.environ.get('SECURE_SSL_REDIRECT', 'True') == 'True'
     
-    # Trust the X-Forwarded-Proto header from the Sevalla proxy
+    # Trust the X-Forwarded-Proto header from the hosting proxy
     SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
     
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
     SECURE_BROWSER_XSS_FILTER = True
     SECURE_CONTENT_SECURITY_POLICY = {
-        'default-src': ("'self'", "https://tastybites-oj7lu-hdnu8.sevalla.app"),
+        'default-src': ("'self'", "https:"),
         'img-src': ("'self'", "data:", "https:"),
-        'connect-src': ("'self'", "https://tastybites-backend-oj7lu-hdnu8.sevalla.app", "https://tastybites-oj7lu-hdnu8.sevalla.app"),
+        'connect-src': ("'self'", "https:"),
     }

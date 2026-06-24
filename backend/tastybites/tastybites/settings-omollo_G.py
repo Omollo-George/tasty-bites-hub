@@ -35,7 +35,7 @@ DEBUG = os.environ.get('DJANGO_DEBUG', 'True') == 'True'
 # Allow local/dev hosts by default; override via env var if needed
 ALLOWED_HOSTS = os.environ.get(
     'ALLOWED_HOSTS',
-    '127.0.0.1,localhost,[::1],.sevalla.app,.sevalla.page,.onrender.com,tastybites-backend-oj7lu-hdnu8.sevalla.app,tastybites-oj7lu-hdnu8.sevalla.app'
+    '127.0.0.1,localhost,[::1],.vercel.app,.onrender.com'
 ).replace(' ', '').replace(';', ',').split(',')
 
 
@@ -210,14 +210,14 @@ if not DEBUG:
     # This prevents ERR_SSL_PROTOCOL_ERROR during local testing with DEBUG=False
     SECURE_SSL_REDIRECT = os.environ.get('SECURE_SSL_REDIRECT', 'True') == 'True'
     
-    # Trust the X-Forwarded-Proto header from the Sevalla proxy
+    # Trust the X-Forwarded-Proto header from the hosting proxy
     SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
     
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
     SECURE_BROWSER_XSS_FILTER = True
     SECURE_CONTENT_SECURITY_POLICY = {
-        'default-src': ("'self'", "https://tastybites-oj7lu-hdnu8.sevalla.app"),
+        'default-src': ("'self'", "https:"),
         'img-src': ("'self'", "data:", "https:"),
-        'connect-src': ("'self'", "https://tastybites-backend-oj7lu-hdnu8.sevalla.app", "https://tastybites-oj7lu-hdnu8.sevalla.app"),
+        'connect-src': ("'self'", "https:"),
     }
