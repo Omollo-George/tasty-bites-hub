@@ -1,6 +1,5 @@
 {
-  "version": 3,
-  "name": "tasty-bites-hub",
+  "version": 2,
   "builds": [
     {
       "src": "frontend/package.json",
