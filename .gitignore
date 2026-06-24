@@ -61,3 +61,5 @@ staticfiles/
 *.sln
 *.sw?
 archive/
+.vercel
+.env*
