@@ -1,0 +1,67 @@
+> [debug] [2026-06-24T13:01:24.997Z] Found config in provided --local-config path C:\Users\omoll\tasty-bites-hub\vercel.json
+Vercel CLI 54.15.1 (Node.js 24.16.0)
+> [debug] [2026-06-24T13:01:25.227Z] Agent/TTY/nonInteractive: isAgent=true agentName=github_copilot_vscode_agent stdin.isTTY=true --non-interactive=false explicitFalse=false => nonInteractive=false
+> [debug] [2026-06-24T13:01:25.231Z] user supplied known subcommand: "build"
+WARNING! Build not running on Vercel. System environment variables will not be available.
+> [debug] [2026-06-24T13:01:25.498Z] Loaded environment variables from "C:\Users\omoll\tasty-bites-hub\.vercel\.env.preview.local"
+> [debug] [2026-06-24T13:01:25.713Z] Locating files C:\Users\omoll\tasty-bites-hub
+> [debug] [2026-06-24T13:01:25.714Z] Ignoring C:\Users\omoll\tasty-bites-hub\.dockerignore
+> [debug] [2026-06-24T13:01:25.716Z] Ignoring C:\Users\omoll\tasty-bites-hub\.env.local
+> [debug] [2026-06-24T13:01:25.716Z] Ignoring C:\Users\omoll\tasty-bites-hub\.git
+> [debug] [2026-06-24T13:01:25.716Z] Ignoring C:\Users\omoll\tasty-bites-hub\.gitignore
+> [debug] [2026-06-24T13:01:25.716Z] Ignoring C:\Users\omoll\tasty-bites-hub\.vercel
+> [debug] [2026-06-24T13:01:25.717Z] Ignoring C:\Users\omoll\tasty-bites-hub\__pycache__
+> [debug] [2026-06-24T13:01:25.721Z] Ignoring C:\Users\omoll\tasty-bites-hub\frontend\node_modules
+> [debug] [2026-06-24T13:01:25.727Z] Ignoring C:\Users\omoll\tasty-bites-hub\backend\tastybites\__pycache__
+> [debug] [2026-06-24T13:01:25.730Z] Ignoring C:\Users\omoll\tasty-bites-hub\backend\tastybites\tastybites\__pycache__
+> [debug] [2026-06-24T13:01:25.731Z] Ignoring C:\Users\omoll\tasty-bites-hub\backend\tastybites\payments\__pycache__
+> [debug] [2026-06-24T13:01:25.737Z] Ignoring C:\Users\omoll\tasty-bites-hub\backend\tastybites\payments\migrations\__pycache__
+> [debug] [2026-06-24T13:01:25.746Z] Locating files C:\Users\omoll\tasty-bites-hub [33ms]
+WARNING! Due to `builds` existing in your configuration file, the Build and Development Settings defined in your Project Settings will not apply. Learn More: https://vercel.link/unused-build-settings
+> [debug] [2026-06-24T13:01:26.270Z] Imported Builder "@vercel/static-build" from "C:\Users\omoll\AppData\Local\npm-cache\_npx\69f9afb961c37556\node_modules\@vercel\static-build"
+> [debug] [2026-06-24T13:01:26.336Z] Imported Builder "@vercel/python" from "C:\Users\omoll\AppData\Local\npm-cache\_npx\69f9afb961c37556\node_modules\@vercel\python"
+> [debug] [2026-06-24T13:01:26.336Z] Resolved builders: "@vercel/static-build => 2.11.1, @vercel/python => 6.47.1"
+> [debug] [2026-06-24T13:01:26.385Z] Setting env VERCEL_PROJECT_SETTINGS_NODE_VERSION to "24.x"
+> [debug] [2026-06-24T13:01:26.385Z] Building entrypoint "frontend/package.json" with "@vercel/static-build"
+Warning: Detected "engines": { "node": ">=20.0.0" } in your `package.json` that will automatically upgrade when a new major Node.js Version is released. Learn More: https://vercel.link/node-version
+Installing dependencies...
+
+up to date in 3s
+
+72 packages are looking for funding
+  run `npm fund` for details
+Running "npm run build"
+
+> build
+> vite build
+
+[36mvite v8.0.16 [32mbuilding client environment for production...[36m[39m
+[2Ktransforming...✓ 2870 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                         0.60 kB │ gzip:   0.36 kB
+dist/assets/hero-food-CWLNsrzY.jpg    162.63 kB
+dist/assets/index-C6v6w-ZM.css         95.72 kB │ gzip:  16.58 kB
+dist/assets/index-C72Ank0p.js       1,922.80 kB │ gzip: 530.77 kB
+
+[33m[33m[INEFFECTIVE_DYNAMIC_IMPORT] [0msrc/lib/admin-session.ts is dynamically imported by src/components/AdminAuthGuard.tsx, src/pages/Admin/Login.tsx but also statically imported by src/components/AdminAuthGuard.tsx, src/components/AdminAutomation.tsx, src/components/AdminHeader.tsx, src/components/AdminOrdersTable.tsx, src/components/AdminSidebar.tsx, ..., dynamic import will not move module into another chunk.
+[39m
+[33m[plugin builtin:vite-reporter] 
+(!) Some chunks are larger than 1000 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.[39m
+[33m[33m[PLUGIN_TIMINGS] [0mYour build spent significant time in plugins. Here is a breakdown:
+  - rolldown:vite-resolve (70%)
+  - vite:css (11%)
+See https://rolldown.rs/options/checks#plugintimings for more details.
+[39m
+[32m✓ built in 25.05s[39m
+> [debug] [2026-06-24T13:01:56.698Z] Setting env VERCEL_PROJECT_SETTINGS_NODE_VERSION to "24.x"
+> [debug] [2026-06-24T13:01:56.698Z] Building entrypoint "backend/api/index.py" with "@vercel/python"
+Error: uv is required but was not found in PATH.
+Learn More: https://vercel.link/python-version
+> [debug] [2026-06-24T13:01:58.952Z] Vercel CLI 54.15.1 (Node.js 24.16.0)
+
+> [debug] [2026-06-24T13:01:59.808Z] Telemetry subprocess killed due to timeout
+> [debug] [2026-06-24T13:01:59.858Z] Telemetry subprocess exited with code null
