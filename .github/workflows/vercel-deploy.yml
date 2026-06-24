@@ -42,11 +42,19 @@ jobs:
       - name: Install Vercel CLI
         run: npm install -g vercel
 
+      - name: Verify Vercel token
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          if [ -z "$VERCEL_TOKEN" ]; then
+            echo "ERROR: VERCEL_TOKEN secret is not configured. Add it under repository Settings > Secrets."
+            exit 1
+          fi
+
       - name: Deploy to Vercel
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
           VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
         run: |
-          # Deploy the prepared build to Vercel. Ensure `VERCEL_TOKEN` is set in repository secrets.
           vercel --prod --token "$VERCEL_TOKEN" --confirm
