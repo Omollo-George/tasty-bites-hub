@@ -60,4 +60,6 @@ if AUTO_MIGRATE or RUN_MIGRATE_ON_VERCEL:
 		print('Applying pending Django migrations on startup...')
 		call_command('migrate', '--noinput')
 	except Exception as exc:
-		print(f'Warning: automatic migration failed: {exc}')
+		import traceback
+		print('Warning: automatic migration failed:')
+		traceback.print_exc()
