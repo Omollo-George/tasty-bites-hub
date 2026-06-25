@@ -102,6 +102,12 @@ if os.environ.get('PORT', '').strip() == '':
 # "port=8000" appended to the DATABASE_URL string and fall back to sqlite
 # if parsing fails so the app doesn't crash with a confusing "'' is not a valid port number" error.
 raw_db_url = os.environ.get('DATABASE_URL', '') or None
+if not raw_db_url:
+    raw_db_url = os.environ.get('tastybites_POSTGRES_URL', '') or None
+if not raw_db_url:
+    raw_db_url = os.environ.get('tastybites_NILEDB_URL', '') or None
+if not raw_db_url:
+    raw_db_url = os.environ.get('tastybites_NILEDB_POSTGRES_URL', '') or None
 def add_sslmode_if_requested(url):
     if not url or 'sslmode=' in url:
         return url
