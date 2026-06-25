@@ -1,0 +1,6 @@
+﻿Vercel CLI 54.17.0 (Node.js 24.16.0)
+Retrieving projectΓÇª
+> Downloading `production` environment variables for omollo/tasty-bites-hub
+Downloading
+System.Management.Automation.RemoteException
+Γ£ô Created         .vercel.production.env file
