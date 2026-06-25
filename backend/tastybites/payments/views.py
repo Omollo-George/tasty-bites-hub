@@ -1156,11 +1156,9 @@ def customer_home(request):
         )
 
 
- def menu_items(request):
-
+def menu_items(request):
     if request.method != 'GET':
         return HttpResponseBadRequest('Only GET allowed')
-
 
     # Seed defaults unless explicitly disabled by the client.
     seed_flag = request.GET.get('seed', '1')
