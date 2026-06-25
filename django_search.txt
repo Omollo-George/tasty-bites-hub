@@ -1,0 +1,2 @@
+Django 6.0.3
+Path C:\Users\omoll\AppData\Roaming\Python\Python314\site-packages\django

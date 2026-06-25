@@ -8,7 +8,7 @@ import secrets
 import string
 
 def generate_django_secret():
-    """Generate a secure Django SECRET_KEY"""
+    """Generate a secure Django SECRET_KEY"""ul
     try:
         from django.core.management.utils import get_random_secret_key
         return get_random_secret_key()
