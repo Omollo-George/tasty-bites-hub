@@ -138,16 +138,22 @@ try:
                 conn_max_age=600
             )
         }
-    else:
+    elif DEBUG:
         DATABASES = {
             'default': dj_database_url.config(
                 default=f"sqlite:///{BASE_DIR / 'db.sqlite3'}",
                 conn_max_age=600
             )
         }
+    else:
+        raise RuntimeError(
+            'DATABASE_URL must be set in production. ' \
+            'Set a valid DATABASE_URL in your Vercel environment variables.'
+        )
 except Exception as e:
-    # Don't crash on startup due to a malformed DATABASE_URL — log and fall back
-    # to local sqlite so the process can start and we can inspect the environment.
+    if not DEBUG:
+        raise
+    # Don't crash on startup in development due to a malformed DATABASE_URL.
     print('WARNING: could not parse DATABASE_URL:', str(e))
     DATABASES = {
         'default': {

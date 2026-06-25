@@ -1,0 +1,30 @@
+﻿> [debug] [2026-06-25T07:42:27.679Z] Found config in file "C:\Users\omoll\tasty-bites-hub\vercel.json"
+Vercel CLI 54.17.0 (Node.js 24.16.0)
+> [debug] [2026-06-25T07:42:27.922Z] Agent/TTY/nonInteractive: isAgent=true agentName=github_copilot_vscode_agent stdin.isTTY=true --non-interactive=false explicitFalse=false => nonInteractive=false
+> [debug] [2026-06-25T07:42:27.923Z] user supplied known subcommand: "logs"
+> [debug] [2026-06-25T07:42:27.925Z] Valid access token, skipping token refresh.
+> [debug] [2026-06-25T07:42:27.960Z] #1 ΓåÆ GET https://api.vercel.com/v2/user
+> [debug] [2026-06-25T07:42:29.106Z] #1 ΓåÉ 200 OK: sfo1::pgn89-1782373350259-f54124cb2681 [1.15s]
+> [debug] [2026-06-25T07:42:29.119Z] #2 ΓåÆ GET https://api.vercel.com/v1/teams
+> [debug] [2026-06-25T07:42:29.507Z] #2 ΓåÉ 200 OK: sfo1::sc5w4-1782373350624-daa32e981d17 [388ms]
+> [debug] [2026-06-25T07:42:40.567Z] Spinner invoked (Resolving deployment "tasty-bites-hub.vercel.app") with a 1000ms delay
+> [debug] [2026-06-25T07:42:40.570Z] #3 ΓåÆ GET https://api.vercel.com/v13/deployments/tasty-bites-hub.vercel.app?teamId=team_KQbCNkM2QcRM876dVB0Pdp3v
+> [debug] [2026-06-25T07:42:41.226Z] #3 ΓåÉ 200 OK: sfo1::qglh5-1782373362089-a93951fc92d7 [656ms]
+> [debug] [2026-06-25T07:42:41.229Z] Spinner invoked (Fetching project "prj_TxD1a2RcuQqzlZTbvh9uEBQ0GB0j") with a 1000ms delay
+> [debug] [2026-06-25T07:42:41.230Z] #4 ΓåÆ GET https://api.vercel.com/v9/projects/prj_TxD1a2RcuQqzlZTbvh9uEBQ0GB0j?teamId=team_KQbCNkM2QcRM876dVB0Pdp3v
+> [debug] [2026-06-25T07:42:41.603Z] #4 ΓåÉ 200 OK: sfo1::brpqm-1782373362724-7b2cca388fe7 [373ms]
+> [debug] [2026-06-25T07:42:41.608Z] Spinner invoked (Fetching logs...) with a 1000ms delay
+> [debug] [2026-06-25T07:42:41.612Z] #5 ΓåÆ GET https://vercel.com/api/logs/request-logs?projectId=prj_TxD1a2RcuQqzlZTbvh9uEBQ0GB0j&ownerId=team_KQbCNkM2QcRM876dVB0Pdp3v&page=0&startDate=1782369761609&endDate=1782373361609&deploymentId=dpl_J6F9aihmTFRfmHDJL6ZmrjH2arZy&teamId=team_KQbCNkM2QcRM876dVB0Pdp3v
+> [debug] [2026-06-25T07:42:43.181Z] #5 ΓåÉ 200 OK: cpt1:cpt1:sfo1:sfo1:cpt1:sfo1:sfo1::sfo1::j6nnm-1782373363258-3a4b4c5643d6 [1.57s]
+TIME         HOST                                     LEVEL                                         STATUS  MESSAGE     
+10:20:34.55  tasty-bites-hub.vercel.app               error  ╬╗ GET /api/payments/reviews/           500     Internal SeΓÇª
+10:20:34.54  tasty-bites-hub.vercel.app               error  ╬╗ GET /api/payments/customer/home/     500     customer_hoΓÇª
+10:20:26.70  tasty-bites-hub.vercel.app               error  ╬╗ GET /api/payments/reviews/           500     Internal SeΓÇª
+10:20:26.70  tasty-bites-hub.vercel.app               error  ╬╗ GET /api/payments/customer/home/     500     customer_hoΓÇª
+10:20:13.89  tasty-bites-m58xiapme-omollo.vercel.app  error  ╬╗ GET /api/payments/reviews/           500     Failed to bΓÇª
+10:20:13.89  tasty-bites-m58xiapme-omollo.vercel.app  error  ╬╗ GET /api/payments/customer/home/     500     Failed to bΓÇª
+10:20:13.82  tasty-bites-m58xiapme-omollo.vercel.app  error  ╬╗ GET /api/payments/customer/home/     500     customer_hoΓÇª
+10:20:13.82  tasty-bites-m58xiapme-omollo.vercel.app  error  ╬╗ GET /api/payments/reviews/           500     Failed to bΓÇª
+Fetched 8 logs for omollo/tasty-bites-hub
+> [debug] [2026-06-25T07:42:45.458Z] Telemetry subprocess killed due to timeout
+> [debug] [2026-06-25T07:42:45.507Z] Telemetry subprocess exited with code null
