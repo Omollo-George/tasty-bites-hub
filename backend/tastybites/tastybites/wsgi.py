@@ -15,7 +15,7 @@ os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'tastybites.settings')
 
 # Optional DB readiness check at WSGI startup to avoid immediate runtime errors
 # when the database is transiently unavailable. Controlled via env vars:
-# DB_STARTUP_RETRIES (default 10), DB_STARTUP_DELAY (seconds).
+# DB_STARTUP_RETRIES (default 60), DB_STARTUP_DELAY (seconds).
 try:
 	DB_STARTUP_RETRIES = int(os.environ.get('DB_STARTUP_RETRIES', '60'))
 except Exception:
@@ -50,3 +50,14 @@ if DB_STARTUP_RETRIES > 0 and os.environ.get('DATABASE_URL'):
 				time.sleep(DB_STARTUP_DELAY)
 
 application = get_wsgi_application()
+
+# Automatically apply any pending migrations on startup in production.
+AUTO_MIGRATE = os.environ.get('DJANGO_AUTO_MIGRATE', '').strip().lower() in ('1', 'true', 'yes')
+RUN_MIGRATE_ON_VERCEL = os.environ.get('VERCEL', '') == '1' and os.environ.get('DJANGO_DEBUG', 'False').strip().lower() not in ('1', 'true', 'yes')
+if AUTO_MIGRATE or RUN_MIGRATE_ON_VERCEL:
+	try:
+		from django.core.management import call_command
+		print('Applying pending Django migrations on startup...')
+		call_command('migrate', '--noinput')
+	except Exception as exc:
+		print(f'Warning: automatic migration failed: {exc}')
