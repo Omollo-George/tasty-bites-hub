@@ -20,6 +20,21 @@ class PaymentsConfig(AppConfig):
         # Runs every 10 minutes. Daemon thread so it won't block shutdown.
         logger = logging.getLogger(__name__)
 
+        # If the DB tables for the payments app aren't present yet (migrations pending),
+        # skip starting the background index worker to avoid startup-time errors.
+        try:
+            from django.db import connection, utils as db_utils
+            with connection.cursor() as cur:
+                try:
+                    cur.execute('SELECT 1 FROM payments_menuitem LIMIT 1')
+                except db_utils.ProgrammingError:
+                    logger.info('payments_menuitem table not present yet; skipping index worker startup')
+                    return
+        except Exception:
+            # If DB is not reachable or other errors occur, avoid starting the worker.
+            logger.exception('DB check failed; skipping index worker startup')
+            return
+
         def _index_worker():
             try:
                 from . import views

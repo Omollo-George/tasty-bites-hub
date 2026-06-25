@@ -20,6 +20,7 @@ from django.http import StreamingHttpResponse
 from django.utils import timezone
 from django.core.mail import send_mail
 from django.views.decorators.csrf import csrf_exempt
+from django.db import utils as db_utils
 from django.core.exceptions import FieldError
 logger = logging.getLogger(__name__)
 from datetime import timedelta
@@ -2031,7 +2032,15 @@ def reviews_list(request):
     if request.method != 'GET':
         return HttpResponseBadRequest('Only GET allowed')
 
-    reviews = Review.objects.all().order_by('-created_at')
+    try:
+        reviews = Review.objects.all().order_by('-created_at')
+    except db_utils.ProgrammingError as e:
+        # Likely the table doesn't exist (migrations not applied) — return helpful message
+        return JsonResponse({
+            'error': 'Database table for reviews not found. Have you applied migrations?',
+            'details': str(e),
+        }, status=500)
+
     return JsonResponse({'reviews': [_serialize_review(r) for r in reviews]})
 
 

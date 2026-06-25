@@ -1,0 +1,3 @@
+This repository contains Vercel deployment/migration logs that are not valid JSON.
+The original .vercel_migrate_error.json file contained UTF-16/escaped log output and is replaced with a JSON pointer.
+If you need the original binary/text log, retrieve it from your deployment output or the CI logs.
