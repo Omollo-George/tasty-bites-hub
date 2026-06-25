@@ -2035,11 +2035,14 @@ def reviews_list(request):
     try:
         reviews = Review.objects.all().order_by('-created_at')
     except db_utils.ProgrammingError as e:
-        # Likely the table doesn't exist (migrations not applied) — return helpful message
-        return JsonResponse({
-            'error': 'Database table for reviews not found. Have you applied migrations?',
-            'details': str(e),
-        }, status=500)
+        # Table missing (migrations not yet applied) — avoid raising 500 in production.
+        # Return an empty reviews list so frontends don't break while migrations run.
+        try:
+            import logging
+            logging.getLogger('payments').warning('reviews table missing; returning empty list: %s', e)
+        except Exception:
+            pass
+        return JsonResponse({'reviews': []})
 
     return JsonResponse({'reviews': [_serialize_review(r) for r in reviews]})
 
