@@ -53,8 +53,10 @@ application = get_wsgi_application()
 
 # Automatically apply any pending migrations on startup in production.
 AUTO_MIGRATE = os.environ.get('DJANGO_AUTO_MIGRATE', '').strip().lower() in ('1', 'true', 'yes')
-RUN_MIGRATE_ON_VERCEL = os.environ.get('VERCEL', '') == '1' and os.environ.get('DJANGO_DEBUG', 'False').strip().lower() not in ('1', 'true', 'yes')
-if AUTO_MIGRATE or RUN_MIGRATE_ON_VERCEL:
+# By default do NOT auto-run migrations on Vercel — prefer running migrations
+# explicitly via CI or a deployment task. Auto-migration can leave the process
+# in a partially-migrated state if it fails during deploy.
+if AUTO_MIGRATE:
 	try:
 		from django.core.management import call_command
 		print('Applying pending Django migrations on startup...')
