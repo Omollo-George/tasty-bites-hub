@@ -52,8 +52,165 @@ interface HomeData {
   config: { currency: string; delivery_min: number };
 }
 
+const DEFAULT_HOME_DATA: HomeData = {
+  hero: {
+    title: 'TASTY BITES HUB',
+    tagline: 'CRAFTED WITH PASSION, DELIVERED WITH PRECISION.',
+    image_url: 'https://images.unsplash.com/photo-1514356015730-0739d598061f?q=80&w=1600',
+  },
+  categories: ['Burgers', 'Sides', 'Drinks', 'Desserts'],
+  featured: [
+    {
+      id: 1,
+      name: 'Classic Smash Burger',
+      description: 'Double patty, cheddar, pickles, special sauce',
+      price: 750,
+      category: 'Burgers',
+      image_url: 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=500&q=80',
+      popular: true,
+      spicy: false,
+      is_available: true,
+    },
+    {
+      id: 2,
+      name: 'Loaded Fries',
+      description: 'Cheese sauce, bacon bits, green onions',
+      price: 360,
+      category: 'Sides',
+      image_url: 'https://images.unsplash.com/photo-1573015084185-7205ba3d6ea8?w=500&q=80',
+      popular: true,
+      spicy: false,
+      is_available: true,
+    },
+    {
+      id: 3,
+      name: 'Classic Milkshake',
+      description: 'Vanilla, chocolate, or strawberry',
+      price: 420,
+      category: 'Drinks',
+      image_url: 'https://images.unsplash.com/photo-1572490122747-3968b75cc699?w=500&q=80',
+      popular: true,
+      spicy: false,
+      is_available: true,
+    },
+    {
+      id: 4,
+      name: 'Brownie Sundae',
+      description: 'Warm brownie, vanilla ice cream, hot fudge',
+      price: 460,
+      category: 'Desserts',
+      image_url: 'https://images.unsplash.com/photo-1551024506-0bccd828d307?w=500&q=80',
+      popular: true,
+      spicy: false,
+      is_available: true,
+    },
+  ],
+  menu_by_category: {
+    Burgers: [
+      {
+        id: 1,
+        name: 'Classic Smash Burger',
+        description: 'Double patty, cheddar, pickles, special sauce',
+        price: 750,
+        category: 'Burgers',
+        image_url: 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=500&q=80',
+        popular: true,
+        spicy: false,
+        is_available: true,
+      },
+      {
+        id: 2,
+        name: 'Spicy Chicken Burger',
+        description: 'Crispy chicken, jalapeños, sriracha mayo',
+        price: 780,
+        category: 'Burgers',
+        image_url: 'https://images.unsplash.com/photo-1610614819513-58e34989848b?w=500&q=80',
+        popular: false,
+        spicy: true,
+        is_available: true,
+      },
+    ],
+    Sides: [
+      {
+        id: 3,
+        name: 'Loaded Fries',
+        description: 'Cheese sauce, bacon bits, green onions',
+        price: 360,
+        category: 'Sides',
+        image_url: 'https://images.unsplash.com/photo-1573015084185-7205ba3d6ea8?w=500&q=80',
+        popular: true,
+        spicy: false,
+        is_available: true,
+      },
+      {
+        id: 4,
+        name: 'Onion Rings',
+        description: 'Beer-battered, crispy golden perfection',
+        price: 280,
+        category: 'Sides',
+        image_url: 'https://images.unsplash.com/photo-1499028344343-cd173ffc68a9?w=500&q=80',
+        popular: false,
+        spicy: false,
+        is_available: true,
+      },
+    ],
+    Drinks: [
+      {
+        id: 5,
+        name: 'Classic Milkshake',
+        description: 'Vanilla, chocolate, or strawberry',
+        price: 420,
+        category: 'Drinks',
+        image_url: 'https://images.unsplash.com/photo-1572490122747-3968b75cc699?w=500&q=80',
+        popular: true,
+        spicy: false,
+        is_available: true,
+      },
+      {
+        id: 6,
+        name: 'Fresh Lemonade',
+        description: 'Freshly squeezed with a hint of mint',
+        price: 290,
+        category: 'Drinks',
+        image_url: 'https://images.unsplash.com/photo-1504754524776-8f4f37790ca0?w=500&q=80',
+        popular: false,
+        spicy: false,
+        is_available: true,
+      },
+    ],
+    Desserts: [
+      {
+        id: 7,
+        name: 'Brownie Sundae',
+        description: 'Warm brownie, vanilla ice cream, hot fudge',
+        price: 460,
+        category: 'Desserts',
+        image_url: 'https://images.unsplash.com/photo-1551024506-0bccd828d307?w=500&q=80',
+        popular: true,
+        spicy: false,
+        is_available: true,
+      },
+      {
+        id: 8,
+        name: 'Apple Pie Bites',
+        description: 'Cinnamon sugar dusted, served warm',
+        price: 330,
+        category: 'Desserts',
+        image_url: 'https://images.unsplash.com/photo-1568571780765-9276ac8b75a2?w=500&q=80',
+        popular: false,
+        spicy: false,
+        is_available: true,
+      },
+    ],
+  },
+  config: {
+    currency: 'KES',
+    delivery_min: 0,
+  },
+};
+
 const ProfessionalCustomerHome = () => {
-  const [data, setData] = useState<HomeData | null>(null);
+  const [data, setData] = useState<HomeData | null>(DEFAULT_HOME_DATA);
   const [scrolled, setScrolled] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -86,13 +243,15 @@ const ProfessionalCustomerHome = () => {
         if (!homeRes.ok) {
           const text = await homeRes.text().catch(() => '');
           console.error('customer_home failed response:', homeRes.status, text);
-          throw new Error(`HTTP error! status: ${homeRes.status} from home data`);
+          setError(`HTTP error! status: ${homeRes.status} from home data`);
+          return;
         }
 
         const homeJson = await homeRes.json();
         if (!homeJson || !homeJson.menu_by_category) {
           console.error('customer_home returned invalid payload:', homeJson);
-          throw new Error('Invalid menu response from backend.');
+          setError('Invalid menu response from backend. Showing fallback menu.');
+          return;
         }
 
         setData(homeJson);
@@ -434,7 +593,6 @@ const ProfessionalCustomerHome = () => {
   };
 
   if (loading) return <div className="min-h-screen bg-black flex items-center justify-center text-white text-xl">Loading Experience...</div>;
-  if (error) return <div className="min-h-screen bg-black flex items-center justify-center text-red-500 text-lg p-4 text-center">Error: {error}</div>;
   if (!data) return <div className="min-h-screen bg-black flex items-center justify-center text-white text-lg">No menu data received. Check backend.</div>;
 
   return (
