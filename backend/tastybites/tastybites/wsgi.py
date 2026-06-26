@@ -53,10 +53,14 @@ application = get_wsgi_application()
 
 # Automatically apply any pending migrations on startup in production.
 AUTO_MIGRATE = os.environ.get('DJANGO_AUTO_MIGRATE', '').strip().lower() in ('1', 'true', 'yes')
-# By default do NOT auto-run migrations on Vercel — prefer running migrations
-# explicitly via CI or a deployment task. Auto-migration can leave the process
-# in a partially-migrated state if it fails during deploy.
-if AUTO_MIGRATE:
+# If not explicitly disabled, auto-run migrations in production containers when a
+# real DATABASE_URL is present. This helps avoid the common "payments schema"
+# failure mode caused by missing runtime migrations.
+if not AUTO_MIGRATE:
+    dj_debug = os.environ.get('DJANGO_DEBUG', os.environ.get('DEBUG', 'False')).strip().lower()
+    if os.environ.get('DATABASE_URL') and dj_debug not in ('1', 'true', 'yes', 'on'):
+        AUTO_MIGRATE = True
+# By default do NOT auto-run migrations on serverless/Vercel unless env opts in.
 	try:
 		from django.core.management import call_command
 		print('Applying pending Django migrations on startup...')
