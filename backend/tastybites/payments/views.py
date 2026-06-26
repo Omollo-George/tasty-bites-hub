@@ -1051,50 +1051,31 @@ def _serialize_table(table):
     }
 
 
+def _get_fallback_images():
+    """Get a pool of diverse food images for fallback when items lack image_url."""
+    return [
+        'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=500&q=80',  # Burger 1
+        'https://images.unsplash.com/photo-1610614819513-58e34989848b?w=500&q=80',  # Burger 2
+        'https://images.unsplash.com/photo-1553979459-d2229ba7433b?w=500&q=80',      # Burger 3
+        'https://images.unsplash.com/photo-1573015084185-7205ba3d6ea8?w=500&q=80',  # Fries
+        'https://images.unsplash.com/photo-1567620832903-9fc6debc209f?w=500&q=80',  # Wings
+        'https://images.unsplash.com/photo-1572490122747-3968b75cc699?w=500&q=80',  # Milkshake
+        'https://images.unsplash.com/photo-1551024506-0bccd828d307?w=500&q=80',      # Sundae
+        'https://images.unsplash.com/photo-1604068549290-dea0e4a305ca?w=500&q=80',  # Pizza
+        'https://images.unsplash.com/photo-1540189549336-e6e99c3679fe?w=500&q=80',  # Salad
+        'https://images.unsplash.com/photo-1504754524776-8f4f37790ca0?w=500&q=80',  # Lemonade
+        'https://images.unsplash.com/photo-1556679343-c7306c1976bc?w=500&q=80',      # Iced tea
+        'https://images.unsplash.com/photo-1568571780765-9276ac8b75a2?w=500&q=80',  # Apple pie
+    ]
+
+
 def _serialize_menu_item(menu_item):
     image_url = _normalize_image_url(menu_item.image_url)
     
-    # If no image URL, assign a varied default based on category and item id
+    # If no image URL, assign a varied default based on item id
     if not image_url:
-        default_images = {
-            'Burgers': [
-                'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=500&q=80',
-                'https://images.unsplash.com/photo-1610614819513-58e34989848b?w=500&q=80',
-                'https://images.unsplash.com/photo-1553979459-d2229ba7433b?w=500&q=80',
-                'https://images.unsplash.com/photo-1520201163981-8cc95007dd2a?w=500&q=80',
-            ],
-            'Sides': [
-                'https://images.unsplash.com/photo-1573015084185-7205ba3d6ea8?w=500&q=80',
-                'https://images.unsplash.com/photo-1499028344343-cd173ffc68a9?w=500&q=80',
-                'https://images.unsplash.com/photo-1567620832903-9fc6debc209f?w=500&q=80',
-                'https://images.unsplash.com/photo-1481833761820-0509d3217039?w=500&q=80',
-            ],
-            'Drinks': [
-                'https://images.unsplash.com/photo-1572490122747-3968b75cc699?w=500&q=80',
-                'https://images.unsplash.com/photo-1504754524776-8f4f37790ca0?w=500&q=80',
-                'https://images.unsplash.com/photo-1556679343-c7306c1976bc?w=500&q=80',
-                'https://images.unsplash.com/photo-1608270861620-7476ffd00d4d?w=500&q=80',
-            ],
-            'Desserts': [
-                'https://images.unsplash.com/photo-1551024506-0bccd828d307?w=500&q=80',
-                'https://images.unsplash.com/photo-1568571780765-9276ac8b75a2?w=500&q=80',
-                'https://images.unsplash.com/photo-1578985545062-69928b1d9587?w=500&q=80',
-                'https://images.unsplash.com/photo-1578477836815-02d583d114f1?w=500&q=80',
-            ],
-            'Pizza': [
-                'https://images.unsplash.com/photo-1604068549290-dea0e4a305ca?w=500&q=80',
-                'https://images.unsplash.com/photo-1571407387-4b7bb56675ef?w=500&q=80',
-                'https://images.unsplash.com/photo-1513689686128-93b740fceb83?w=500&q=80',
-            ],
-            'Salads': [
-                'https://images.unsplash.com/photo-1540189549336-e6e99c3679fe?w=500&q=80',
-                'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=500&q=80',
-                'https://images.unsplash.com/photo-1495521821757-a1efb6729352?w=500&q=80',
-            ],
-        }
-        category_images = default_images.get(menu_item.category, default_images['Sides'])
-        # Use item id as seed for consistent image selection
-        image_url = category_images[menu_item.id % len(category_images)]
+        fallback_images = _get_fallback_images()
+        image_url = fallback_images[menu_item.id % len(fallback_images)]
     
     return {
         'id': menu_item.id,
