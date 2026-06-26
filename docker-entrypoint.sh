@@ -51,7 +51,13 @@ PY
 
 wait_for_db
 
-if [ "${RUN_MIGRATIONS:-false}" = "true" ]; then
+DJANGO_DEBUG=${DJANGO_DEBUG:-false}
+DJANGO_DEBUG_LOWER=$(printf '%s' "$DJANGO_DEBUG" | tr '[:upper:]' '[:lower:]')
+if [ -z "${RUN_MIGRATIONS:-}" ] && [ "$DJANGO_DEBUG_LOWER" = "false" ] && [ -n "${DATABASE_URL:-}" ]; then
+  RUN_MIGRATIONS=true
+fi
+
+if [ "${RUN_MIGRATIONS}" = "true" ]; then
   echo "Running Django migrations..."
   python manage.py migrate --noinput
 fi
