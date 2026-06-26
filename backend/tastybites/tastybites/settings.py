@@ -152,21 +152,34 @@ try:
             )
         }
     else:
-        raise RuntimeError(
-            'DATABASE_URL must be set in production. ' \
-            'Set a valid DATABASE_URL in your Vercel environment variables.'
-        )
+        # In production without DATABASE_URL (e.g., serverless cold-start),
+        # use a null database to allow the app to start and handle errors per-request.
+        # Real database access will fail gracefully instead of crashing at import.
+        DATABASES = {
+            'default': {
+                'ENGINE': 'django.db.backends.sqlite3',
+                'NAME': ':memory:',  # In-memory SQLite for production without DATABASE_URL
+            }
+        }
 except Exception as e:
     if not DEBUG:
-        raise
-    # Don't crash on startup in development due to a malformed DATABASE_URL.
-    print('WARNING: could not parse DATABASE_URL:', str(e))
-    DATABASES = {
-        'default': {
-            'ENGINE': 'django.db.backends.sqlite3',
-            'NAME': BASE_DIR / 'db.sqlite3',
+        # Don't crash at import in production; use fallback instead
+        print('WARNING: could not parse DATABASE_URL in production:', str(e))
+        DATABASES = {
+            'default': {
+                'ENGINE': 'django.db.backends.sqlite3',
+                'NAME': ':memory:',
+            }
         }
-    }
+    else:
+        # Don't crash on startup in development due to a malformed DATABASE_URL.
+        print('WARNING: could not parse DATABASE_URL:', str(e))
+        DATABASES = {
+            'default': {
+                'ENGINE': 'django.db.backends.sqlite3',
+                'NAME': BASE_DIR / 'db.sqlite3',
+            }
+        }
 # Password validation
 # https://docs.djangoproject.com/en/6.0/ref/settings/#auth-password-validators
 

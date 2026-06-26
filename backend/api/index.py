@@ -1,25 +1,53 @@
 import os
 import sys
 import django
+import traceback
 
-# Path to the directory containing manage.py
-# Since this file is in 'api/', we go up one level to root, then into 'tastybites'
-project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "tastybites"))
-if project_root not in sys.path:
-    sys.path.insert(0, project_root)
+try:
+    # Path to the directory containing manage.py
+    # Since this file is in 'api/', we go up one level to root, then into 'tastybites'
+    project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "tastybites"))
+    if project_root not in sys.path:
+        sys.path.insert(0, project_root)
 
-# Set the Django settings module
-os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'tastybites.settings')
-os.environ.setdefault('DJANGO_DEBUG', 'False')
+    # Set the Django settings module
+    os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'tastybites.settings')
+    os.environ.setdefault('DJANGO_DEBUG', 'False')
 
-# Initialize Django
-django.setup()
+    # Initialize Django
+    django.setup()
 
-# Import the WSGI application
-from tastybites.wsgi import application
+    # Import the WSGI application
+    from tastybites.wsgi import application
 
-# Export for Vercel serverless
-app = application
-handler = application
+    # Export for Vercel serverless
+    app = application
+    handler = application
 
-__all__ = ["app", "handler"]
+    __all__ = ["app", "handler"]
+
+except Exception as e:
+    # Graceful fallback for serverless cold-start failures
+    import json
+    from django.http import JsonResponse
+    
+    error_msg = f"Backend initialization failed: {str(e)}"
+    print(f"ERROR: {error_msg}")
+    traceback.print_exc()
+    
+    # Create a minimal WSGI app that returns error responses
+    def app(environ, start_response):
+        response_body = json.dumps({
+            'error': 'backend_initialization_failed',
+            'message': error_msg,
+        }).encode('utf-8')
+        status = '500 Internal Server Error'
+        response_headers = [
+            ('Content-Type', 'application/json'),
+            ('Content-Length', str(len(response_body))),
+        ]
+        start_response(status, response_headers)
+        return [response_body]
+    
+    handler = app
+    __all__ = ["app", "handler"]

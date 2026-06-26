@@ -62,12 +62,6 @@ if not AUTO_MIGRATE:
     dj_debug = os.environ.get('DJANGO_DEBUG', os.environ.get('DEBUG', 'False')).strip().lower()
     if os.environ.get('DATABASE_URL') and dj_debug not in ('1', 'true', 'yes', 'on'):
         AUTO_MIGRATE = True
+
 # By default do NOT auto-run migrations on serverless/Vercel unless env opts in.
-	try:
-		from django.core.management import call_command
-		print('Applying pending Django migrations on startup...')
-		call_command('migrate', '--noinput')
-	except Exception as exc:
-		import traceback
-		print('Warning: automatic migration failed:')
-		traceback.print_exc()
+if AUTO_MIGRATE:
