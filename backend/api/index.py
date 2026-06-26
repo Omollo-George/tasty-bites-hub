@@ -2,6 +2,11 @@ import os
 import sys
 import django
 import traceback
+import json
+
+# Initialize at module scope so Vercel can find them
+app = None
+handler = None
 
 try:
     # Path to the directory containing manage.py
@@ -24,19 +29,14 @@ try:
     app = application
     handler = application
 
-    __all__ = ["app", "handler"]
-
 except Exception as e:
     # Graceful fallback for serverless cold-start failures
-    import json
-    from django.http import JsonResponse
-    
     error_msg = f"Backend initialization failed: {str(e)}"
     print(f"ERROR: {error_msg}")
     traceback.print_exc()
     
     # Create a minimal WSGI app that returns error responses
-    def app(environ, start_response):
+    def error_handler(environ, start_response):
         response_body = json.dumps({
             'error': 'backend_initialization_failed',
             'message': error_msg,
@@ -49,5 +49,5 @@ except Exception as e:
         start_response(status, response_headers)
         return [response_body]
     
-    handler = app
-    __all__ = ["app", "handler"]
+    app = error_handler
+    handler = error_handler
