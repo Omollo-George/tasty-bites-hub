@@ -1,13 +1,12 @@
 import React, { useEffect, useState, useMemo, useRef } from 'react';
-import { Flame, ShoppingCart, Star, ChevronRight, Search, MapPin, MessageSquareText } from 'lucide-react';
+import { Flame, ShoppingCart, Star, Search, MapPin } from 'lucide-react';
 import { getApiUrl } from '@/lib/api';
 import { useNavigate, Link } from 'react-router-dom';
 import { toast } from 'sonner';
 import { formatImageUrl } from '@/lib/image';
-import CartModal from './CartModal'; // Import the new CartModal component
+import CartModal from './CartModal';
 import { formatCurrency } from './utils'; 
-import Receipt from './Receipt'; // Reusing the Receipt component
-import ReviewFormModal from './ReviewFormModal'; // Import the new ReviewFormModal component
+import Receipt from './Receipt';
 import heroImage from "@/assets/hero-food.jpg";
 import About from './About';
 import Contact from './Contact';
@@ -45,14 +44,6 @@ interface OrderReceipt {
   phone?: string;
   cashier_notified?: boolean;
 }
-
-interface Review {
-  id: number;
-  customer_name: string;
-  rating: number;
-  comment: string;
-  created_at: string;
-}
 interface HomeData {
   hero: { title: string; tagline: string; image_url: string };
   categories: string[];
@@ -80,8 +71,6 @@ const ProfessionalCustomerHome = () => {
   const [orderType, setOrderType] = useState<'takeaway' | 'delivery'>('takeaway');
   const [deliveryAddress, setDeliveryAddress] = useState('');
   const navigate = useNavigate();
-  const [reviews, setReviews] = useState<Review[]>([]);
-  const [showReviewModal, setShowReviewModal] = useState(false);
 
   const pollTimerRef = useRef<any>(null);
   const safetyTimeoutRef = useRef<any>(null);
@@ -92,24 +81,13 @@ const ProfessionalCustomerHome = () => {
     
     const fetchData = async () => {
       try {
-        const [homeRes, reviewsRes] = await Promise.all([
-          fetch(getApiUrl('/payments/customer/home/')),
-          fetch(getApiUrl('/payments/reviews/')),
-        ]);
+        const homeRes = await fetch(getApiUrl('/payments/customer/home/'));
 
         if (!homeRes.ok) {
           throw new Error(`HTTP error! status: ${homeRes.status} from home data`);
         }
         const homeJson = await homeRes.json();
         setData(homeJson);
-
-        if (reviewsRes.ok) {
-          const reviewsJson = await reviewsRes.json();
-          setReviews(reviewsJson.reviews || []);
-        } else {
-          console.warn(`Reviews API failed with status ${reviewsRes.status}; showing menu without reviews.`);
-          setReviews([]);
-        }
       } catch (err: any) {
         setError(err.message || "Failed to fetch data. Check backend connection.");
       } finally {
@@ -127,7 +105,7 @@ const ProfessionalCustomerHome = () => {
 
   // Lock scroll on both body and html to ensure background is strictly static
   useEffect(() => {
-    if (showCartModal || lastOrder || showReviewModal) {
+    if (showCartModal || lastOrder) {
       document.documentElement.style.overflow = 'hidden';
       document.body.style.overflow = 'hidden';
     } else {
@@ -484,16 +462,8 @@ const ProfessionalCustomerHome = () => {
       )}
 
       {/* Receipt Modal */}
-      {lastOrder && ( // Changed from lastOrder to lastOrder
+      {lastOrder && (
         <Receipt order={lastOrder} onClose={() => setLastOrder(null)} />
-      )}
-
-      {/* Review Form Modal */}
-      {showReviewModal && (
-        <ReviewFormModal 
-          onClose={() => setShowReviewModal(false)} 
-          onSubmitSuccess={() => { /* You can add logic to refresh reviews here */ }} 
-        />
       )}
 
       {/* Glassmorphic Navbar */}
@@ -522,7 +492,6 @@ const ProfessionalCustomerHome = () => {
             <Link to="/track" className="hover:text-white transition-colors">My Orders</Link>
             <Link to="/account" className="hover:text-white transition-colors">Account</Link>
           </div>
-          <button onClick={() => setShowReviewModal(true)} className="p-3 rounded-full bg-white/5 border border-white/10 backdrop-blur-md hover:bg-orange-500 transition-all group relative"><MessageSquareText size={20} className="group-hover:scale-110 transition-transform" /></button>
           <button onClick={() => setShowCartModal(true)} className="p-3 rounded-full bg-white/5 border border-white/10 backdrop-blur-md hover:bg-orange-500 transition-all group relative">
             <ShoppingCart size={20} className="group-hover:scale-110 transition-transform" />
             {cartTotalItems > 0 && (
@@ -734,47 +703,6 @@ const ProfessionalCustomerHome = () => {
           });
         })()}
       </main>
-
-      {/* Customer Reviews Section */}
-      <section id="reviews" className={`scroll-mt-32 max-w-7xl mx-auto px-6 py-20 relative z-20 transition-opacity duration-500 ${
-        showCartModal || lastOrder || showReviewModal ? 'opacity-20 pointer-events-none' : 'opacity-100'
-      }`}>
-            <div className="text-center mb-12">
-              <p className="font-body text-orange-500 text-sm font-semibold uppercase tracking-[0.2em] mb-2">What Our Customers Say</p>
-              <h2 className="font-display text-5xl md:text-6xl text-white">Customer Reviews</h2>
-            </div>
-
-            {/* chef illustration removed */}
-
-        {reviews.length === 0 ? (
-          <p className="text-center text-gray-400 text-lg">No reviews yet. Be the first to share your experience!</p>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-            {reviews.map(review => (
-              <div key={review.id} className="bg-white/5 border border-white/10 rounded-2xl p-6 backdrop-blur-sm shadow-lg">
-                <div className="flex items-center mb-3">
-                  {[1, 2, 3, 4, 5].map(star => (
-                    <Star 
-                      key={star} 
-                      size={20} 
-                      className={`${review.rating >= star ? 'text-orange-500 fill-orange-500' : 'text-gray-600'}`} 
-                    />
-                  ))}
-                </div>
-                <p className="text-gray-300 text-base mb-4 line-clamp-4">{review.comment}</p>
-                <p className="text-sm font-semibold text-white">- {review.customer_name || 'Anonymous'}</p>
-                <p className="text-xs text-gray-500">{new Date(review.created_at).toLocaleDateString()}</p>
-              </div>
-            ))}
-          </div>
-        )}
-
-        <div className="text-center mt-12">
-          <button onClick={() => setShowReviewModal(true)} className="px-8 py-4 bg-orange-600 hover:bg-orange-500 rounded-2xl font-bold shadow-lg shadow-orange-600/20 transition-all hover:-translate-y-1">
-            Write a Review
-          </button>
-        </div>
-      </section>
 
       <div className={`transition-opacity duration-500 ${showCartModal || lastOrder ? 'opacity-20 pointer-events-none' : 'opacity-100'}`}>
         <About />
