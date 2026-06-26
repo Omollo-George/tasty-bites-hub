@@ -284,7 +284,7 @@ const CartModal: React.FC<CartModalProps> = ({
               <label className="text-xs font-bold text-gray-500 uppercase tracking-widest">M-Pesa Phone Number</label>
               <input 
                 type="tel"
-                placeholder="e.g. 254712345678"
+                placeholder="e.g. +254712345678 or 0712345678"
                 value={phoneNumber}
                 onMouseDown={(e) => e.stopPropagation()} // Prevent drag from starting on input
                 onTouchStart={(e) => e.stopPropagation()} // Prevent drag from starting on input

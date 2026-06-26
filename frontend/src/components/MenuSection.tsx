@@ -5,6 +5,7 @@ import { useToast } from "@/hooks/use-toast";
 import Receipt from "./Receipt";
 import { getApiUrl } from "@/lib/api";
 import { formatImageUrl } from '@/lib/image';
+import { isValidMpesaPhone, normalizePhoneNumber } from '@/lib/utils';
 import Restaurant3DBackground from "../../Restaurant3DBackground.jsx";
 
 
@@ -244,9 +245,9 @@ const MenuSection = () => {
       return;
     }
 
-    const cleanedPhone = phoneNumber.replace(/\D/g, "");
-    if (phoneNumber && !/^\d{9,12}$/.test(cleanedPhone)) {
-      toast({ title: "Invalid phone number", description: "Enter a valid phone number (e.g., 2547XXXXXXXX)." });
+    const cleanedPhone = normalizePhoneNumber(phoneNumber);
+    if (paymentMethod === "mpesa" && !isValidMpesaPhone(phoneNumber)) {
+      toast({ title: "Invalid phone number", description: "Enter a Kenyan M-Pesa number like +254712345678, 0712345678, or 712345678." });
       return;
     }
 
@@ -668,7 +669,7 @@ const MenuSection = () => {
                     type="tel"
                     value={phoneNumber}
                     onChange={(e) => setPhoneNumber(e.target.value)}
-                    placeholder="2547XXXXXXXX"
+                    placeholder="e.g. +254712345678 or 0712345678"
                     className="w-full rounded-full border border-[#1F2937] bg-[#1F2937] px-4 py-2 text-sm text-[#E5E7EB] outline-none focus:ring-2 focus:ring-[#C9A961]"
                   />
                 </div>

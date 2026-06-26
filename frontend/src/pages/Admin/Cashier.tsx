@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { getStaffName } from '@/lib/staff-session';
 import { getApiUrl } from '@/lib/api';
 import { getAuthHeaders } from '@/lib/auth';
+import { normalizePhoneNumber, isValidMpesaPhone } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
@@ -148,13 +149,13 @@ export default function Cashier() {
         setProcessingPayment(false);
         return;
       }
-      // Validate phone format (should be 12-13 digits)
-      const phoneRegex = /^\d{10,13}$/;
-      if (!phoneRegex.test(mpesaNumber)) {
-        setMpesaError('Phone number should be 10-13 digits (e.g., 2547XXXXXXXX)');
+      const normalized = normalizePhoneNumber(mpesaNumber);
+      if (!isValidMpesaPhone(mpesaNumber) || !normalized) {
+        setMpesaError('Enter a valid Kenyan M-Pesa number like +254712345678, 0712345678, or 712345678');
         setProcessingPayment(false);
         return;
       }
+      setMpesaNumber(normalized);
     }
 
     try {
@@ -557,13 +558,13 @@ export default function Cashier() {
               <DialogTitle>Enter M-Pesa Number</DialogTitle>
             </DialogHeader>
             <div className="space-y-4">
-              <p className="text-sm text-slate-400">Enter customer's M-Pesa phone number to prompt payment (e.g., 2547XXXXXXXX).</p>
+              <p className="text-sm text-slate-400">Enter customer's M-Pesa phone number to prompt payment (e.g. +254712345678, 0712345678, 712345678).</p>
               <div className="flex flex-col">
                 <input
                   value={mpesaNumber}
                   onChange={(e) => { setMpesaNumber(e.target.value.replace(/\s+/g, '')); setMpesaError(null); }}
                   onKeyDown={(e) => { if (e.key === 'Enter' && !processingPayment) handleProcessPayment('mpesa'); }}
-                  placeholder="2547XXXXXXXX"
+                  placeholder="e.g. +254712345678"
                   disabled={processingPayment}
                   className="bg-slate-900 border border-slate-800 rounded-lg px-4 py-2 text-slate-100 disabled:opacity-50"
                 />
