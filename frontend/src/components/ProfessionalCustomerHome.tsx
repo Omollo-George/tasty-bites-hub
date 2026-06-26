@@ -485,15 +485,22 @@ const ProfessionalCustomerHome = () => {
       });
 
       const dataRes = await response.json();
+      const errorMessage = dataRes?.message || dataRes?.error;
 
       if (!response.ok) {
         setProcessing(false); // Ensure processing is reset on error
-        throw new Error(dataRes.message || dataRes.error || "Failed to initiate payment");
+        if (dataRes?.error === 'schema_not_ready') {
+          throw new Error('Payments are temporarily unavailable. Please try again later.');
+        }
+        if (dataRes?.error === 'stk_push_failed') {
+          throw new Error(dataRes.details?.message || 'M-Pesa initiation failed. Try again.');
+        }
+        throw new Error(errorMessage || "Failed to initiate payment");
       }
 
       const checkoutId = dataRes.stk_response?.CheckoutRequestID;
       if (!checkoutId) {
-        throw new Error("M-Pesa STK Push could not be initiated. Try again.");
+        throw new Error(errorMessage || "M-Pesa STK Push could not be initiated. Try again.");
       }
 
       setCurrentOrderId(dataRes.order_id); // Store the order ID
@@ -574,7 +581,8 @@ const ProfessionalCustomerHome = () => {
       }, 60000);
 
     } catch (err: any) {
-      toast.error("Order Failed", { description: err.message });
+      const message = err?.message || 'Unable to complete payment. Please try again.';
+      toast.error("Order Failed", { description: message });
       setProcessing(false);
       setAwaitingMpesaConfirm(false);
     }
