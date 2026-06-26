@@ -1116,6 +1116,49 @@ def _ensure_menu_items(seed: bool = True):
             if updated:
                 item.save()
 
+def _customer_home_fallback_response(message: str = 'Using default menu data while the database schema is being updated.'):
+    default_items = _get_default_menu_items()
+    categories = sorted({item['category'] for item in default_items})
+    featured = [item for item in default_items if item['popular']][:5]
+    grouped_menu = {
+        cat: [
+            {
+                'id': idx + 1,
+                'sku': None,
+                'name': item['name'],
+                'category': item['category'],
+                'price': float(item['price']),
+                'food_cost': float(item['food_cost']),
+                'description': item['description'],
+                'popular': bool(item['popular']),
+                'spicy': bool(item['spicy']),
+                'stock_level': 50,
+                'min_stock_level': 10,
+                'image_url': item['image'],
+                'is_available': True,
+            }
+            for item in default_items if item['category'] == cat
+        ]
+        for cat in categories
+    }
+    return JsonResponse({
+        'hero': {
+            'title': 'TASTY BITES HUB',
+            'tagline': 'CRAFTED WITH PASSION, DELIVERED WITH PRECISION.',
+            'image_url': 'https://images.unsplash.com/photo-1514356015730-0739d598061f?q=80&w=1600',
+            'accent_color': '#f97316'
+        },
+        'categories': categories,
+        'featured': featured,
+        'menu_by_category': grouped_menu,
+        'config': {
+            'currency': 'KES',
+            'delivery_min': 0,
+        },
+        'warning': message,
+    })
+
+
 def customer_home(request):
     """Professional Customer Home View returning grouped data."""
     if request.method != 'GET':
@@ -1151,51 +1194,13 @@ def customer_home(request):
         })
     except (db_utils.ProgrammingError, db_utils.OperationalError) as exc:
         logger.warning('customer_home missing DB schema or connection; returning static default menu: %s', exc)
-        default_items = _get_default_menu_items()
-        categories = sorted({item['category'] for item in default_items})
-        featured = [item for item in default_items if item['popular']][:5]
-        grouped_menu = {
-            cat: [
-                {
-                    'id': idx + 1,
-                    'sku': None,
-                    'name': item['name'],
-                    'category': item['category'],
-                    'price': float(item['price']),
-                    'food_cost': float(item['food_cost']),
-                    'description': item['description'],
-                    'popular': bool(item['popular']),
-                    'spicy': bool(item['spicy']),
-                    'stock_level': 50,
-                    'min_stock_level': 10,
-                    'image_url': item['image'],
-                    'is_available': True,
-                }
-                for item in default_items if item['category'] == cat
-            ]
-            for cat in categories
-        }
-        return JsonResponse({
-            'hero': {
-                'title': 'TASTY BITES HUB',
-                'tagline': 'CRAFTED WITH PASSION, DELIVERED WITH PRECISION.',
-                'image_url': 'https://images.unsplash.com/photo-1514356015730-0739d598061f?q=80&w=1600',
-                'accent_color': '#f97316'
-            },
-            'categories': categories,
-            'featured': featured,
-            'menu_by_category': grouped_menu,
-            'config': {
-                'currency': 'KES',
-                'delivery_min': 0,
-            },
-            'warning': 'Using default menu data while the database schema is being updated.'
-        })
+        return _customer_home_fallback_response(
+            'Using default menu data while the database schema is being updated.'
+        )
     except Exception as exc:
-        logger.exception('customer_home failed')
-        return JsonResponse(
-            {'error': 'Unable to load home data at this time. Please try again later.'},
-            status=500
+        logger.exception('customer_home failed; returning fallback menu')
+        return _customer_home_fallback_response(
+            'Using default menu data due to an unexpected backend issue.'
         )
 
 
