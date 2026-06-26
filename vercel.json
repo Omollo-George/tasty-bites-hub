@@ -1,5 +1,6 @@
 {
   "version": 2,
+  "buildCommand": "cd backend/tastybites && python manage.py migrate --noinput || true",
   "builds": [
     {
       "src": "frontend/package.json",
@@ -9,7 +10,10 @@
     {
       "src": "backend/api/index.py",
       "use": "@vercel/python",
-      "config": { "runtime": "python3.12" }
+      "config": { 
+        "runtime": "python3.12",
+        "requirements": "backend/tastybites/requirements.txt"
+      }
     }
   ],
   "routes": [

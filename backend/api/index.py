@@ -19,6 +19,11 @@ try:
     os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'tastybites.settings')
     os.environ.setdefault('DJANGO_DEBUG', 'False')
 
+    # Diagnostic logging for Vercel
+    has_db_url = bool(os.environ.get('DATABASE_URL'))
+    print(f'[Django Setup] DATABASE_URL configured: {has_db_url}')
+    print(f'[Django Setup] DJANGO_DEBUG={os.environ.get("DJANGO_DEBUG")}')
+
     # Initialize Django
     django.setup()
 
@@ -28,6 +33,8 @@ try:
     # Export for Vercel serverless
     app = application
     handler = application
+    
+    print('[Django Setup] Backend initialized successfully')
 
 except Exception as e:
     # Graceful fallback for serverless cold-start failures

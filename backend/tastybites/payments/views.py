@@ -1146,7 +1146,7 @@ def _customer_home_fallback_response(message: str = 'Using default menu data whi
                 'image_url': item['image'],
                 'is_available': True,
             }
-            for item in default_items if item['category'] == cat
+            for idx, item in enumerate(default_items) if item['category'] == cat
         ]
         for cat in categories
     }
@@ -3691,10 +3691,11 @@ def create_pos_order(request):
             'stk_response': stk_data,
         })
     except (db_utils.ProgrammingError, db_utils.OperationalError) as exc:
-        logger.warning('create_pos_order failed due to missing payments schema: %s', exc)
+        logger.error('create_pos_order failed due to missing payments schema. Exception: %s', exc)
+        logger.error('This usually means database migrations have not been applied. Check DATABASE_URL is set and migrations have run.')
         return JsonResponse({
             'error': 'schema_not_ready',
-            'message': 'Payments database schema is not available. Please apply database migrations.'
+            'message': 'Payments database schema is not available. Migrations are being applied. Please try again in a moment.'
         }, status=503)
     except Exception as exc:
         error_message = str(exc)

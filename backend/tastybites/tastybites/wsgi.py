@@ -65,11 +65,11 @@ if not AUTO_MIGRATE:
 
 # By default do NOT auto-run migrations on serverless/Vercel unless env opts in.
 if AUTO_MIGRATE:
-	try:
-		from django.core.management import call_command
-		print('Applying pending Django migrations on startup...')
-		call_command('migrate', '--noinput')
-	except Exception as exc:
-		import traceback
-		print('Warning: automatic migration failed:')
-		traceback.print_exc()
+    try:
+        from django.core.management import call_command
+        print('Applying pending Django migrations on startup...')
+        call_command('migrate', '--noinput')
+    except Exception as exc:
+        import traceback
+        print('Warning: automatic migration failed:')
+        traceback.print_exc()
