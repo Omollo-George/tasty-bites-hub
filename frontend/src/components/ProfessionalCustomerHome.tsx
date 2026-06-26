@@ -485,12 +485,13 @@ const ProfessionalCustomerHome = () => {
         }),
       });
 
+      const responseClone = response.clone();
       let dataRes: any = null;
       let responseText = '';
       try {
         dataRes = await response.json();
       } catch (jsonError) {
-        responseText = await response.text().catch(() => '');
+        responseText = await responseClone.text().catch(() => '');
       }
 
       const errorMessage = dataRes?.message || dataRes?.error || responseText || response.statusText;
@@ -500,10 +501,10 @@ const ProfessionalCustomerHome = () => {
         if (dataRes?.error === 'schema_not_ready') {
           throw new Error('Payments are temporarily unavailable. Please try again later.');
         }
-        if (dataRes?.error === 'stk_push_failed') {
-          throw new Error(dataRes.details?.message || 'M-Pesa initiation failed. Try again.');
+        if (dataRes?.error === 'stk_push_failed' || dataRes?.error === 'stk_rejected') {
+          throw new Error(dataRes.details?.message || dataRes.message || errorMessage || 'M-Pesa initiation failed. Try again.');
         }
-        throw new Error(errorMessage || "Failed to initiate payment");
+        throw new Error(errorMessage || `Failed to initiate payment (${response.status} ${response.statusText})`);
       }
 
       const checkoutId = dataRes.stk_response?.CheckoutRequestID;
