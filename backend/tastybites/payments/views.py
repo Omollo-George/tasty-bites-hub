@@ -1149,6 +1149,24 @@ def customer_home(request):
                 'delivery_min': float(settings_obj.min_delivery_fee)
             }
         })
+    except db_utils.ProgrammingError as exc:
+        logger.warning('customer_home missing DB table; returning graceful fallback: %s', exc)
+        return JsonResponse({
+            'hero': {
+                'title': 'TASTY BITES HUB',
+                'tagline': 'CRAFTED WITH PASSION, DELIVERED WITH PRECISION.',
+                'image_url': 'https://images.unsplash.com/photo-1514356015730-0739d598061f?q=80&w=1600',
+                'accent_color': '#f97316'
+            },
+            'categories': [],
+            'featured': [],
+            'menu_by_category': {},
+            'config': {
+                'currency': 'KES',
+                'delivery_min': 0,
+            },
+            'warning': 'Data is temporarily unavailable while the database schema is being updated.'
+        })
     except Exception as exc:
         logger.exception('customer_home failed')
         return JsonResponse(
