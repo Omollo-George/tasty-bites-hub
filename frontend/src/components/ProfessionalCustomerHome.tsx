@@ -103,12 +103,13 @@ const ProfessionalCustomerHome = () => {
         const homeJson = await homeRes.json();
         setData(homeJson);
 
-        if (!reviewsRes.ok) {
-          throw new Error(`HTTP error! status: ${reviewsRes.status} from reviews data`);
+        if (reviewsRes.ok) {
+          const reviewsJson = await reviewsRes.json();
+          setReviews(reviewsJson.reviews || []);
+        } else {
+          console.warn(`Reviews API failed with status ${reviewsRes.status}; showing menu without reviews.`);
+          setReviews([]);
         }
-        const reviewsJson = await reviewsRes.json();
-        setReviews(reviewsJson.reviews || []);
-
       } catch (err: any) {
         setError(err.message || "Failed to fetch data. Check backend connection.");
       } finally {
