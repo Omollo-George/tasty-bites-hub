@@ -4,6 +4,7 @@ import { getApiUrl } from '@/lib/api';
 import { useNavigate, Link } from 'react-router-dom';
 import { toast } from 'sonner';
 import { formatImageUrl } from '@/lib/image';
+import { isValidMpesaPhone, normalizePhoneNumber } from '@/lib/utils';
 import CartModal from './CartModal';
 import { formatCurrency } from './utils'; 
 import Receipt from './Receipt';
@@ -456,9 +457,9 @@ const ProfessionalCustomerHome = () => {
       return;
     }
 
-    const cleanedPhone = phoneNumber.replace(/\D/g, "");
-    if (!/^\d{9,12}$/.test(cleanedPhone)) {
-      toast.error("Invalid phone number", { description: "Please enter a valid M-Pesa number." });
+    const cleanedPhone = normalizePhoneNumber(phoneNumber);
+    if (!isValidMpesaPhone(phoneNumber) || !cleanedPhone) {
+      toast.error("Invalid phone number", { description: "Enter a Kenyan M-Pesa number like +254712345678, 0712345678, or 712345678." });
       return;
     }
 
