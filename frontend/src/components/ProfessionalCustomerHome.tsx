@@ -485,8 +485,15 @@ const ProfessionalCustomerHome = () => {
         }),
       });
 
-      const dataRes = await response.json();
-      const errorMessage = dataRes?.message || dataRes?.error;
+      let dataRes: any = null;
+      let responseText = '';
+      try {
+        dataRes = await response.json();
+      } catch (jsonError) {
+        responseText = await response.text().catch(() => '');
+      }
+
+      const errorMessage = dataRes?.message || dataRes?.error || responseText || response.statusText;
 
       if (!response.ok) {
         setProcessing(false); // Ensure processing is reset on error
