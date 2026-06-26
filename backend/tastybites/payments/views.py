@@ -3474,7 +3474,7 @@ def get_active_pos_order(request):
 def create_pos_order(request):
     """Creates a full order with items and modifiers."""
     if request.method != 'POST':
-        return HttpResponseBadRequest('Only POST allowed')
+        return JsonResponse({'error': 'method_not_allowed', 'message': 'Only POST allowed'}, status=405)
 
     # Initialize msisdn at function scope to avoid unbound variable errors
     msisdn = ""
@@ -3482,7 +3482,7 @@ def create_pos_order(request):
     try:
         payload = json.loads(request.body.decode('utf-8'))
     except Exception:
-        return JsonResponse({'error': 'Invalid JSON'}, status=400)
+        return JsonResponse({'error': 'invalid_json', 'message': 'Invalid JSON payload'}, status=400)
 
     items_data = payload.get('items', [])
     if not isinstance(items_data, list) or not items_data:
