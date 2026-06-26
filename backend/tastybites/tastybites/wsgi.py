@@ -13,13 +13,15 @@ from django.core.wsgi import get_wsgi_application
 
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'tastybites.settings')
 
-# Optional DB readiness check at WSGI startup to avoid immediate runtime errors
-# when the database is transiently unavailable. Controlled via env vars:
-# DB_STARTUP_RETRIES (default 60), DB_STARTUP_DELAY (seconds).
+# Optional DB readiness check at WSGI startup.
+# By default this is disabled for serverless/cold-start runtimes like Vercel,
+# because waiting on the database during function import can cause function
+# startup failures and invocation errors.
+# Enable it explicitly with DB_STARTUP_RETRIES > 0.
 try:
-	DB_STARTUP_RETRIES = int(os.environ.get('DB_STARTUP_RETRIES', '60'))
+	DB_STARTUP_RETRIES = int(os.environ.get('DB_STARTUP_RETRIES', '0'))
 except Exception:
-	DB_STARTUP_RETRIES = 60
+	DB_STARTUP_RETRIES = 0
 try:
 	DB_STARTUP_DELAY = float(os.environ.get('DB_STARTUP_DELAY', '3'))
 except Exception:
