@@ -88,6 +88,15 @@ def _normalize_phone(ph: str) -> str:
     return digits
 
 
+def _payments_schema_ready() -> bool:
+    try:
+        Order.objects.exists()
+        return True
+    except (db_utils.ProgrammingError, db_utils.OperationalError) as exc:
+        logger.warning('Payments schema unavailable: %s', exc)
+        return False
+
+
 def _display_rate() -> float:
     app_settings = AppSettings.current()
     try:
@@ -3681,9 +3690,15 @@ def create_pos_order(request):
             **_serialize_order(order),
             'stk_response': stk_data,
         })
+    except (db_utils.ProgrammingError, db_utils.OperationalError) as exc:
+        logger.warning('create_pos_order failed due to missing payments schema: %s', exc)
+        return JsonResponse({
+            'error': 'schema_not_ready',
+            'message': 'Payments database schema is not available. Please apply database migrations.'
+        }, status=503)
     except Exception as exc:
         error_message = str(exc)
-        print(f"create_pos_order error: {error_message}")
+        logger.exception('create_pos_order unexpected error: %s', exc)
         return JsonResponse({'error': 'server_error', 'message': error_message}, status=500)
 
 @csrf_exempt
@@ -3784,6 +3799,12 @@ def cashier_confirm_payment(request, order_id):
         payload = json.loads(request.body.decode('utf-8'))
     except Exception:
         return JsonResponse({'error': 'Invalid JSON'}, status=400)
+
+    if not _payments_schema_ready():
+        return JsonResponse({
+            'error': 'schema_not_ready',
+            'message': 'Payments database schema is not available. Please apply database migrations.'
+        }, status=503)
 
     try:
         order = Order.objects.get(order_id=order_id)
