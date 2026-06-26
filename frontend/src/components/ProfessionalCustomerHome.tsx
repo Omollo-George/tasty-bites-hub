@@ -84,9 +84,17 @@ const ProfessionalCustomerHome = () => {
         const homeRes = await fetch(getApiUrl('/payments/customer/home/'));
 
         if (!homeRes.ok) {
+          const text = await homeRes.text().catch(() => '');
+          console.error('customer_home failed response:', homeRes.status, text);
           throw new Error(`HTTP error! status: ${homeRes.status} from home data`);
         }
+
         const homeJson = await homeRes.json();
+        if (!homeJson || !homeJson.menu_by_category) {
+          console.error('customer_home returned invalid payload:', homeJson);
+          throw new Error('Invalid menu response from backend.');
+        }
+
         setData(homeJson);
       } catch (err: any) {
         setError(err.message || "Failed to fetch data. Check backend connection.");
