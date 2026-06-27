@@ -3,6 +3,7 @@ import sys
 import django
 import traceback
 import json
+from django.core.management import call_command
 
 # Initialize at module scope so Vercel can find them
 app = None
@@ -26,6 +27,15 @@ try:
 
     # Initialize Django
     django.setup()
+
+    # Ensure migrations are applied before handling production requests.
+    # This helps avoid missing relations in newly deployed environments.
+    try:
+        call_command('migrate', '--noinput', verbosity=0)
+        print('[Django Setup] Applied migrations successfully')
+    except Exception as exc:
+        print('[Django Setup] Migrate failed:', exc)
+        raise
 
     # Import the WSGI application
     from tastybites.wsgi import application
