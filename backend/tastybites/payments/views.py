@@ -1741,15 +1741,13 @@ def customer_home(request):
 
     try:
         _ensure_menu_items(seed=True)
-        # Include items with 0 stock but mark them as unavailable for a pro "catalog" feel
-        items = MenuItem.objects.all()
-        
-        categories = list(items.values_list('category', flat=True).distinct().order_by('category'))
-        featured = items.filter(popular=True).order_by('?')[:5]
-        
+        items = list(MenuItem.objects.all().order_by('category', 'name'))
+        categories = sorted({item.category for item in items})
+        featured = [item for item in items if item.popular][:5]
+
         grouped_menu = {}
         for cat in categories:
-            grouped_menu[cat] = [_serialize_menu_item(i) for i in items.filter(category=cat)]
+            grouped_menu[cat] = [_serialize_menu_item(i) for i in items if i.category == cat]
 
         settings_obj = AppSettings.current()
         return JsonResponse({
@@ -1783,11 +1781,10 @@ def menu_items(request):
     if request.method != 'GET':
         return HttpResponseBadRequest('Only GET allowed')
 
-    # Seed defaults unless explicitly disabled by the client.
     seed_flag = request.GET.get('seed', '1')
     seed = str(seed_flag).strip().lower() not in ('0', 'false', 'no', 'off')
     _ensure_menu_items(seed=seed)
-    items = MenuItem.objects.all().order_by('category', 'name')
+    items = list(MenuItem.objects.all().order_by('category', 'name'))
     return JsonResponse({'menu_items': [_serialize_menu_item(item) for item in items]})
 
 
@@ -3662,7 +3659,7 @@ def _build_report_summary(start_date: datetime.datetime, end_date: datetime.date
         if not _payments_schema_ready():
             return _empty_report_summary_payload(range_label)
 
-        paid_orders = Order.objects.filter(
+        paid_orders = list(Order.objects.filter(
             created_at__gte=start_date,
             created_at__lte=end_date,
         ).annotate(
@@ -3670,11 +3667,12 @@ def _build_report_summary(start_date: datetime.datetime, end_date: datetime.date
         ).filter(
             Q(paid_sum__gte=F('total_amount')) | Q(status='completed'),
             total_amount__gt=0,
-        )
+        ).values_list('id', flat=True))
 
-        paid_order_ids = paid_orders.values_list('id', flat=True)
+        if not paid_orders:
+            return _empty_report_summary_payload(range_label)
 
-        order_items = OrderItem.objects.filter(order__id__in=paid_order_ids).annotate(
+        order_items = OrderItem.objects.filter(order__id__in=paid_orders).annotate(
             item_revenue=ExpressionWrapper(F('price') * F('quantity'), output_field=DecimalField()),
             item_food_cost=ExpressionWrapper(F('food_cost') * F('quantity'), output_field=DecimalField()),
         )
@@ -3704,7 +3702,7 @@ def _build_report_summary(start_date: datetime.datetime, end_date: datetime.date
         ]
 
         hourly = []
-        hours = Order.objects.filter(id__in=paid_order_ids).annotate(hour=ExtractHour('created_at')).values('hour').annotate(
+        hours = Order.objects.filter(id__in=paid_orders).annotate(hour=ExtractHour('created_at')).values('hour').annotate(
             orders=Count('id'),
             revenue=Sum('total_amount'),
         ).order_by('hour')
@@ -3716,7 +3714,7 @@ def _build_report_summary(start_date: datetime.datetime, end_date: datetime.date
             })
 
         total_revenue = float(Transaction.objects.filter(
-            order__id__in=paid_order_ids, status='success'
+            order__id__in=paid_orders, status='success'
         ).aggregate(total=Sum('amount'))['total'] or 0)
         total_food_cost = float(order_items.aggregate(total=Sum(F('food_cost') * F('quantity'), output_field=DecimalField()))['total'] or 0)
         total_wastage = float(WastageLog.objects.filter(
@@ -3730,17 +3728,17 @@ def _build_report_summary(start_date: datetime.datetime, end_date: datetime.date
         food_cost_ratio = float((Decimal(total_food_cost) / Decimal(total_revenue) * 100) if total_revenue else 0)
 
         cash_revenue = float(Transaction.objects.filter(
-            order__id__in=paid_order_ids,
+            order__id__in=paid_orders,
             status='success',
             method=Transaction.METHOD_CASH,
         ).aggregate(total=Sum('amount'))['total'] or 0)
         mpesa_revenue = float(Transaction.objects.filter(
-            order__id__in=paid_order_ids,
+            order__id__in=paid_orders,
             status='success',
             method=Transaction.METHOD_M_PESA,
         ).aggregate(total=Sum('amount'))['total'] or 0)
 
-        waiter_stats_qs = Order.objects.filter(id__in=paid_order_ids).values('waiter_id', 'waiter_name', 'waiter__name').annotate(orders=Count('id'))
+        waiter_stats_qs = Order.objects.filter(id__in=paid_orders).values('waiter_id', 'waiter_name', 'waiter__name').annotate(orders=Count('id'))
         best_waiter = None
         least_waiter = None
         if waiter_stats_qs:
