@@ -408,6 +408,27 @@ def _get_period_dates(period_type: str, date_str: str):
         start_date = timezone.make_aware(datetime.datetime.combine(selected_date.replace(month=1, day=1), datetime.time.min))
         end_date = timezone.make_aware(datetime.datetime.combine(selected_date.replace(month=12, day=31), datetime.time.max))
         label = selected_date.strftime('%Y')
+    elif period_type == 'custom':
+        # custom date ranges are passed through explicit query parameters
+        start_date_str = request.GET.get('start_date') or request.GET.get('from')
+        end_date_str = request.GET.get('end_date') or request.GET.get('to')
+        try:
+            if start_date_str:
+                start_date = datetime.datetime.strptime(start_date_str, '%Y-%m-%d')
+            if end_date_str:
+                end_date = datetime.datetime.strptime(end_date_str, '%Y-%m-%d')
+        except ValueError:
+            start_date = None
+            end_date = None
+
+        if not start_date or not end_date:
+            start_date = timezone.make_aware(datetime.datetime.combine(today, datetime.time.min))
+            end_date = timezone.make_aware(datetime.datetime.combine(today, datetime.time.max))
+            label = today.strftime('%Y-%m-%d')
+        else:
+            start_date = timezone.make_aware(datetime.datetime.combine(start_date.date(), datetime.time.min))
+            end_date = timezone.make_aware(datetime.datetime.combine(end_date.date(), datetime.time.max))
+            label = f"{start_date.strftime('%Y-%m-%d')} → {end_date.strftime('%Y-%m-%d')}"
     else: # Default to current week if period_type is unknown
         # Fallback to current week (Monday-Sunday)
         monday_of_week = today - timedelta(days=today.isoweekday() - 1)

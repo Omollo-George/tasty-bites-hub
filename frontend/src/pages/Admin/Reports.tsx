@@ -64,6 +64,7 @@ const Reports: React.FC = () => {
   const [loading, setLoading] = useState(false)
   const [savingWastage, setSavingWastage] = useState(false)
   const [savingMisc, setSavingMisc] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   const makeReportParams = () => {
     const params = new URLSearchParams({ period_type: selectedPeriodType })
@@ -76,33 +77,62 @@ const Reports: React.FC = () => {
     return params
   }
 
+  const makeAuthHeaders = (token: string) => ({
+    Authorization: `Bearer ${token}`,
+    'X-ADMIN-TOKEN': token,
+  })
+
+  const withAdminToken = (url: string, token: string) => {
+    try {
+      const parsed = new URL(url, window.location.origin)
+      parsed.searchParams.set('admin_token', token)
+      return parsed.toString()
+    } catch (_err) {
+      return url
+    }
+  }
+
   const fetchReport = async () => {
     setLoading(true)
+    setError(null)
     const token = getAdminToken()
-    const url = getApiUrl(`/payments/reports/summary/?${makeReportParams().toString()}`)
-    console.log('Fetching report from:', url, 'Token:', token ? 'present' : 'missing')
+    if (!token) {
+      setError('Admin session token missing. Please sign out and sign in again.')
+      setLoading(false)
+      setData(null)
+      return
+    }
+
+    const url = withAdminToken(getApiUrl(`/payments/reports/summary/?${makeReportParams().toString()}`), token)
     try {
       const res = await fetch(url, {
-        headers: { Authorization: `Bearer ${token}` }
+        headers: makeAuthHeaders(token),
       })
-      console.log('Report response status:', res.status)
-      if (!res.headers.get("content-type")?.includes("application/json")) {
-        // If the response is not JSON, it's likely a server error page or misconfiguration
-        const errorText = await res.text();
-        console.error("Invalid response format from /reports/summary/", res.status, errorText);
-        throw new Error("Invalid server response format. Check backend logs.");
+
+      const contentType = res.headers.get('content-type') || ''
+      const bodyText = await res.text()
+      const isJson = contentType.includes('application/json')
+      const json = isJson ? JSON.parse(bodyText || '{}') : null
+
+      if (!res.ok) {
+        const message = json?.error || bodyText || `Request failed with status ${res.status}`
+        setError(`Report load failed: ${message}`)
+        setData(null)
+        return
       }
-      const json = await res.json()
-      console.log('Report data received:', json)
-      if (res.ok) {
-        setData(json);
-      } else {
-        console.error("Backend error fetching report summary:", json);
-        setData(null); // Clear previous data on error
+
+      if (!isJson) {
+        setError('Report endpoint returned invalid content type.')
+        setData(null)
+        return
       }
-    } catch (error) {
-      console.error('Error fetching report:', error)
-      setData(null); // Clear previous data on error
+
+      setData(json)
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Unknown error'
+      console.error('Error fetching report:', message)
+      setError(`Could not load report: ${message}`)
+      setData(null)
     } finally {
       setLoading(false)
     }
@@ -110,10 +140,14 @@ const Reports: React.FC = () => {
 
   const downloadReport = async () => {
     const token = getAdminToken()
+    if (!token) {
+      alert('Admin session expired. Please sign in again.')
+      return
+    }
     try {
-      const url = getApiUrl(`/payments/reports/download/?${makeReportParams().toString()}`)
+      const url = withAdminToken(getApiUrl(`/payments/reports/download/?${makeReportParams().toString()}`), token)
       const res = await fetch(url, {
-        headers: { Authorization: `Bearer ${token}` }
+        headers: makeAuthHeaders(token),
       })
       if (!res.ok) {
         const errorJson = await res.text().catch(() => 'Download failed')
@@ -140,11 +174,11 @@ const Reports: React.FC = () => {
 
   const fetchWastage = async () => {
     const token = getAdminToken()
-    const url = getApiUrl(`/payments/reports/wastage/?${makeReportParams().toString()}`)
+    const url = withAdminToken(getApiUrl(`/payments/reports/wastage/?${makeReportParams().toString()}`), token)
     console.log('Fetching wastage logs from:', url)
     try {
       const res = await fetch(url, {
-        headers: { Authorization: `Bearer ${token}` }
+        headers: makeAuthHeaders(token),
       })
       console.log('Wastage response status:', res.status)
       if (!res.headers.get("content-type")?.includes("application/json")) {
@@ -168,11 +202,11 @@ const Reports: React.FC = () => {
 
   const fetchMisc = async () => {
     const token = getAdminToken()
-    const url = getApiUrl(`/payments/reports/miscellaneous/?${makeReportParams().toString()}`)
+    const url = withAdminToken(getApiUrl(`/payments/reports/miscellaneous/?${makeReportParams().toString()}`), token)
     console.log('Fetching miscellaneous logs from:', url)
     try {
       const res = await fetch(url, {
-        headers: { Authorization: `Bearer ${token}` }
+        headers: makeAuthHeaders(token),
       })
       console.log('Miscellaneous response status:', res.status)
       if (!res.headers.get("content-type")?.includes("application/json")) {
@@ -241,14 +275,19 @@ const Reports: React.FC = () => {
 
   const submitWastage = async () => {
     if (!newWastage.item_name.trim() || newWastage.quantity <= 0) return
+    const token = getAdminToken()
+    if (!token) {
+      alert('Admin session expired. Please sign in again.')
+      return
+    }
     setSavingWastage(true)
     try {
-      const adminToken = localStorage.getItem('admin_token')
-      const res = await fetch(getApiUrl('/payments/reports/wastage/'), {
+      const url = withAdminToken(getApiUrl('/payments/reports/wastage/'), token)
+      const res = await fetch(url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${adminToken}`,
+          ...makeAuthHeaders(token),
         },
         body: JSON.stringify({
           ...newWastage,
@@ -275,11 +314,16 @@ const Reports: React.FC = () => {
 
   const deleteWastageLog = async (id: number) => {
     if (!window.confirm('Remove this wastage entry?')) return
+    const token = getAdminToken()
+    if (!token) {
+      alert('Admin session expired. Please sign in again.')
+      return
+    }
     try {
-      const adminToken = localStorage.getItem('admin_token')
-      const res = await fetch(getApiUrl(`/payments/reports/wastage/${id}/`), {
+      const url = withAdminToken(getApiUrl(`/payments/reports/wastage/${id}/`), token)
+      const res = await fetch(url, {
         method: 'DELETE',
-        headers: { Authorization: `Bearer ${adminToken}` },
+        headers: makeAuthHeaders(token),
       })
       if (res.ok) {
         fetchWastage()
@@ -301,12 +345,17 @@ const Reports: React.FC = () => {
 
     setSavingWastage(true); // Re-using this state for loading indicator
     try {
-        const adminToken = localStorage.getItem('admin_token');
-        const res = await fetch(getApiUrl('/payments/admin/clear-wastage/'), { // Assuming this URL
+        const token = getAdminToken();
+        if (!token) {
+            alert('Admin session expired. Please sign in again.');
+            return;
+        }
+        const url = withAdminToken(getApiUrl('/payments/admin/clear-wastage/'), token)
+        const res = await fetch(url, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                Authorization: `Bearer ${adminToken}`,
+                ...makeAuthHeaders(token),
             },
         });
         const json = await res.json();
@@ -328,15 +377,19 @@ const Reports: React.FC = () => {
   const submitMisc = async () => {
     if (!newMisc.item_name.trim()) return alert('Please enter an item name');
     if (newMisc.cost <= 0) return alert('Please enter a valid cost amount');
-    
+    const token = getAdminToken()
+    if (!token) {
+      alert('Admin session expired. Please sign in again.')
+      return
+    }
     setSavingMisc(true)
     try {
-      const adminToken = localStorage.getItem('admin_token')
-      const res = await fetch(getApiUrl('/payments/reports/miscellaneous/'), {
+      const url = withAdminToken(getApiUrl('/payments/reports/miscellaneous/'), token)
+      const res = await fetch(url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${adminToken}`,
+          ...makeAuthHeaders(token),
         },
         body: JSON.stringify(newMisc),
       })
@@ -358,11 +411,16 @@ const Reports: React.FC = () => {
 
   const deleteMiscLog = async (id: number) => {
     if (!window.confirm('Remove this expense entry?')) return
+    const token = getAdminToken()
+    if (!token) {
+      alert('Admin session expired. Please sign in again.')
+      return
+    }
     try {
-      const adminToken = localStorage.getItem('admin_token')
-      const res = await fetch(getApiUrl(`/payments/reports/miscellaneous/${id}/`), {
+      const url = withAdminToken(getApiUrl(`/payments/reports/miscellaneous/${id}/`), token)
+      const res = await fetch(url, {
         method: 'DELETE',
-        headers: { Authorization: `Bearer ${adminToken}` },
+        headers: makeAuthHeaders(token),
       })
       if (res.ok) {
         fetchMisc()
@@ -376,11 +434,17 @@ const Reports: React.FC = () => {
   const clearMiscLogs = async () => {
     if (!window.confirm('Delete all miscellaneous logs?')) return
     setSavingMisc(true)
+    const token = getAdminToken()
+    if (!token) {
+      alert('Admin session expired. Please sign in again.')
+      setSavingMisc(false)
+      return
+    }
     try {
-      const adminToken = localStorage.getItem('admin_token')
-      const res = await fetch(getApiUrl('/payments/admin/clear-miscellaneous/'), {
+      const url = withAdminToken(getApiUrl('/payments/admin/clear-miscellaneous/'), token)
+      const res = await fetch(url, {
         method: 'POST',
-        headers: { Authorization: `Bearer ${adminToken}` },
+        headers: makeAuthHeaders(token),
       })
       if (res.ok) {
         fetchMisc()
@@ -416,7 +480,11 @@ const Reports: React.FC = () => {
         <div className="space-y-2">
           <p className="text-sm text-slate-400">Reports</p>
           <h2 className="font-display text-3xl text-slate-100">Sales & Cost Insights</h2>
-          {!data && !loading && <p className="text-xs text-yellow-400 mt-2">⚠️ No data loaded. Click "Refresh Report" to fetch data.</p>}
+          {error ? (
+            <p className="text-xs text-red-400 mt-2">⚠️ {error}</p>
+          ) : (!data && !loading ? (
+            <p className="text-xs text-yellow-400 mt-2">⚠️ No data loaded. Click "Refresh Report" to fetch data. Make sure you are authenticated and the backend is reachable.</p>
+          ) : null)}
         </div>
 
         <div className="grid gap-3">
