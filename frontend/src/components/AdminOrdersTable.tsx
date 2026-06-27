@@ -80,11 +80,11 @@ const OrdersTable: React.FC = () => {
         fetch(getApiUrl('/payments/config/'), { signal: controller.signal }),
       ])
 
-      if (!r.ok || !c.ok) return;
-      if (!r.headers.get("content-type")?.includes("application/json") || !c.headers.get("content-type")?.includes("application/json")) return;
+      if (!r.ok) return;
+      if (!r.headers.get("content-type")?.includes("application/json")) return;
 
       const j = await r.json()
-      const cfg = await c.json()
+      const cfg = c.ok && c.headers.get("content-type")?.includes("application/json") ? await c.json() : { conversion_rate: 1 }
       // ignore this response if a newer request was issued
       if (reqId !== requestIdRef.current) return
       const results = (j.results || []).map((order: any) => ({

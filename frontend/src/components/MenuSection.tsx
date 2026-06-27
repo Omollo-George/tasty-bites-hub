@@ -99,6 +99,8 @@ const MenuSection = () => {
           if (!configRes.headers.get("content-type")?.includes("application/json")) return;
           const d = await configRes.json();
           if (d?.conversion_rate) setRate(d.conversion_rate);
+        } else {
+          setRate(1);
         }
 
         if (menuRes.ok) {

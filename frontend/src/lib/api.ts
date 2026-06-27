@@ -50,11 +50,25 @@ export const getApiUrl = (path: string) => {
   return `${normalizedOrigin}${normalizedPath}`
 }
 
+const DEFAULT_CONFIG_PAYLOAD = {
+  base_currency: 'KES',
+  display_currency: 'KES',
+  conversion_rate: 1,
+  delivery_rate_per_km: 100,
+  min_delivery_fee: 50,
+}
+
 export async function apiFetch(path: string, options?: RequestInit) {
   const url = getApiUrl(path)
+  const isConfigRequest = /\/payments\/config\/?$/.test(path.replace(/\?.*$/, ''))
+
   try {
     const res = await fetch(url, options)
     if (!res.ok) {
+      if (isConfigRequest) {
+        return DEFAULT_CONFIG_PAYLOAD
+      }
+
       const text = await res.text().catch(() => '')
       const status = res.status
       const statusText = res.statusText
@@ -73,6 +87,10 @@ export async function apiFetch(path: string, options?: RequestInit) {
     // return raw text if not JSON
     return res.text()
   } catch (e) {
+    if (isConfigRequest) {
+      return DEFAULT_CONFIG_PAYLOAD
+    }
+
     console.error('apiFetch error for', url, e)
     throw e
   }
