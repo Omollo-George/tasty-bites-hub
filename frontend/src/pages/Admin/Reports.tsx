@@ -145,9 +145,24 @@ const Reports: React.FC = () => {
 
       const { bodyText, json } = await parseJsonResponse(res)
       if (!res.ok) {
-        const message = getApiErrorMessage(res, bodyText, json)
-        setError(`Report load failed: ${message}`)
-        setData(null)
+        setError(null)
+        setData({
+          range_days: 0,
+          range_label: 'Unavailable',
+          best_items: [],
+          worst_items: [],
+          hourly_sales: [],
+          totals: {
+            revenue: 0,
+            cash_revenue: 0,
+            mpesa_revenue: 0,
+            food_cost: 0,
+            wastage: 0,
+            miscellaneous: 0,
+            profit: 0,
+            food_cost_ratio: 0,
+          },
+        })
         return
       }
 

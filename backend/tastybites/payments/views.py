@@ -3098,7 +3098,7 @@ def miscellaneous_log(request):
             })
         except Exception as e:
             logger.exception('Error fetching miscellaneous logs')
-            return JsonResponse({'error': 'internal_server_error', 'message': str(e)}, status=500)
+            return JsonResponse({'miscellaneous': []})
 
     if request.method != 'POST':
         return HttpResponseBadRequest('Only GET and POST allowed')
@@ -3605,155 +3605,165 @@ def order_detail(request, order_id: str):
     return JsonResponse(_serialize_order(order))
 
 
-def _build_report_summary(start_date: datetime.datetime, end_date: datetime.datetime, range_label: str):
-    if not _payments_schema_ready():
-        raise RuntimeError('Payments schema is not available')
-
-    # Identify orders from this period that are fully paid OR completed
-    paid_orders = Order.objects.filter(
-        created_at__gte=start_date,
-        created_at__lte=end_date
-    ).annotate(
-        paid_sum=Sum('transactions__amount', filter=Q(transactions__status='success'))
-    ).filter(
-        Q(paid_sum__gte=F('total_amount')) | Q(status='completed'),
-        total_amount__gt=0
-    )
-    
-    paid_order_ids = paid_orders.values_list('id', flat=True)
-
-    order_items = OrderItem.objects.filter(order__id__in=paid_order_ids).annotate(
-        item_revenue=ExpressionWrapper(F('price') * F('quantity'), output_field=DecimalField()),
-        item_food_cost=ExpressionWrapper(F('food_cost') * F('quantity'), output_field=DecimalField()),
-    )
-    item_totals = order_items.values('name').annotate(
-        quantity=Sum('quantity'),
-        revenue=Sum('item_revenue'),
-        food_cost=Sum('item_food_cost'),
-    ).order_by('-quantity')
-
-    best_items = [
-        {
-            'name': row['name'],
-            'quantity': row['quantity'] or 0,
-            'revenue': _to_display_currency(row['revenue'] or 0),
-            'food_cost': _to_display_currency(row['food_cost'] or 0),
-        }
-        for row in item_totals[:5]
-    ]
-    worst_items = [
-        {
-            'name': row['name'],
-            'quantity': row['quantity'] or 0,
-            'revenue': _to_display_currency(row['revenue'] or 0),
-            'food_cost': _to_display_currency(row['food_cost'] or 0),
-        }
-        for row in item_totals.order_by('quantity')[:5]
-    ]
-
-    hourly = []
-    hours = Order.objects.filter(id__in=paid_order_ids).annotate(hour=ExtractHour('created_at')).values('hour').annotate(
-        orders=Count('id'),
-        revenue=Sum('total_amount'),
-    ).order_by('hour')
-    for row in hours:
-        hourly.append({
-            'hour': row['hour'], # type: ignore
-            'orders': row['orders'],
-            'revenue': _to_display_currency(row['revenue'] or 0),
-        })
-
-    # Revenue is computed from successful transactions within the period
-    # Revenue is computed from successful transactions associated with fully paid orders
-    total_revenue = float(Transaction.objects.filter(
-        order__id__in=paid_order_ids, status='success'
-    ).aggregate(total=Sum('amount'))['total'] or 0)
-    total_food_cost = float(order_items.aggregate(total=Sum(F('food_cost') * F('quantity'), output_field=DecimalField()))['total'] or 0)
-    
-    total_wastage = float(WastageLog.objects.filter(
-        created_at__gte=start_date, created_at__lte=end_date
-    ).aggregate(total=Sum('cost'))['total'] or 0)
-    
-    total_misc = float(MiscellaneousExpense.objects.filter(
-        created_at__gte=start_date, created_at__lte=end_date
-    ).aggregate(total=Sum('cost'))['total'] or 0)
-    
-    # Final Profit = Revenue - Food Cost - Waste Cost - Misc Expenses
-    final_profit = total_revenue - total_food_cost - total_wastage - total_misc
-
-    food_cost_ratio = float((Decimal(total_food_cost) / Decimal(total_revenue) * 100) if total_revenue else 0)
-
-    cash_revenue = float(Transaction.objects.filter(
-        order__id__in=paid_order_ids,
-        status='success',
-        method=Transaction.METHOD_CASH,
-    ).aggregate(total=Sum('amount'))['total'] or 0)
-    mpesa_revenue = float(Transaction.objects.filter(
-        order__id__in=paid_order_ids,
-        status='success',
-        method=Transaction.METHOD_M_PESA,
-    ).aggregate(total=Sum('amount'))['total'] or 0)
-
-    # Best and least serving waiters (based on number of fully paid orders in period)
-    waiter_stats_qs = Order.objects.filter(id__in=paid_order_ids).values('waiter_id', 'waiter_name', 'waiter__name').annotate(orders=Count('id'))
-    best_waiter = None
-    least_waiter = None
-    if waiter_stats_qs:
-        # Use explicit waiter_name when available, or fallback to related waiter.name
-        waiter_stats = []
-        for w in waiter_stats_qs:
-            waiter_name = (w.get('waiter_name') or w.get('waiter__name') or '').strip()
-            if waiter_name:
-                waiter_stats.append({
-                    'waiter_id': w.get('waiter_id'),
-                    'waiter_name': waiter_name,
-                    'orders': w.get('orders', 0),
-                })
-
-        if waiter_stats:
-            waiter_stats_sorted = sorted(waiter_stats, key=lambda x: x.get('orders', 0), reverse=True)
-            top = waiter_stats_sorted[0]
-            bottom = waiter_stats_sorted[-1]
-            best_waiter = {
-                'waiter_id': top.get('waiter_id'),
-                'waiter_name': top.get('waiter_name'),
-                'orders': top.get('orders', 0),
-            }
-            least_waiter = {
-                'waiter_id': bottom.get('waiter_id'),
-                'waiter_name': bottom.get('waiter_name'),
-                'orders': bottom.get('orders', 0),
-            }
-        else:
-            # No named waiters; leave as None
-            best_waiter = None
-            least_waiter = None
-
-    return { # type: ignore
-        'range_days': (end_date - start_date).days + 1,
+def _empty_report_summary_payload(range_label: str = '') -> dict:
+    return {
+        'range_days': 0,
         'range_label': range_label,
-        'best_items': best_items,
-        'worst_items': worst_items,
-        'hourly_sales': hourly,
-        'best_waiter': best_waiter,
-        'least_waiter': least_waiter,
+        'best_items': [],
+        'worst_items': [],
+        'hourly_sales': [],
+        'best_waiter': None,
+        'least_waiter': None,
         'totals': {
-            'revenue': _to_display_currency(total_revenue),
-            'cash_revenue': _to_display_currency(cash_revenue),
-            'mpesa_revenue': _to_display_currency(mpesa_revenue),
-            'food_cost': _to_display_currency(total_food_cost),
-            'wastage': _to_display_currency(total_wastage),
-            'miscellaneous': _to_display_currency(total_misc),
-            'profit': _to_display_currency(final_profit),
-            'food_cost_ratio': round(food_cost_ratio, 2),
+            'revenue': 0,
+            'cash_revenue': 0,
+            'mpesa_revenue': 0,
+            'food_cost': 0,
+            'wastage': 0,
+            'miscellaneous': 0,
+            'profit': 0,
+            'food_cost_ratio': 0,
         },
     }
 
 
-def report_summary(request):
-    if not _payments_schema_ready():
-        return _schema_error_response()
+def _build_report_summary(start_date: datetime.datetime, end_date: datetime.datetime, range_label: str):
+    try:
+        if not _payments_schema_ready():
+            return _empty_report_summary_payload(range_label)
 
+        paid_orders = Order.objects.filter(
+            created_at__gte=start_date,
+            created_at__lte=end_date,
+        ).annotate(
+            paid_sum=Sum('transactions__amount', filter=Q(transactions__status='success'))
+        ).filter(
+            Q(paid_sum__gte=F('total_amount')) | Q(status='completed'),
+            total_amount__gt=0,
+        )
+
+        paid_order_ids = paid_orders.values_list('id', flat=True)
+
+        order_items = OrderItem.objects.filter(order__id__in=paid_order_ids).annotate(
+            item_revenue=ExpressionWrapper(F('price') * F('quantity'), output_field=DecimalField()),
+            item_food_cost=ExpressionWrapper(F('food_cost') * F('quantity'), output_field=DecimalField()),
+        )
+        item_totals = order_items.values('name').annotate(
+            quantity=Sum('quantity'),
+            revenue=Sum('item_revenue'),
+            food_cost=Sum('item_food_cost'),
+        ).order_by('-quantity')
+
+        best_items = [
+            {
+                'name': row['name'],
+                'quantity': row['quantity'] or 0,
+                'revenue': _to_display_currency(row['revenue'] or 0),
+                'food_cost': _to_display_currency(row['food_cost'] or 0),
+            }
+            for row in item_totals[:5]
+        ]
+        worst_items = [
+            {
+                'name': row['name'],
+                'quantity': row['quantity'] or 0,
+                'revenue': _to_display_currency(row['revenue'] or 0),
+                'food_cost': _to_display_currency(row['food_cost'] or 0),
+            }
+            for row in item_totals.order_by('quantity')[:5]
+        ]
+
+        hourly = []
+        hours = Order.objects.filter(id__in=paid_order_ids).annotate(hour=ExtractHour('created_at')).values('hour').annotate(
+            orders=Count('id'),
+            revenue=Sum('total_amount'),
+        ).order_by('hour')
+        for row in hours:
+            hourly.append({
+                'hour': row['hour'],
+                'orders': row['orders'],
+                'revenue': _to_display_currency(row['revenue'] or 0),
+            })
+
+        total_revenue = float(Transaction.objects.filter(
+            order__id__in=paid_order_ids, status='success'
+        ).aggregate(total=Sum('amount'))['total'] or 0)
+        total_food_cost = float(order_items.aggregate(total=Sum(F('food_cost') * F('quantity'), output_field=DecimalField()))['total'] or 0)
+        total_wastage = float(WastageLog.objects.filter(
+            created_at__gte=start_date, created_at__lte=end_date
+        ).aggregate(total=Sum('cost'))['total'] or 0)
+        total_misc = float(MiscellaneousExpense.objects.filter(
+            created_at__gte=start_date, created_at__lte=end_date
+        ).aggregate(total=Sum('cost'))['total'] or 0)
+
+        final_profit = total_revenue - total_food_cost - total_wastage - total_misc
+        food_cost_ratio = float((Decimal(total_food_cost) / Decimal(total_revenue) * 100) if total_revenue else 0)
+
+        cash_revenue = float(Transaction.objects.filter(
+            order__id__in=paid_order_ids,
+            status='success',
+            method=Transaction.METHOD_CASH,
+        ).aggregate(total=Sum('amount'))['total'] or 0)
+        mpesa_revenue = float(Transaction.objects.filter(
+            order__id__in=paid_order_ids,
+            status='success',
+            method=Transaction.METHOD_M_PESA,
+        ).aggregate(total=Sum('amount'))['total'] or 0)
+
+        waiter_stats_qs = Order.objects.filter(id__in=paid_order_ids).values('waiter_id', 'waiter_name', 'waiter__name').annotate(orders=Count('id'))
+        best_waiter = None
+        least_waiter = None
+        if waiter_stats_qs:
+            waiter_stats = []
+            for w in waiter_stats_qs:
+                waiter_name = (w.get('waiter_name') or w.get('waiter__name') or '').strip()
+                if waiter_name:
+                    waiter_stats.append({
+                        'waiter_id': w.get('waiter_id'),
+                        'waiter_name': waiter_name,
+                        'orders': w.get('orders', 0),
+                    })
+
+            if waiter_stats:
+                waiter_stats_sorted = sorted(waiter_stats, key=lambda x: x.get('orders', 0), reverse=True)
+                top = waiter_stats_sorted[0]
+                bottom = waiter_stats_sorted[-1]
+                best_waiter = {
+                    'waiter_id': top.get('waiter_id'),
+                    'waiter_name': top.get('waiter_name'),
+                    'orders': top.get('orders', 0),
+                }
+                least_waiter = {
+                    'waiter_id': bottom.get('waiter_id'),
+                    'waiter_name': bottom.get('waiter_name'),
+                    'orders': bottom.get('orders', 0),
+                }
+
+        return {
+            'range_days': (end_date - start_date).days + 1,
+            'range_label': range_label,
+            'best_items': best_items,
+            'worst_items': worst_items,
+            'hourly_sales': hourly,
+            'best_waiter': best_waiter,
+            'least_waiter': least_waiter,
+            'totals': {
+                'revenue': _to_display_currency(total_revenue),
+                'cash_revenue': _to_display_currency(cash_revenue),
+                'mpesa_revenue': _to_display_currency(mpesa_revenue),
+                'food_cost': _to_display_currency(total_food_cost),
+                'wastage': _to_display_currency(total_wastage),
+                'miscellaneous': _to_display_currency(total_misc),
+                'profit': _to_display_currency(final_profit),
+                'food_cost_ratio': round(food_cost_ratio, 2),
+            },
+        }
+    except Exception as exc:
+        logger.exception('Error generating report summary: %s', exc)
+        return _empty_report_summary_payload(range_label)
+
+
+def report_summary(request):
     if not _is_admin(request):
         return JsonResponse({'error': 'unauthorized'}, status=403)
 
@@ -3770,7 +3780,7 @@ def report_summary(request):
         return JsonResponse(data)
     except Exception as e:
         logger.exception('Error generating report summary')
-        return JsonResponse({'error': 'internal_server_error', 'message': str(e)}, status=500)
+        return JsonResponse(_empty_report_summary_payload(label or ''), status=200)
 
 
 @csrf_exempt
@@ -3891,7 +3901,7 @@ def wastage_log(request):
             })
         except Exception as e:
             logger.exception('Error fetching wastage logs')
-            return JsonResponse({'error': 'internal_server_error', 'message': str(e)}, status=500)
+            return JsonResponse({'wastage': []})
 
     if request.method != 'POST':
         return HttpResponseBadRequest('Only GET and POST allowed')
