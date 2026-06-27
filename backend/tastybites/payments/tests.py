@@ -36,3 +36,15 @@ class AdminSigninSchemaTests(SchemaCleanupMixin, TestCase):
         self.drop_table_if_exists('payments_orderitem')
 
         self.assertTrue(_payments_schema_ready())
+
+    def test_config_returns_defaults_when_appsettings_table_is_missing(self):
+        self.drop_table_if_exists('payments_appsettings')
+
+        from .views import config
+        request = self.factory.get('/api/payments/config/')
+        response = config(request)
+
+        self.assertEqual(response.status_code, 200)
+        payload = json.loads(response.content.decode('utf-8'))
+        self.assertEqual(payload['base_currency'], 'KES')
+        self.assertEqual(payload['conversion_rate'], 1.0)
