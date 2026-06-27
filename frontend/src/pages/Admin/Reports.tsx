@@ -77,12 +77,16 @@ const Reports: React.FC = () => {
     return params
   }
 
-  const makeAuthHeaders = (token: string) => ({
-    Authorization: `Bearer ${token}`,
-    'X-ADMIN-TOKEN': token,
-  })
+  const makeAuthHeaders = (token?: string | null): Record<string, string> => {
+    if (!token) return {}
+    return {
+      Authorization: `Bearer ${token}`,
+      'X-ADMIN-TOKEN': token,
+    }
+  }
 
-  const withAdminToken = (url: string, token: string) => {
+  const withAdminToken = (url: string, token?: string | null) => {
+    if (!token) return url
     try {
       const parsed = new URL(url, window.location.origin)
       parsed.searchParams.set('admin_token', token)
@@ -174,6 +178,11 @@ const Reports: React.FC = () => {
 
   const fetchWastage = async () => {
     const token = getAdminToken()
+    if (!token) {
+      console.warn('Skipping wastage fetch because admin token is missing.')
+      setWastageLogs([])
+      return
+    }
     const url = withAdminToken(getApiUrl(`/payments/reports/wastage/?${makeReportParams().toString()}`), token)
     console.log('Fetching wastage logs from:', url)
     try {
@@ -202,6 +211,11 @@ const Reports: React.FC = () => {
 
   const fetchMisc = async () => {
     const token = getAdminToken()
+    if (!token) {
+      console.warn('Skipping miscellaneous fetch because admin token is missing.')
+      setMiscLogs([])
+      return
+    }
     const url = withAdminToken(getApiUrl(`/payments/reports/miscellaneous/?${makeReportParams().toString()}`), token)
     console.log('Fetching miscellaneous logs from:', url)
     try {
@@ -257,13 +271,13 @@ const Reports: React.FC = () => {
   )
 
   const hourlyData = useMemo(() => {
-    const hourMap = new Map<number, { orders: number; revenue: number }>()
+    const hourMap = new Map<number, { orders: number; revenue: number; label?: string }>()
     data?.hourly_sales.forEach((entry) => {
-      hourMap.set(entry.hour, { orders: entry.orders, revenue: entry.revenue })
+      hourMap.set(entry.hour, { orders: entry.orders, revenue: entry.revenue, label: entry.label })
     })
 
     return Array.from({ length: 24 }, (_, hour) => {
-      const value = hourMap.get(hour) || { orders: 0, revenue: 0 }
+      const value = hourMap.get(hour) || { orders: 0, revenue: 0, label: `${hour.toString().padStart(2, '0')}:00` }
       return {
         hour,
         label: value.label || `${hour.toString().padStart(2, '0')}:00`,
