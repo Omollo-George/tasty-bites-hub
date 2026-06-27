@@ -515,8 +515,38 @@ def _ensure_required_tables() -> bool:
         return False
 
 
+def _ensure_required_columns() -> bool:
+    try:
+        with connection.cursor() as cursor:
+            table_names = set(connection.introspection.table_names(cursor))
+
+            if 'payments_orderitem' in table_names:
+                columns = {col.name for col in connection.introspection.get_table_description(cursor, 'payments_orderitem')}
+                if 'food_cost' not in columns:
+                    cursor.execute('ALTER TABLE payments_orderitem ADD COLUMN food_cost numeric NOT NULL DEFAULT 0.00')
+                if 'is_served' not in columns:
+                    cursor.execute('ALTER TABLE payments_orderitem ADD COLUMN is_served boolean NOT NULL DEFAULT 0')
+
+            if 'payments_transaction' in table_names:
+                columns = {col.name for col in connection.introspection.get_table_description(cursor, 'payments_transaction')}
+                if 'mpesa_receipt' not in columns:
+                    cursor.execute('ALTER TABLE payments_transaction ADD COLUMN mpesa_receipt varchar(64) NULL')
+
+            if 'payments_order' in table_names:
+                columns = {col.name for col in connection.introspection.get_table_description(cursor, 'payments_order')}
+                if 'waiter_id' not in columns:
+                    cursor.execute('ALTER TABLE payments_order ADD COLUMN waiter_id integer NULL')
+                if 'waiter_name' not in columns:
+                    cursor.execute('ALTER TABLE payments_order ADD COLUMN waiter_name varchar(255) NOT NULL DEFAULT ""')
+
+            return True
+    except Exception as exc:
+        logger.warning('Could not ensure required payments columns: %s', exc)
+        return False
+
+
 def _payments_schema_ready() -> bool:
-    return _ensure_required_tables()
+    return _ensure_required_tables() and _ensure_required_columns()
 
 
 def _schema_error_response(message='Payments database schema is not available. Please apply database migrations.'):

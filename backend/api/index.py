@@ -37,6 +37,15 @@ try:
         print('[Django Setup] Migrate failed (continuing):', exc)
         traceback.print_exc()
 
+    try:
+        from payments.views import _ensure_required_tables, _ensure_required_columns
+        _ensure_required_tables()
+        _ensure_required_columns()
+        print('[Django Setup] Repaired payments database schema if needed')
+    except Exception as exc:
+        print('[Django Setup] Schema repair failed (continuing):', exc)
+        traceback.print_exc()
+
     # Import the WSGI application even if migrations had issues.
     # This prevents the generic backend_initialization_failed fallback
     # from masking real request-time failures.

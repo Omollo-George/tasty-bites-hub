@@ -63,6 +63,29 @@ class AdminSigninSchemaTests(SchemaCleanupMixin, TestCase):
 
         self.assertTrue(_payments_schema_ready())
 
+    def test_schema_repair_adds_missing_orderitem_columns(self):
+        self.drop_table_if_exists('payments_orderitem')
+        with connection.cursor() as cursor:
+            cursor.execute('''
+                CREATE TABLE payments_orderitem (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    order_id INTEGER NOT NULL,
+                    name VARCHAR(255) NOT NULL,
+                    price NUMERIC NOT NULL,
+                    quantity INTEGER NOT NULL,
+                    created_at DATETIME NOT NULL
+                )
+            ''')
+
+        from .views import _ensure_required_columns
+
+        self.assertTrue(_ensure_required_columns())
+        with connection.cursor() as cursor:
+            columns = {col.name for col in connection.introspection.get_table_description(cursor, 'payments_orderitem')}
+
+        self.assertIn('food_cost', columns)
+        self.assertIn('is_served', columns)
+
     def test_config_returns_defaults_when_appsettings_table_is_missing(self):
         self.drop_table_if_exists('payments_appsettings')
 
