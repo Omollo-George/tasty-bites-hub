@@ -92,21 +92,58 @@ def _normalize_phone(ph: str) -> str:
 def _ensure_required_tables() -> bool:
     try:
         call_command('migrate', 'payments', verbosity=0, interactive=False)
-        return True
     except Exception as exc:
-        logger.warning('Could not ensure required payments tables: %s', exc)
+        logger.warning('Migrate repair failed, trying direct table creation: %s', exc)
+
+    required_models = [
+        AppSettings,
+        AdminUser,
+        Employee,
+        Table,
+        MenuItem,
+        Order,
+        OrderItem,
+        Transaction,
+        AdminSessionLog,
+        AdminToken,
+        StaffToken,
+        Review,
+        WastageLog,
+        MiscellaneousExpense,
+        StockLog,
+    ]
+    existing_tables = set(connection.introspection.table_names())
+
+    try:
+        connection.disable_constraint_checking()
+        try:
+            with connection.schema_editor(atomic=False) as schema_editor:
+                for model in required_models:
+                    table_name = model._meta.db_table
+                    if table_name in existing_tables:
+                        continue
+                    schema_editor.create_model(model)
+                    existing_tables.add(table_name)
+        finally:
+            connection.enable_constraint_checking()
+    except Exception as exc:
+        logger.warning('Could not ensure required payments tables directly: %s', exc)
         return False
 
-
-def _payments_schema_ready() -> bool:
-    if not _ensure_required_tables():
-        return False
     try:
         Order.objects.exists()
         return True
     except (db_utils.ProgrammingError, db_utils.OperationalError) as exc:
-        logger.warning('Payments schema unavailable: %s', exc)
+        logger.warning('Payments schema unavailable after repair: %s', exc)
         return False
+
+
+def _payments_schema_ready() -> bool:
+    return _ensure_required_tables()
+
+
+def _schema_error_response(message='Payments database schema is not available. Please apply database migrations.'):
+    return JsonResponse({'error': 'schema_not_ready', 'message': message}, status=503)
 
 
 def _display_rate() -> float:
@@ -732,6 +769,9 @@ def payment_status(request):
 
 
 def config(request):
+    if not _payments_schema_ready():
+        return _schema_error_response()
+
     app_settings = AppSettings.current()
     # Conversion rate is still returned for frontend pricing calculations.
     return JsonResponse({
@@ -2106,6 +2146,9 @@ def search_knowledge(request):
 
 def automation_insights(request):
     """The 'Super System' engine: Analyzes patterns for auto-staffing and re-engagement."""
+    if not _payments_schema_ready():
+        return _schema_error_response()
+
     if not _is_admin(request):
         return JsonResponse({'error': 'unauthorized'}, status=403)
 
@@ -2244,6 +2287,9 @@ def _parse_employee_payload(request):
 @csrf_exempt
 def employees_list(request):
     """Lists all employees and handles creation via POST."""
+    if not _payments_schema_ready():
+        return _schema_error_response()
+
     if not _is_admin(request):
         return JsonResponse({'error': 'unauthorized'}, status=403)
 
@@ -2627,6 +2673,9 @@ def admin_delete_wastage_log(request, log_id: int):
 
 @csrf_exempt
 def miscellaneous_log(request):
+    if not _payments_schema_ready():
+        return _schema_error_response()
+
     if not _is_admin(request):
         return JsonResponse({'error': 'unauthorized'}, status=403)
 
@@ -3119,6 +3168,9 @@ def order_receipt(request, order_id: str):
 
 
 def orders_list(request):
+    if not _payments_schema_ready():
+        return _schema_error_response()
+
     if not _is_admin(request):
         return JsonResponse({'error': 'unauthorized'}, status=403)
 
@@ -3147,6 +3199,9 @@ def orders_list(request):
 
 
 def order_detail(request, order_id: str):
+    if not _payments_schema_ready():
+        return _schema_error_response()
+
     if not _is_admin(request):
         return JsonResponse({'error': 'unauthorized'}, status=403)
 
@@ -3158,6 +3213,8 @@ def order_detail(request, order_id: str):
 
 
 def _build_report_summary(start_date: datetime.datetime, end_date: datetime.datetime, range_label: str):
+    if not _payments_schema_ready():
+        raise RuntimeError('Payments schema is not available')
 
     # Identify orders from this period that are fully paid OR completed
     paid_orders = Order.objects.filter(
@@ -3301,6 +3358,9 @@ def _build_report_summary(start_date: datetime.datetime, end_date: datetime.date
 
 
 def report_summary(request):
+    if not _payments_schema_ready():
+        return _schema_error_response()
+
     if not _is_admin(request):
         return JsonResponse({'error': 'unauthorized'}, status=403)
 
@@ -3403,6 +3463,9 @@ def download_report(request):
 
 @csrf_exempt
 def wastage_log(request):
+    if not _payments_schema_ready():
+        return _schema_error_response()
+
     if not _is_admin(request):
         return JsonResponse({'error': 'unauthorized'}, status=403)
 
