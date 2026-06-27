@@ -846,12 +846,20 @@ def admin_signin(request):
         user.save()
 
         log = AdminSessionLog.objects.create(user=user)
-        # Set initial expiry to 4 hours
         expiry = timezone.now() + timedelta(hours=4)
         token = AdminToken.objects.create(user=user, session_log=log, expires_at=expiry)
         return JsonResponse({'token': token.token, 'username': user.username})
+    except (db_utils.ProgrammingError, db_utils.OperationalError, AttributeError) as exc:
+        logger.warning('Admin sign-in failed due to schema issue: %s', exc)
+        return JsonResponse(
+            {
+                'error': 'Admin authentication is temporarily unavailable because the admin authentication tables are missing or incomplete. Please redeploy or run database migrations.'
+            },
+            status=503,
+        )
     except Exception as e:
-        return JsonResponse({'error': f'Login Error: {str(e)}. This usually indicates missing database migrations. Please run "python manage.py migrate".'}, status=500)
+        logger.exception('Unexpected admin sign-in failure: %s', e)
+        return JsonResponse({'error': 'Login failed. Please try again later.'}, status=500)
 
 
 @csrf_exempt
