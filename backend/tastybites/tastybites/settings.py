@@ -158,25 +158,15 @@ try:
             )
         }
     else:
-        # In production without DATABASE_URL (e.g., serverless cold-start),
-        # use a null database to allow the app to start and handle errors per-request.
-        # Real database access will fail gracefully instead of crashing at import.
-        DATABASES = {
-            'default': {
-                'ENGINE': 'django.db.backends.sqlite3',
-                'NAME': ':memory:',  # In-memory SQLite for production without DATABASE_URL
-            }
-        }
+        raise ImproperlyConfigured(
+            'DATABASE_URL is required in production. Set DATABASE_URL in your Vercel environment variables.'
+        )
 except Exception as e:
     if not DEBUG:
-        # Don't crash at import in production; use fallback instead
-        print('WARNING: could not parse DATABASE_URL in production:', str(e))
-        DATABASES = {
-            'default': {
-                'ENGINE': 'django.db.backends.sqlite3',
-                'NAME': ':memory:',
-            }
-        }
+        raise ImproperlyConfigured(
+            f'Could not parse DATABASE_URL in production: {str(e)}. '
+            'Verify your Vercel DATABASE_URL environment variable and ensure it is a valid PostgreSQL URL.'
+        )
     else:
         # Don't crash on startup in development due to a malformed DATABASE_URL.
         print('WARNING: could not parse DATABASE_URL:', str(e))
