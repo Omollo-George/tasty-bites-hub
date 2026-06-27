@@ -193,21 +193,6 @@ def _get_oauth_token():
         logger.exception('Unexpected error obtaining M-Pesa OAuth token: %s', e)
         raise Exception(f"An unexpected error occurred while getting M-Pesa OAuth token: {e}")
 
-def _get_token_from_request(request):
-    auth_header = request.headers.get('Authorization', '')
-    if auth_header.startswith('Bearer '):
-        return auth_header.split('Bearer ')[1].strip()
-
-    return (
-        request.headers.get('X-STAFF-TOKEN')
-        or request.headers.get('X-ADMIN-TOKEN')
-        or request.GET.get('admin_token')
-        or request.POST.get('admin_token')
-        or request.GET.get('staff_token')
-        or request.POST.get('staff_token')
-    )
-
-
 def _normalize_image_url(url: str) -> str:
     if not url:
         return ''
@@ -242,11 +227,19 @@ def _get_admin_token(request):
 
 
 def _get_token_from_request(request):
-    # Support both Authorization Bearer and custom admin token headers.
+    # Support Authorization Bearer and both admin/staff token headers.
     auth_header = request.headers.get('Authorization', '')
     if auth_header.startswith('Bearer '):
         return auth_header.split(' ', 1)[1].strip()
-    token = request.headers.get('X-ADMIN-TOKEN', '') or request.POST.get('admin_token', '') or request.GET.get('admin_token', '')
+
+    token = (
+        request.headers.get('X-ADMIN-TOKEN', '') or
+        request.headers.get('X-STAFF-TOKEN', '') or
+        request.GET.get('admin_token', '') or
+        request.POST.get('admin_token', '') or
+        request.GET.get('staff_token', '') or
+        request.POST.get('staff_token', '')
+    )
     return token.strip() if token else None
 
 

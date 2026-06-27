@@ -13,6 +13,7 @@ https://docs.djangoproject.com/en/6.0/ref/settings/
 import os
 import sys
 from pathlib import Path
+from django.core.exceptions import ImproperlyConfigured
 import dj_database_url
 from dotenv import load_dotenv
 from corsheaders.defaults import default_headers
@@ -135,6 +136,11 @@ if isinstance(raw_db_url, str):
         cleaned_db_url = add_sslmode_if_requested(cleaned_db_url)
 else:
     cleaned_db_url = None
+
+if cleaned_db_url is None and not DEBUG:
+    raise ImproperlyConfigured(
+        'DATABASE_URL is required in production. Set DATABASE_URL in your Vercel environment variables.'
+    )
 
 try:
     if cleaned_db_url:
