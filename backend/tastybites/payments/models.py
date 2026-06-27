@@ -45,6 +45,7 @@ class Transaction(models.Model):
     order = models.ForeignKey('Order', on_delete=models.SET_NULL, null=True, blank=True, related_name='transactions')
     status = models.CharField(max_length=32, choices=STATUS_CHOICES, default=STATUS_PENDING, db_index=True)
     method = models.CharField(max_length=32, choices=METHOD_CHOICES, default=METHOD_M_PESA)
+    mpesa_receipt = models.CharField(max_length=64, blank=True, null=True)
     raw_response = models.JSONField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
