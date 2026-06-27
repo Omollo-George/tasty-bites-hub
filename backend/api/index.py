@@ -31,19 +31,21 @@ try:
     # Ensure migrations are applied before handling production requests.
     # This helps avoid missing relations in newly deployed environments.
     try:
-        call_command('migrate', '--noinput', verbosity=0)
+        call_command('migrate', '--noinput', verbosity=0, interactive=False)
         print('[Django Setup] Applied migrations successfully')
     except Exception as exc:
-        print('[Django Setup] Migrate failed:', exc)
-        raise
+        print('[Django Setup] Migrate failed (continuing):', exc)
+        traceback.print_exc()
 
-    # Import the WSGI application
+    # Import the WSGI application even if migrations had issues.
+    # This prevents the generic backend_initialization_failed fallback
+    # from masking real request-time failures.
     from tastybites.wsgi import application
 
     # Export for Vercel serverless
     app = application
     handler = application
-    
+
     print('[Django Setup] Backend initialized successfully')
 
 except Exception as e:
@@ -51,7 +53,7 @@ except Exception as e:
     error_msg = f"Backend initialization failed: {str(e)}"
     print(f"ERROR: {error_msg}")
     traceback.print_exc()
-    
+
     # Create a minimal WSGI app that returns error responses
     def error_handler(environ, start_response):
         response_body = json.dumps({
@@ -65,6 +67,6 @@ except Exception as e:
         ]
         start_response(status, response_headers)
         return [response_body]
-    
+
     app = error_handler
     handler = error_handler
