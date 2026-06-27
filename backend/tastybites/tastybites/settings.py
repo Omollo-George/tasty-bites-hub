@@ -214,7 +214,16 @@ STATIC_URL = 'static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 MEDIA_URL = '/media/'
-MEDIA_ROOT = BASE_DIR / 'media'
+MEDIA_ROOT = Path(os.environ.get('DJANGO_MEDIA_ROOT', BASE_DIR / 'media'))
+try:
+    MEDIA_ROOT.mkdir(parents=True, exist_ok=True)
+except OSError:
+    MEDIA_ROOT = Path(os.environ.get('TMPDIR', os.environ.get('TMP', '/tmp'))) / 'media'
+    MEDIA_ROOT.mkdir(parents=True, exist_ok=True)
+else:
+    if not os.access(str(MEDIA_ROOT), os.W_OK):
+        MEDIA_ROOT = Path(os.environ.get('TMPDIR', os.environ.get('TMP', '/tmp'))) / 'media'
+        MEDIA_ROOT.mkdir(parents=True, exist_ok=True)
 # M-Pesa Daraja API Config
 MPESA_ENVIRONMENT = 'sandbox'
 
