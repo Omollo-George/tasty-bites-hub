@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "buildCommand": "cd backend/tastybites && python manage.py migrate --noinput || true",
+  "buildCommand": "cd backend/tastybites && python manage.py migrate --noinput",
   "builds": [
     {
       "src": "frontend/package.json",

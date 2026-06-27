@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { Eye, EyeOff, Users } from 'lucide-react'
-import { setAdminToken, getAdminToken, isAdminSessionValid } from '@/lib/admin-session'
+import { setAdminToken, getAdminToken, isAdminSessionValid, setAdminUser } from '@/lib/admin-session'
 import { getApiUrl } from '@/lib/api'
 import heroImage from '@/assets/hero-food.jpg'
 
@@ -16,31 +16,7 @@ const AdminLogin: React.FC = () => {
   const location = useLocation()
   const from = (location.state as any)?.from?.pathname || '/admin'
 
-  const passwordRequirements = [
-    {
-      label: 'At least 8 characters',
-      validate: (value: string) => value.length >= 8,
-    },
-    {
-      label: 'One uppercase letter',
-      validate: (value: string) => /[A-Z]/.test(value),
-    },
-    {
-      label: 'One lowercase letter',
-      validate: (value: string) => /[a-z]/.test(value),
-    },
-    {
-      label: 'One number',
-      validate: (value: string) => /[0-9]/.test(value),
-    },
-    {
-      label: 'One special character (!@#$%^&*)',
-      validate: (value: string) => /[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]/.test(value),
-    },
-  ]
-
-  const passwordIssues = passwordRequirements.filter((requirement) => !requirement.validate(password))
-  const isPasswordValid = passwordIssues.length === 0
+  const isPasswordValid = password.trim().length > 0
 
   useEffect(() => {
     // Redirect to dashboard if session is already valid
@@ -65,8 +41,8 @@ const AdminLogin: React.FC = () => {
     setError('')
     setLoading(true)
 
-    if (!isPasswordValid) {
-      setError('Please ensure your password meets all security requirements.')
+    if (!username.trim() || !password.trim()) {
+      setError('Username and password are required.')
       setLoading(false)
       return
     }
@@ -101,9 +77,7 @@ const AdminLogin: React.FC = () => {
         setLockoutSeconds(0)
         setAdminToken(data.token)
         if (data.username) {
-          import('@/lib/admin-session').then(module => {
-            module.setAdminUser({ username: data.username })
-          })
+          setAdminUser({ username: data.username, display_name: data.username, authorized: true })
         }
         navigate(from, { replace: true })
       }
@@ -169,18 +143,6 @@ const AdminLogin: React.FC = () => {
               </button>
             </div>
           </label>
-          <div className="mt-2 space-y-1 text-xs text-slate-400">
-            {passwordRequirements.map((requirement) => {
-              const valid = requirement.validate(password)
-              if (valid) return null; // Disappear if condition is met
-              return (
-                <div key={requirement.label} className="flex items-center gap-2">
-                  <span className="text-red-500">✖</span>
-                  <span>{requirement.label}</span>
-                </div>
-              )
-            })}
-          </div>
           {error && <p className="text-sm text-red-500 font-medium">{error}</p>}
           {lockoutSeconds > 0 && (
             <p className="text-sm text-yellow-700">
