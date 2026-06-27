@@ -367,7 +367,7 @@ def staff_activities(request):
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
 
-def _get_period_dates(period_type: str, date_str: str):
+def _get_period_dates(period_type: str, date_str: str, start_date_str: str | None = None, end_date_str: str | None = None):
     """
     Calculates start and end dates for a report period based on type and a reference date.
     """
@@ -410,8 +410,8 @@ def _get_period_dates(period_type: str, date_str: str):
         label = selected_date.strftime('%Y')
     elif period_type == 'custom':
         # custom date ranges are passed through explicit query parameters
-        start_date_str = request.GET.get('start_date') or request.GET.get('from')
-        end_date_str = request.GET.get('end_date') or request.GET.get('to')
+        start_date_str = start_date_str or ''
+        end_date_str = end_date_str or ''
         try:
             if start_date_str:
                 start_date = datetime.datetime.strptime(start_date_str, '%Y-%m-%d')
@@ -2566,21 +2566,32 @@ def miscellaneous_log(request):
         return JsonResponse({'error': 'unauthorized'}, status=403)
 
     if request.method == 'GET':
-        period_type = request.GET.get('period_type', 'week')
-        date_str = request.GET.get('date')
-        start_date, end_date, _ = _get_period_dates(period_type, date_str)
-        logs = MiscellaneousExpense.objects.filter(
-            created_at__gte=start_date, created_at__lte=end_date).order_by('-created_at')[:100]
-        return JsonResponse({'miscellaneous': [
-            {
-                'id': log.id,
-                'item_name': log.item_name,
-                'reason': log.reason,
-                'cost': _to_display_currency(log.cost),
-                'created_at': log.created_at.isoformat() if log.created_at else None,
-            }
-            for log in logs
-        ]})
+        try:
+            period_type = request.GET.get('period_type', 'week')
+            date_str = request.GET.get('date')
+            start_date, end_date, _ = _get_period_dates(
+                period_type,
+                date_str,
+                request.GET.get('start_date'),
+                request.GET.get('end_date'),
+            )
+            logs = MiscellaneousExpense.objects.filter(
+                created_at__gte=start_date, created_at__lte=end_date).order_by('-created_at')[:100]
+            return JsonResponse({
+                'miscellaneous': [
+                    {
+                        'id': log.id,
+                        'item_name': log.item_name,
+                        'reason': log.reason,
+                        'cost': _to_display_currency(log.cost),
+                        'created_at': log.created_at.isoformat() if log.created_at else None,
+                    }
+                    for log in logs
+                ]
+            })
+        except Exception as e:
+            logger.exception('Error fetching miscellaneous logs')
+            return JsonResponse({'error': 'internal_server_error', 'message': str(e)}, status=500)
 
     if request.method != 'POST':
         return HttpResponseBadRequest('Only GET and POST allowed')
@@ -3228,12 +3239,20 @@ def report_summary(request):
     if not _is_admin(request):
         return JsonResponse({'error': 'unauthorized'}, status=403)
 
-    period_type = request.GET.get('period_type', 'week') # Default to week
-    date_str = request.GET.get('date') # YYYY-MM-DD
-    
-    start_date, end_date, label = _get_period_dates(period_type, date_str)
-    data = _build_report_summary(start_date, end_date, label)
-    return JsonResponse(data)
+    try:
+        period_type = request.GET.get('period_type', 'week') # Default to week
+        date_str = request.GET.get('date') # YYYY-MM-DD
+        start_date, end_date, label = _get_period_dates(
+            period_type,
+            date_str,
+            request.GET.get('start_date'),
+            request.GET.get('end_date'),
+        )
+        data = _build_report_summary(start_date, end_date, label)
+        return JsonResponse(data)
+    except Exception as e:
+        logger.exception('Error generating report summary')
+        return JsonResponse({'error': 'internal_server_error', 'message': str(e)}, status=500)
 
 
 @csrf_exempt
@@ -3247,7 +3266,12 @@ def download_report(request):
     period_type = request.GET.get('period_type', 'week')
     date_str = request.GET.get('date')
     
-    start_date, end_date, label = _get_period_dates(period_type, date_str)
+    start_date, end_date, label = _get_period_dates(
+        period_type,
+        date_str,
+        request.GET.get('start_date'),
+        request.GET.get('end_date'),
+    )
     report_data = _build_report_summary(start_date, end_date, label)
     filename = f"tastybites-report-{report_data['range_label']}.csv"
     response = HttpResponse(content_type='text/csv')
@@ -3318,24 +3342,35 @@ def wastage_log(request):
         return JsonResponse({'error': 'unauthorized'}, status=403)
 
     if request.method == 'GET':
-        period_type = request.GET.get('period_type', 'week') # Default to week
-        date_str = request.GET.get('date') # YYYY-MM-DD
-        
-        start_date, end_date, _ = _get_period_dates(period_type, date_str)
+        try:
+            period_type = request.GET.get('period_type', 'week') # Default to week
+            date_str = request.GET.get('date') # YYYY-MM-DD
 
-        logs = WastageLog.objects.filter(
-            created_at__gte=start_date, created_at__lte=end_date).order_by('-created_at')[:100]
-        return JsonResponse({'wastage': [
-            {
-                'id': log.id,
-                'item_name': log.item_name,
-                'quantity': log.quantity,
-                'reason': log.reason,
-                'cost': _to_display_currency(log.cost),
-                'created_at': log.created_at.isoformat() if log.created_at else None,
-            }
-            for log in logs
-        ]})
+            start_date, end_date, _ = _get_period_dates(
+                period_type,
+                date_str,
+                request.GET.get('start_date'),
+                request.GET.get('end_date'),
+            )
+
+            logs = WastageLog.objects.filter(
+                created_at__gte=start_date, created_at__lte=end_date).order_by('-created_at')[:100]
+            return JsonResponse({
+                'wastage': [
+                    {
+                        'id': log.id,
+                        'item_name': log.item_name,
+                        'quantity': log.quantity,
+                        'reason': log.reason,
+                        'cost': _to_display_currency(log.cost),
+                        'created_at': log.created_at.isoformat() if log.created_at else None,
+                    }
+                    for log in logs
+                ]
+            })
+        except Exception as e:
+            logger.exception('Error fetching wastage logs')
+            return JsonResponse({'error': 'internal_server_error', 'message': str(e)}, status=500)
 
     if request.method != 'POST':
         return HttpResponseBadRequest('Only GET and POST allowed')
