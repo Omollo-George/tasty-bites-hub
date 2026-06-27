@@ -95,37 +95,414 @@ def _ensure_required_tables() -> bool:
     except Exception as exc:
         logger.warning('Migrate repair failed, trying direct table creation: %s', exc)
 
-    required_models = [
-        AppSettings,
-        AdminUser,
-        Employee,
-        Table,
-        MenuItem,
-        Order,
-        OrderItem,
-        Transaction,
-        AdminSessionLog,
-        AdminToken,
-        StaffToken,
-        Review,
-        WastageLog,
-        MiscellaneousExpense,
-        StockLog,
-    ]
     existing_tables = set(connection.introspection.table_names())
+    vendor = connection.vendor
+
+    create_statements = []
+
+    if 'payments_appsettings' not in existing_tables:
+        create_statements.append(
+            '''
+            CREATE TABLE payments_appsettings (
+                id integer PRIMARY KEY AUTOINCREMENT,
+                default_phone varchar(32) NOT NULL DEFAULT '',
+                conversion_rate numeric NOT NULL DEFAULT 1.00,
+                delivery_rate_per_km numeric NOT NULL DEFAULT 100.00,
+                min_delivery_fee numeric NOT NULL DEFAULT 50.00,
+                base_currency varchar(8) NOT NULL DEFAULT 'KES',
+                display_currency varchar(8) NOT NULL DEFAULT 'KES',
+                updated_at datetime NOT NULL
+            )
+            ''' if vendor != 'postgresql' else
+            '''
+            CREATE TABLE payments_appsettings (
+                id bigserial PRIMARY KEY,
+                default_phone varchar(32) NOT NULL DEFAULT '',
+                conversion_rate numeric NOT NULL DEFAULT 1.00,
+                delivery_rate_per_km numeric NOT NULL DEFAULT 100.00,
+                min_delivery_fee numeric NOT NULL DEFAULT 50.00,
+                base_currency varchar(8) NOT NULL DEFAULT 'KES',
+                display_currency varchar(8) NOT NULL DEFAULT 'KES',
+                updated_at timestamp with time zone NOT NULL
+            )
+            '''
+        )
+
+    if 'payments_adminuser' not in existing_tables:
+        create_statements.append(
+            '''
+            CREATE TABLE payments_adminuser (
+                id integer PRIMARY KEY AUTOINCREMENT,
+                username varchar(150) NOT NULL UNIQUE,
+                password_hash varchar(256) NOT NULL,
+                failed_login_attempts smallint NOT NULL DEFAULT 0,
+                lockout_until datetime NULL,
+                created_at datetime NOT NULL
+            )
+            ''' if vendor != 'postgresql' else
+            '''
+            CREATE TABLE payments_adminuser (
+                id bigserial PRIMARY KEY,
+                username varchar(150) NOT NULL UNIQUE,
+                password_hash varchar(256) NOT NULL,
+                failed_login_attempts smallint NOT NULL DEFAULT 0,
+                lockout_until timestamp with time zone NULL,
+                created_at timestamp with time zone NOT NULL
+            )
+            '''
+        )
+
+    if 'payments_employee' not in existing_tables:
+        create_statements.append(
+            '''
+            CREATE TABLE payments_employee (
+                id integer PRIMARY KEY AUTOINCREMENT,
+                name varchar(255) NOT NULL,
+                role varchar(100) NOT NULL DEFAULT 'Staff',
+                username varchar(150) UNIQUE,
+                password_hash varchar(256),
+                phone varchar(32) NOT NULL DEFAULT '',
+                email varchar(254) NOT NULL DEFAULT '',
+                salary numeric NOT NULL DEFAULT 0.00,
+                account_number varchar(100) NOT NULL DEFAULT '',
+                special_id varchar(50) NOT NULL DEFAULT '',
+                document varchar(100) NULL,
+                status varchar(32) NOT NULL DEFAULT 'active',
+                created_at datetime NOT NULL
+            )
+            ''' if vendor != 'postgresql' else
+            '''
+            CREATE TABLE payments_employee (
+                id bigserial PRIMARY KEY,
+                name varchar(255) NOT NULL,
+                role varchar(100) NOT NULL DEFAULT 'Staff',
+                username varchar(150) UNIQUE,
+                password_hash varchar(256),
+                phone varchar(32) NOT NULL DEFAULT '',
+                email varchar(254) NOT NULL DEFAULT '',
+                account_number varchar(100) NOT NULL DEFAULT '',
+                special_id varchar(50) NOT NULL DEFAULT '',
+                document varchar(100) NULL,
+                status varchar(32) NOT NULL DEFAULT 'active',
+                created_at timestamp with time zone NOT NULL
+            )
+            '''
+        )
+
+    if 'payments_table' not in existing_tables:
+        create_statements.append(
+            '''
+            CREATE TABLE payments_table (
+                id integer PRIMARY KEY AUTOINCREMENT,
+                number varchar(32) NOT NULL UNIQUE,
+                name varchar(128) NOT NULL,
+                status varchar(32) NOT NULL,
+                created_at datetime NOT NULL
+            )
+            ''' if vendor != 'postgresql' else
+            '''
+            CREATE TABLE payments_table (
+                id bigserial PRIMARY KEY,
+                number varchar(32) NOT NULL UNIQUE,
+                name varchar(128) NOT NULL,
+                status varchar(32) NOT NULL,
+                created_at timestamp with time zone NOT NULL
+            )
+            '''
+        )
+
+    if 'payments_menuitem' not in existing_tables:
+        create_statements.append(
+            '''
+            CREATE TABLE payments_menuitem (
+                id integer PRIMARY KEY AUTOINCREMENT,
+                name varchar(255) NOT NULL UNIQUE,
+                category varchar(64) NOT NULL DEFAULT 'All',
+                sku varchar(64),
+                price numeric NOT NULL,
+                food_cost numeric NOT NULL DEFAULT 0.00,
+                description text NOT NULL DEFAULT '',
+                popular integer NOT NULL DEFAULT 0,
+                spicy integer NOT NULL DEFAULT 0,
+                stock_level integer NOT NULL DEFAULT 0,
+                min_stock_level integer NOT NULL DEFAULT 10,
+                image_url varchar(512) NOT NULL DEFAULT '',
+                is_available integer NOT NULL DEFAULT 1,
+                created_at datetime NOT NULL
+            )
+            ''' if vendor != 'postgresql' else
+            '''
+            CREATE TABLE payments_menuitem (
+                id bigserial PRIMARY KEY,
+                name varchar(255) NOT NULL UNIQUE,
+                category varchar(64) NOT NULL DEFAULT 'All',
+                sku varchar(64),
+                price numeric NOT NULL,
+                food_cost numeric NOT NULL DEFAULT 0.00,
+                description text NOT NULL DEFAULT '',
+                popular boolean NOT NULL DEFAULT false,
+                spicy boolean NOT NULL DEFAULT false,
+                stock_level integer NOT NULL DEFAULT 0,
+                min_stock_level integer NOT NULL DEFAULT 10,
+                image_url varchar(512) NOT NULL DEFAULT '',
+                is_available boolean NOT NULL DEFAULT true,
+                created_at timestamp with time zone NOT NULL
+            )
+            '''
+        )
+
+    if 'payments_order' not in existing_tables:
+        create_statements.append(
+            '''
+            CREATE TABLE payments_order (
+                id integer PRIMARY KEY AUTOINCREMENT,
+                order_id varchar(64) NOT NULL UNIQUE,
+                phone varchar(32) NOT NULL,
+                status varchar(32) NOT NULL,
+                split_count integer NOT NULL,
+                total_amount numeric NOT NULL,
+                created_at datetime NOT NULL,
+                table_id integer NULL REFERENCES payments_table(id)
+            )
+            ''' if vendor != 'postgresql' else
+            '''
+            CREATE TABLE payments_order (
+                id bigserial PRIMARY KEY,
+                order_id varchar(64) NOT NULL UNIQUE,
+                phone varchar(32) NOT NULL,
+                status varchar(32) NOT NULL,
+                split_count integer NOT NULL,
+                total_amount numeric NOT NULL,
+                created_at timestamp with time zone NOT NULL,
+                table_id bigint NULL REFERENCES payments_table(id)
+            )
+            '''
+        )
+
+    if 'payments_orderitem' not in existing_tables:
+        create_statements.append(
+            '''
+            CREATE TABLE payments_orderitem (
+                id integer PRIMARY KEY AUTOINCREMENT,
+                name varchar(255) NOT NULL,
+                price numeric NOT NULL,
+                quantity integer NOT NULL,
+                modifiers text NULL,
+                seat_number integer NOT NULL,
+                created_at datetime NOT NULL,
+                order_id integer NOT NULL REFERENCES payments_order(id)
+            )
+            ''' if vendor != 'postgresql' else
+            '''
+            CREATE TABLE payments_orderitem (
+                id bigserial PRIMARY KEY,
+                name varchar(255) NOT NULL,
+                price numeric NOT NULL,
+                quantity integer NOT NULL,
+                modifiers jsonb NULL,
+                seat_number integer NOT NULL,
+                created_at timestamp with time zone NOT NULL,
+                order_id bigint NOT NULL REFERENCES payments_order(id)
+            )
+            '''
+        )
+
+    if 'payments_transaction' not in existing_tables:
+        create_statements.append(
+            '''
+            CREATE TABLE payments_transaction (
+                id integer PRIMARY KEY AUTOINCREMENT,
+                merchant_request_id varchar(64),
+                checkout_request_id varchar(64),
+                phone varchar(32) NOT NULL DEFAULT '',
+                amount numeric NOT NULL DEFAULT 0.00,
+                item varchar(255) NOT NULL DEFAULT '',
+                status varchar(32) NOT NULL DEFAULT 'pending',
+                method varchar(32) NOT NULL DEFAULT 'mpesa',
+                mpesa_receipt varchar(64),
+                raw_response text,
+                created_at datetime NOT NULL,
+                order_id integer NULL REFERENCES payments_order(id)
+            )
+            ''' if vendor != 'postgresql' else
+            '''
+            CREATE TABLE payments_transaction (
+                id bigserial PRIMARY KEY,
+                merchant_request_id varchar(64),
+                checkout_request_id varchar(64),
+                phone varchar(32) NOT NULL DEFAULT '',
+                amount numeric NOT NULL DEFAULT 0.00,
+                item varchar(255) NOT NULL DEFAULT '',
+                status varchar(32) NOT NULL DEFAULT 'pending',
+                method varchar(32) NOT NULL DEFAULT 'mpesa',
+                mpesa_receipt varchar(64),
+                raw_response jsonb,
+                created_at timestamp with time zone NOT NULL,
+                order_id bigint NULL REFERENCES payments_order(id)
+            )
+            '''
+        )
+
+    if 'payments_adminsessionlog' not in existing_tables:
+        create_statements.append(
+            '''
+            CREATE TABLE payments_adminsessionlog (
+                id integer PRIMARY KEY AUTOINCREMENT,
+                user_id integer NOT NULL REFERENCES payments_adminuser(id) ON DELETE CASCADE,
+                login_time datetime NOT NULL,
+                logout_time datetime NULL
+            )
+            ''' if vendor != 'postgresql' else
+            '''
+            CREATE TABLE payments_adminsessionlog (
+                id bigserial PRIMARY KEY,
+                user_id bigint NOT NULL REFERENCES payments_adminuser(id) ON DELETE CASCADE,
+                login_time timestamp with time zone NOT NULL DEFAULT now(),
+                logout_time timestamp with time zone NULL
+            )
+            '''
+        )
+
+    if 'payments_admintoken' not in existing_tables:
+        create_statements.append(
+            '''
+            CREATE TABLE payments_admintoken (
+                id integer PRIMARY KEY AUTOINCREMENT,
+                user_id integer NOT NULL REFERENCES payments_adminuser(id) ON DELETE CASCADE,
+                token varchar(64) NOT NULL UNIQUE,
+                session_log_id integer NULL REFERENCES payments_adminsessionlog(id) ON DELETE SET NULL,
+                created_at datetime NOT NULL,
+                expires_at datetime NULL
+            )
+            ''' if vendor != 'postgresql' else
+            '''
+            CREATE TABLE payments_admintoken (
+                id bigserial PRIMARY KEY,
+                user_id bigint NOT NULL REFERENCES payments_adminuser(id) ON DELETE CASCADE,
+                token varchar(64) NOT NULL UNIQUE,
+                session_log_id bigint NULL REFERENCES payments_adminsessionlog(id) ON DELETE SET NULL,
+                created_at timestamp with time zone NOT NULL,
+                expires_at timestamp with time zone NULL
+            )
+            '''
+        )
+
+    if 'payments_stafftoken' not in existing_tables:
+        create_statements.append(
+            '''
+            CREATE TABLE payments_stafftoken (
+                id integer PRIMARY KEY AUTOINCREMENT,
+                employee_id integer NOT NULL REFERENCES payments_employee(id) ON DELETE CASCADE,
+                token varchar(64) NOT NULL UNIQUE,
+                created_at datetime NOT NULL,
+                expires_at datetime NULL
+            )
+            ''' if vendor != 'postgresql' else
+            '''
+            CREATE TABLE payments_stafftoken (
+                id bigserial PRIMARY KEY,
+                employee_id bigint NOT NULL REFERENCES payments_employee(id) ON DELETE CASCADE,
+                token varchar(64) NOT NULL UNIQUE,
+                created_at timestamp with time zone NOT NULL,
+                expires_at timestamp with time zone NULL
+            )
+            '''
+        )
+
+    if 'payments_review' not in existing_tables:
+        create_statements.append(
+            '''
+            CREATE TABLE payments_review (
+                id integer PRIMARY KEY AUTOINCREMENT,
+                customer_name varchar(255),
+                rating integer NOT NULL,
+                comment text,
+                created_at datetime NOT NULL
+            )
+            ''' if vendor != 'postgresql' else
+            '''
+            CREATE TABLE payments_review (
+                id bigserial PRIMARY KEY,
+                customer_name varchar(255),
+                rating integer NOT NULL,
+                comment text,
+                created_at timestamp with time zone NOT NULL
+            )
+            '''
+        )
+
+    if 'payments_wastagelog' not in existing_tables:
+        create_statements.append(
+            '''
+            CREATE TABLE payments_wastagelog (
+                id integer PRIMARY KEY AUTOINCREMENT,
+                item_name varchar(255) NOT NULL,
+                quantity integer NOT NULL DEFAULT 1,
+                reason varchar(512) NOT NULL DEFAULT '',
+                cost numeric NOT NULL DEFAULT 0.00,
+                created_at datetime NOT NULL
+            )
+            ''' if vendor != 'postgresql' else
+            '''
+            CREATE TABLE payments_wastagelog (
+                id bigserial PRIMARY KEY,
+                item_name varchar(255) NOT NULL,
+                quantity integer NOT NULL DEFAULT 1,
+                reason varchar(512) NOT NULL DEFAULT '',
+                cost numeric NOT NULL DEFAULT 0.00,
+                created_at timestamp with time zone NOT NULL
+            )
+            '''
+        )
+
+    if 'payments_miscellaneousexpense' not in existing_tables:
+        create_statements.append(
+            '''
+            CREATE TABLE payments_miscellaneousexpense (
+                id integer PRIMARY KEY AUTOINCREMENT,
+                item_name varchar(255) NOT NULL,
+                reason varchar(512) NOT NULL DEFAULT '',
+                cost numeric NOT NULL DEFAULT 0.00,
+                created_at datetime NOT NULL
+            )
+            ''' if vendor != 'postgresql' else
+            '''
+            CREATE TABLE payments_miscellaneousexpense (
+                id bigserial PRIMARY KEY,
+                item_name varchar(255) NOT NULL,
+                reason varchar(512) NOT NULL DEFAULT '',
+                cost numeric NOT NULL DEFAULT 0.00,
+                created_at timestamp with time zone NOT NULL
+            )
+            '''
+        )
+
+    if 'payments_stocklog' not in existing_tables:
+        create_statements.append(
+            '''
+            CREATE TABLE payments_stocklog (
+                id integer PRIMARY KEY AUTOINCREMENT,
+                item_id integer NOT NULL,
+                quantity integer NOT NULL,
+                cost numeric NOT NULL,
+                created_at datetime NOT NULL
+            )
+            ''' if vendor != 'postgresql' else
+            '''
+            CREATE TABLE payments_stocklog (
+                id bigserial PRIMARY KEY,
+                item_id bigint NOT NULL,
+                quantity integer NOT NULL,
+                cost numeric NOT NULL,
+                created_at timestamp with time zone NOT NULL
+            )
+            '''
+        )
 
     try:
-        connection.disable_constraint_checking()
-        try:
-            with connection.schema_editor(atomic=False) as schema_editor:
-                for model in required_models:
-                    table_name = model._meta.db_table
-                    if table_name in existing_tables:
-                        continue
-                    schema_editor.create_model(model)
-                    existing_tables.add(table_name)
-        finally:
-            connection.enable_constraint_checking()
+        with connection.cursor() as cursor:
+            for statement in create_statements:
+                cursor.execute(statement)
     except Exception as exc:
         logger.warning('Could not ensure required payments tables directly: %s', exc)
         return False
