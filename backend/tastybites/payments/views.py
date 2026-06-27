@@ -523,11 +523,22 @@ def _schema_error_response(message='Payments database schema is not available. P
     return JsonResponse({'error': 'schema_not_ready', 'message': message}, status=503)
 
 
+def _default_config_payload() -> dict:
+    return {
+        'base_currency': 'KES',
+        'display_currency': 'KES',
+        'conversion_rate': 1.0,
+        'delivery_rate_per_km': 100.0,
+        'min_delivery_fee': 50.0,
+    }
+
+
 def _display_rate() -> float:
-    app_settings = AppSettings.current()
     try:
+        app_settings = AppSettings.current()
         return float(app_settings.conversion_rate or getattr(settings, 'MPESA_TO_KES_RATE', 1))
-    except (TypeError, ValueError):
+    except Exception as exc:
+        logger.warning('Unable to read AppSettings, using default conversion rate: %s', exc)
         return float(getattr(settings, 'MPESA_TO_KES_RATE', 1))
 
 
@@ -1146,18 +1157,23 @@ def payment_status(request):
 
 
 def config(request):
-    if not _payments_schema_ready():
-        return _schema_error_response()
+    try:
+        if _payments_schema_ready():
+            app_settings = AppSettings.current()
+            payload = {
+                'base_currency': app_settings.base_currency or 'KES',
+                'display_currency': app_settings.display_currency or 'KES',
+                'conversion_rate': float(app_settings.conversion_rate or 1.0),
+                'delivery_rate_per_km': float(app_settings.delivery_rate_per_km or 100.0),
+                'min_delivery_fee': float(app_settings.min_delivery_fee or 50.0),
+            }
+        else:
+            payload = _default_config_payload()
+    except Exception as exc:
+        logger.warning('Config endpoint failed, returning safe defaults: %s', exc)
+        payload = _default_config_payload()
 
-    app_settings = AppSettings.current()
-    # Conversion rate is still returned for frontend pricing calculations.
-    return JsonResponse({
-        'base_currency': 'KES',
-        'display_currency': 'KES',
-        'conversion_rate': float(app_settings.conversion_rate),
-        'delivery_rate_per_km': float(app_settings.delivery_rate_per_km),
-        'min_delivery_fee': float(app_settings.min_delivery_fee),
-    })
+    return JsonResponse(payload)
 
 
 @csrf_exempt
