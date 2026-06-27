@@ -85,6 +85,36 @@ const Reports: React.FC = () => {
     }
   }
 
+  const parseJsonResponse = async (res: Response) => {
+    const bodyText = await res.text()
+    if (!res.headers.get('content-type')?.includes('application/json')) {
+      return { bodyText, json: null }
+    }
+
+    try {
+      return { bodyText, json: bodyText ? JSON.parse(bodyText) : null }
+    } catch (err) {
+      console.error('Invalid JSON from API:', err, bodyText)
+      return { bodyText, json: null }
+    }
+  }
+
+  const getApiErrorMessage = (res: Response, bodyText: string, json: any) => {
+    if (json?.message && json?.error) {
+      return `${json.error}: ${json.message}`
+    }
+    if (json?.message) {
+      return json.message
+    }
+    if (json?.error) {
+      return json.error
+    }
+    if (bodyText) {
+      return bodyText
+    }
+    return `Request failed with status ${res.status} ${res.statusText}`
+  }
+
   const withAdminToken = (url: string, token?: string | null) => {
     if (!token) return url
     try {
@@ -113,20 +143,16 @@ const Reports: React.FC = () => {
         headers: makeAuthHeaders(token),
       })
 
-      const contentType = res.headers.get('content-type') || ''
-      const bodyText = await res.text()
-      const isJson = contentType.includes('application/json')
-      const json = isJson ? JSON.parse(bodyText || '{}') : null
-
+      const { bodyText, json } = await parseJsonResponse(res)
       if (!res.ok) {
-        const message = json?.error || bodyText || `Request failed with status ${res.status}`
+        const message = getApiErrorMessage(res, bodyText, json)
         setError(`Report load failed: ${message}`)
         setData(null)
         return
       }
 
-      if (!isJson) {
-        setError('Report endpoint returned invalid content type.')
+      if (json === null) {
+        setError(`Report endpoint returned invalid JSON: ${bodyText || res.statusText}`)
         setData(null)
         return
       }
@@ -190,22 +216,23 @@ const Reports: React.FC = () => {
         headers: makeAuthHeaders(token),
       })
       console.log('Wastage response status:', res.status)
-      if (!res.headers.get("content-type")?.includes("application/json")) {
-        const errorText = await res.text();
-        console.error("Invalid response format from /reports/wastage/", res.status, errorText);
-        throw new Error("Invalid server response format. Check backend logs.");
+      const { bodyText, json } = await parseJsonResponse(res)
+      if (!res.ok) {
+        const message = getApiErrorMessage(res, bodyText, json)
+        console.error('Backend error fetching wastage logs:', message)
+        setWastageLogs([])
+        return
       }
-      const json = await res.json()
+      if (json === null) {
+        console.error('Invalid response format from /reports/wastage/', res.status, bodyText)
+        setWastageLogs([])
+        return
+      }
       console.log('Wastage data received:', json)
-      if (res.ok) {
-        setWastageLogs(json.wastage || []);
-      } else {
-        console.error("Backend error fetching wastage logs:", json);
-        setWastageLogs([]); // Clear previous logs on error
-      }
+      setWastageLogs(json.wastage || [])
     } catch (error) {
       console.error('Error fetching wastage:', error)
-      setWastageLogs([]); // Clear previous logs on error
+      setWastageLogs([])
     }
   }
 
@@ -223,16 +250,23 @@ const Reports: React.FC = () => {
         headers: makeAuthHeaders(token),
       })
       console.log('Miscellaneous response status:', res.status)
-      if (!res.headers.get("content-type")?.includes("application/json")) {
-        throw new Error("Invalid server response format.");
+      const { bodyText, json } = await parseJsonResponse(res)
+      if (!res.ok) {
+        const message = getApiErrorMessage(res, bodyText, json)
+        console.error('Backend error fetching miscellaneous logs:', message)
+        setMiscLogs([])
+        return
       }
-      const json = await res.json()
+      if (json === null) {
+        console.error('Invalid response format from /reports/miscellaneous/', res.status, bodyText)
+        setMiscLogs([])
+        return
+      }
       console.log('Miscellaneous data received:', json)
-      if (res.ok) {
-        setMiscLogs(json.miscellaneous || []);
-      }
+      setMiscLogs(json.miscellaneous || [])
     } catch (error) {
       console.error('Error fetching miscellaneous logs:', error)
+      setMiscLogs([])
     }
   }
 
