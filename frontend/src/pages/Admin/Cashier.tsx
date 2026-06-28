@@ -142,7 +142,8 @@ export default function Cashier() {
     setMpesaError(null);
     setShowPaymentMethod(false);
 
-    // If MPESA, ensure a phone number is provided
+    // If MPESA, ensure a phone number is provided and compute normalized value for the payload
+    let mpesaNumberForPayload: string | undefined = undefined;
     if (method === 'mpesa') {
       if (!mpesaNumber) {
         setMpesaError('Enter MPESA phone number');
@@ -155,6 +156,8 @@ export default function Cashier() {
         setProcessingPayment(false);
         return;
       }
+      // store normalized locally and in state for UI
+      mpesaNumberForPayload = normalized;
       setMpesaNumber(normalized);
     }
 
@@ -165,7 +168,7 @@ export default function Cashier() {
         {
           method: 'POST',
           headers,
-          body: JSON.stringify({ payment_method: method, mpesa_number: method === 'mpesa' ? mpesaNumber : undefined }),
+          body: JSON.stringify({ payment_method: method, mpesa_number: method === 'mpesa' ? mpesaNumberForPayload || mpesaNumber : undefined }),
         }
       );
 
