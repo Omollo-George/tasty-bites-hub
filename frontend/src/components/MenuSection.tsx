@@ -6,6 +6,7 @@ import Receipt from "./Receipt";
 import { getApiUrl } from "@/lib/api";
 import { formatImageUrl } from '@/lib/image';
 import { isValidMpesaPhone, normalizePhoneNumber } from '@/lib/utils';
+import { getAuthHeaders } from '@/lib/auth';
 import Restaurant3DBackground from "../../Restaurant3DBackground.jsx";
 
 
@@ -262,7 +263,10 @@ const MenuSection = () => {
     try {
       const response = await fetch(getApiUrl("/payments/pos/create-order/"), {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...getAuthHeaders(),
+        },
         body: JSON.stringify({
             items: allItems.map((item) => ({
               menu_item_id: (item as any).menu_item_id || (item as any).id || undefined,

@@ -3662,7 +3662,7 @@ def order_detail(request, order_id: str):
     if not _payments_schema_ready():
         return _schema_error_response()
 
-    if not _is_admin(request):
+    if not (_is_admin(request) or _is_staff(request)):
         return JsonResponse({'error': 'unauthorized'}, status=403)
 
     order = Order.objects.filter(order_id=order_id).first()
@@ -4169,8 +4169,11 @@ def create_pos_order(request):
     delivery_distance_km = payload.get('delivery_distance_km')
     delivery_cost_raw = payload.get('delivery_cost')
 
-    payment_method = str(payload.get('payment_method') or Transaction.METHOD_M_PESA).lower()
-    if payment_method == Transaction.METHOD_M_PESA:
+    payment_method = str(payload.get('payment_method') or 'unpaid').lower()
+    is_mpesa = payment_method == Transaction.METHOD_M_PESA
+    is_cash = payment_method == Transaction.METHOD_CASH
+
+    if is_mpesa:
         if not phone:
             return JsonResponse({'error': 'phone_required', 'message': 'Phone number is required for M-Pesa payments.'}, status=400)
         
@@ -4238,7 +4241,7 @@ def create_pos_order(request):
             waiter_name=(waiter_name_raw or (waiter_obj.name if waiter_obj else '')),
         )
 
-        cash_payment = payment_method == Transaction.METHOD_CASH
+        cash_payment = is_cash and initial_status == 'paid'
 
         for idx, item in enumerate(items_data):
             try:
@@ -4340,7 +4343,7 @@ def create_pos_order(request):
                 method=Transaction.METHOD_CASH,
                 raw_response={'source': 'cash_payment'},
             )
-            # cash payments immediately settle the order
+            # cash payments immediately settle the order when the order is created as paid
             try:
                 order.status = 'paid'
                 order.save()
