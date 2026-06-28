@@ -19,7 +19,8 @@ interface RawMenuItem { // Fixed: Renamed from MenuItem to RawMenuItem
   description: string;
   price: number;
   category: string;
-  image_url: string;
+  image_url?: string;
+  image?: string;
   popular: boolean;
   spicy: boolean;
   is_available: boolean;
@@ -921,6 +922,12 @@ const ProfessionalCustomerHome = () => {
   );
 };
 
+const getItemImageSrc = (item: RawMenuItem, formatImageUrl: (url?: string) => string) => {
+  const rawUrl = item.image_url || (item as any).image || '';
+  const formatted = rawUrl ? formatImageUrl(rawUrl) : '';
+  return formatted || FALLBACK_ITEM_IMAGES[item.id % FALLBACK_ITEM_IMAGES.length];
+};
+
 const ProItemCard = ({ 
   item, 
   currency, 
@@ -929,7 +936,7 @@ const ProItemCard = ({
   formatImageUrl
 }: { item: RawMenuItem; currency: string; compact?: boolean; onAdd: () => void; formatImageUrl: (url?: string) => string }) => {
   const fallbackImage = FALLBACK_ITEM_IMAGES[item.id % FALLBACK_ITEM_IMAGES.length];
-  const imageSrc = item.image_url ? formatImageUrl(item.image_url) : fallbackImage;
+  const imageSrc = getItemImageSrc(item, formatImageUrl);
 
   return (
     <div className="group relative bg-white/10 border border-white/10 backdrop-blur-xl rounded-[2rem] overflow-hidden shadow-2xl shadow-black/25 transition-all duration-300 hover:-translate-y-0.5 hover:border-white/20 hover:bg-white/15">
