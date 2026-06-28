@@ -101,6 +101,16 @@ class AdminSigninSchemaTests(SchemaCleanupMixin, TestCase):
         self.assertEqual(payload['base_currency'], 'KES')
         self.assertEqual(payload['conversion_rate'], 1.0)
 
+    def test_staff_activities_repair_creates_missing_staffactivity_table(self):
+        from django.db import connection
+        with connection.cursor() as cursor:
+            cursor.execute('DROP TABLE IF EXISTS payments_staffactivity')
+
+        self.assertTrue(_payments_schema_ready())
+        with connection.cursor() as cursor:
+            existing_tables = set(connection.introspection.table_names(cursor))
+        self.assertIn('payments_staffactivity', existing_tables)
+
     def test_order_status_update_paid_without_order_payment_method_field(self):
         admin_user = AdminUser.objects.create(username='testadmin', password_hash='testhash')
         admin_token = AdminToken.objects.create(user=admin_user)

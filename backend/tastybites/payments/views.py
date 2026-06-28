@@ -409,6 +409,30 @@ def _ensure_required_tables() -> bool:
             '''
         )
 
+    if 'payments_staffactivity' not in existing_tables:
+        create_statements.append(
+            '''
+            CREATE TABLE payments_staffactivity (
+                id integer PRIMARY KEY AUTOINCREMENT,
+                employee_id integer NOT NULL REFERENCES payments_employee(id) ON DELETE CASCADE,
+                order_id integer NULL REFERENCES payments_order(id),
+                action varchar(255) NOT NULL,
+                details text NULL,
+                created_at datetime NOT NULL
+            )
+            ''' if vendor != 'postgresql' else
+            '''
+            CREATE TABLE payments_staffactivity (
+                id bigserial PRIMARY KEY,
+                employee_id bigint NOT NULL REFERENCES payments_employee(id) ON DELETE CASCADE,
+                order_id bigint NULL REFERENCES payments_order(id),
+                action varchar(255) NOT NULL,
+                details jsonb NULL,
+                created_at timestamp with time zone NOT NULL
+            )
+            '''
+        )
+
     if 'payments_review' not in existing_tables:
         create_statements.append(
             '''
