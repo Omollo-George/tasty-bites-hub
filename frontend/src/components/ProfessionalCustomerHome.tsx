@@ -199,6 +199,16 @@ const DEFAULT_MENU_ITEMS: RawMenuItem[] = [
   },
 ];
 
+const FALLBACK_ITEM_IMAGES = [
+  'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=500&q=80',
+  'https://images.unsplash.com/photo-1610614819513-58e34989848b?w=500&q=80',
+  'https://images.unsplash.com/photo-1553979459-d2229ba7433b?w=500&q=80',
+  'https://images.unsplash.com/photo-1573015084185-7205ba3d6ea8?w=500&q=80',
+  'https://images.unsplash.com/photo-1567620832903-9fc6debc209f?w=500&q=80',
+  'https://images.unsplash.com/photo-1572490122747-3968b75cc699?w=500&q=80',
+  'https://images.unsplash.com/photo-1551024506-0bccd828d307?w=500&q=80',
+];
+
 const DEFAULT_CATEGORIES = ['Burgers', 'Sides', 'Drinks', 'Desserts'];
 
 const buildDefaultHomeData = (): HomeData => {
@@ -917,37 +927,42 @@ const ProItemCard = ({
   compact,
   onAdd,
   formatImageUrl
-}: { item: RawMenuItem; currency: string; compact?: boolean; onAdd: () => void; formatImageUrl: (url?: string) => string }) => (
-  <div className="group relative bg-white/10 border border-white/10 backdrop-blur-xl rounded-[2rem] overflow-hidden shadow-2xl shadow-black/25 transition-all duration-300 hover:-translate-y-0.5 hover:border-white/20 hover:bg-white/15">
-    <div className={`relative ${compact ? 'h-24' : 'h-32 sm:h-36'} overflow-hidden`}>
-      <img 
-        src={item.image_url ? formatImageUrl(item.image_url) : 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=500&q=80'} 
-        onError={(event) => { event.currentTarget.src = 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=500&q=80' }}
-        className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" 
-        alt={item.name} 
-      />
-      <div className="absolute top-3 left-3 flex flex-wrap gap-1">
-        {item.popular && <span className="rounded-full bg-orange-500/15 text-[10px] font-bold uppercase tracking-[0.24em] text-orange-200 border border-orange-500/30 px-2 py-1">Pop</span>}
-        {item.spicy && <span className="rounded-full bg-red-500/15 text-[10px] font-bold uppercase tracking-[0.24em] text-red-200 border border-red-500/30 px-2 py-1">Hot</span>}
+}: { item: RawMenuItem; currency: string; compact?: boolean; onAdd: () => void; formatImageUrl: (url?: string) => string }) => {
+  const fallbackImage = FALLBACK_ITEM_IMAGES[item.id % FALLBACK_ITEM_IMAGES.length];
+  const imageSrc = item.image_url ? formatImageUrl(item.image_url) : fallbackImage;
+
+  return (
+    <div className="group relative bg-white/10 border border-white/10 backdrop-blur-xl rounded-[2rem] overflow-hidden shadow-2xl shadow-black/25 transition-all duration-300 hover:-translate-y-0.5 hover:border-white/20 hover:bg-white/15">
+      <div className={`relative ${compact ? 'h-24' : 'h-32 sm:h-36'} overflow-hidden`}>
+        <img 
+          src={imageSrc}
+          onError={(event) => { event.currentTarget.src = fallbackImage }}
+          className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" 
+          alt={item.name} 
+        />
+        <div className="absolute top-3 left-3 flex flex-wrap gap-1">
+          {item.popular && <span className="rounded-full bg-orange-500/15 text-[10px] font-bold uppercase tracking-[0.24em] text-orange-200 border border-orange-500/30 px-2 py-1">Pop</span>}
+          {item.spicy && <span className="rounded-full bg-red-500/15 text-[10px] font-bold uppercase tracking-[0.24em] text-red-200 border border-red-500/30 px-2 py-1">Hot</span>}
+        </div>
       </div>
-    </div>
     
-    <div className="p-3 space-y-2 min-h-[128px] flex flex-col justify-between">
-      <div className="space-y-1">
-        <h5 className="text-sm sm:text-sm font-semibold text-white group-hover:text-orange-300 transition-colors line-clamp-1">{item.name}</h5>
-        <p className="text-sm font-bold text-orange-400">{formatCurrency(item.price, currency)}</p>
-      </div>
-      <div className="space-y-2">
-        <p className="text-slate-300 text-[11px] leading-snug line-clamp-2">{item.description}</p>
-        <button 
-          onClick={(e) => { e.stopPropagation(); onAdd(); }}
-          className="w-full rounded-2xl bg-slate-900/95 text-white font-semibold text-[11px] py-2 flex items-center justify-center gap-2 transition-all duration-200 hover:bg-orange-500 hover:text-white"
-        >
-          <ShoppingCart size={14} /> Add
-        </button>
+      <div className="p-3 space-y-2 min-h-[128px] flex flex-col justify-between">
+        <div className="space-y-1">
+          <h5 className="text-sm sm:text-sm font-semibold text-white group-hover:text-orange-300 transition-colors line-clamp-1">{item.name}</h5>
+          <p className="text-sm font-bold text-orange-400">{formatCurrency(item.price, currency)}</p>
+        </div>
+        <div className="space-y-2">
+          <p className="text-slate-300 text-[11px] leading-snug line-clamp-2">{item.description}</p>
+          <button 
+            onClick={(e) => { e.stopPropagation(); onAdd(); }}
+            className="w-full rounded-2xl bg-slate-900/95 text-white font-semibold text-[11px] py-2 flex items-center justify-center gap-2 transition-all duration-200 hover:bg-orange-500 hover:text-white"
+          >
+            <ShoppingCart size={14} /> Add
+          </button>
+        </div>
       </div>
     </div>
-  </div>
-);
+  );
+};
 
 export default ProfessionalCustomerHome;
