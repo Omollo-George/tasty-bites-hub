@@ -1694,7 +1694,24 @@ def _ensure_menu_items(seed: bool = True):
 def _customer_home_fallback_response(message: str = 'Using default menu data while the database schema is being updated.'):
     default_items = _get_default_menu_items()
     categories = sorted({item['category'] for item in default_items})
-    featured = [item for item in default_items if item['popular']][:5]
+    featured = [
+        {
+            'id': idx + 1,
+            'sku': None,
+            'name': item['name'],
+            'category': item['category'],
+            'price': float(item['price']),
+            'food_cost': float(item['food_cost']),
+            'description': item['description'],
+            'popular': bool(item['popular']),
+            'spicy': bool(item['spicy']),
+            'stock_level': 50,
+            'min_stock_level': 10,
+            'image_url': item['image'],
+            'is_available': True,
+        }
+        for idx, item in enumerate(default_items) if item['popular']
+    ][:5]
     grouped_menu = {
         cat: [
             {
