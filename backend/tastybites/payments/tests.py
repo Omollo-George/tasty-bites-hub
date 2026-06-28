@@ -2,11 +2,13 @@ import json
 
 from django.db import connection
 from django.test import RequestFactory, TestCase
+from django.utils import timezone
 
 from decimal import Decimal
+from datetime import timedelta
 
-from .views import admin_signin, _payments_schema_ready, order_status_update, report_summary
-from .models import AdminToken, AdminUser, Order, OrderItem, Transaction
+from .views import admin_signin, _payments_schema_ready, order_detail, order_status_update, report_summary, create_pos_order
+from .models import AdminToken, AdminUser, Employee, Order, OrderItem, StaffToken, Transaction
 
 
 class SchemaCleanupMixin:
@@ -130,3 +132,49 @@ class AdminSigninSchemaTests(SchemaCleanupMixin, TestCase):
         self.assertEqual(payload['status'], 'paid')
         self.assertEqual(payload['order_id'], order.order_id)
         self.assertTrue(Transaction.objects.filter(order=order, status='success').exists())
+
+    def test_staff_can_access_order_detail(self):
+        employee = Employee.objects.create(name='Waiter Jane', role='Waiter', status='on_shift')
+        staff_token = StaffToken.objects.create(employee=employee, expires_at=timezone.now() + timedelta(hours=8))
+        order = Order.objects.create(order_id='staff-order-100', total_amount=Decimal('120.00'), status='pending')
+        OrderItem.objects.create(order=order, name='Sandwich', price=Decimal('120.00'), food_cost=Decimal('0.00'), quantity=1)
+
+        request = self.factory.get(f'/api/payments/orders/{order.order_id}/')
+        request.headers = {'Authorization': f'Bearer {staff_token.token}', 'X-STAFF-TOKEN': staff_token.token}
+
+        response = order_detail(request, order.order_id)
+        self.assertEqual(response.status_code, 200)
+        payload = json.loads(response.content.decode('utf-8'))
+        self.assertEqual(payload['order_id'], order.order_id)
+        self.assertEqual(payload['status'], 'pending')
+
+    def test_create_pos_order_allows_unpaid_staff_orders(self):
+        employee = Employee.objects.create(name='Waiter Mike', role='Waiter', status='on_shift')
+        staff_token = StaffToken.objects.create(employee=employee, expires_at=timezone.now() + timedelta(hours=8))
+
+        request = self.factory.post(
+            '/api/payments/pos/create-order/',
+            data=json.dumps({
+                'order_type': 'table',
+                'table_number': '7',
+                'status': 'sent_kitchen',
+                'payment_method': 'unpaid',
+                'waiter_id': employee.id,
+                'waiter_name': employee.name,
+                'items': [
+                    { 'name': 'Fries', 'price': 250, 'quantity': 1, 'modifiers': [], 'seat_number': 1 }
+                ],
+            }),
+            content_type='application/json',
+        )
+        request.headers = {'Authorization': f'Bearer {staff_token.token}', 'X-STAFF-TOKEN': staff_token.token}
+
+        response = create_pos_order(request)
+        self.assertEqual(response.status_code, 200)
+
+        payload = json.loads(response.content.decode('utf-8'))
+        self.assertEqual(payload['status'], 'sent_kitchen')
+        self.assertEqual(payload['waiter_name'], employee.name)
+        self.assertEqual(payload['table'], '7')
+        self.assertEqual(len(payload['items']), 1)
+        self.assertEqual(payload['items'][0]['name'], 'Fries')
