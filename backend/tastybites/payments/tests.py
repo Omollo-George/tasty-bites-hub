@@ -3,7 +3,10 @@ import json
 from django.db import connection
 from django.test import RequestFactory, TestCase
 
-from .views import admin_signin, _payments_schema_ready, report_summary
+from decimal import Decimal
+
+from .views import admin_signin, _payments_schema_ready, order_status_update, report_summary
+from .models import AdminToken, AdminUser, Order, OrderItem, Transaction
 
 
 class SchemaCleanupMixin:
@@ -97,3 +100,23 @@ class AdminSigninSchemaTests(SchemaCleanupMixin, TestCase):
         payload = json.loads(response.content.decode('utf-8'))
         self.assertEqual(payload['base_currency'], 'KES')
         self.assertEqual(payload['conversion_rate'], 1.0)
+
+    def test_order_status_update_paid_without_order_payment_method_field(self):
+        admin_user = AdminUser.objects.create(username='testadmin', password_hash='testhash')
+        admin_token = AdminToken.objects.create(user=admin_user)
+        order = Order.objects.create(order_id='test-order-100', total_amount=Decimal('100.00'), status='pending')
+        OrderItem.objects.create(order=order, name='Test Meal', price=Decimal('100.00'), food_cost=Decimal('0.00'), quantity=1)
+
+        request = self.factory.post(
+            f'/api/payments/orders/{order.order_id}/update/',
+            data=json.dumps({'status': 'paid', 'payment_method': 'cash'}),
+            content_type='application/json',
+        )
+        request.headers = {'Authorization': f'Bearer {admin_token.token}', 'X-ADMIN-TOKEN': admin_token.token}
+
+        response = order_status_update(request, order.order_id)
+        self.assertEqual(response.status_code, 200)
+        payload = json.loads(response.content.decode('utf-8'))
+        self.assertEqual(payload['status'], 'paid')
+        self.assertEqual(payload['order_id'], order.order_id)
+        self.assertTrue(Transaction.objects.filter(order=order, status='success').exists())

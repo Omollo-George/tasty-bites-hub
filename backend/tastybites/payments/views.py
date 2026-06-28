@@ -3461,7 +3461,6 @@ def order_status_update(request, order_id: str):
     # If admin marks order as paid, create a transaction record and release table.
     if status == 'paid':
         payment_method = (payload.get('payment_method') or 'cash').strip().lower()
-        order.payment_method = payment_method
         try:
             Transaction.objects.create(
                 phone=order.phone or '',
