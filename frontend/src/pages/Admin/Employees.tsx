@@ -80,10 +80,10 @@ const AdminEmployees: React.FC = () => {
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    // Validate password if it's a new employee or if the password field is being updated
-    if ((editingId === null || newEmp.password) && !isPasswordValid) {
-        alert('Please ensure the workstation password meets all security requirements.')
-        return
+    // Validate password only when the user has entered one.
+    if (newEmp.password && !isPasswordValid) {
+      alert('Please ensure the workstation password meets all security requirements.')
+      return
     }
 
     try {
@@ -94,10 +94,16 @@ const AdminEmployees: React.FC = () => {
       formData.append('role', newEmp.role)
       formData.append('phone', newEmp.phone)
       formData.append('email', newEmp.email)
-      formData.append('username', newEmp.username)
+      if (newEmp.username.trim()) {
+        formData.append('username', newEmp.username.trim())
+      }
       formData.append('salary', String(newEmp.salary))
-      formData.append('account_number', newEmp.account_number)
-      formData.append('special_id', newEmp.special_id)
+      if (newEmp.account_number.trim()) {
+        formData.append('account_number', newEmp.account_number.trim())
+      }
+      if (newEmp.special_id.trim()) {
+        formData.append('special_id', newEmp.special_id.trim())
+      }
       if (newEmp.password) {
         formData.append('password', newEmp.password)
       }
@@ -343,6 +349,9 @@ const AdminEmployees: React.FC = () => {
                 setIsAdding(!isAdding)
                 setEditingId(null)
                 setNewEmp({ name: '', role: 'Waiter', phone: '', email: '', salary: 0, account_number: '', special_id: '', username: '', password: '' })
+                setSelectedFile(null)
+                setExistingDocumentName(null)
+                setRemoveDocument(false)
             }}
             className="bg-orange-500 text-white px-6 py-2.5 rounded-xl font-semibold shadow-md hover:bg-orange-600 transition-all active:scale-95 whitespace-nowrap"
           >
