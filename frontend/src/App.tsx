@@ -1,3 +1,4 @@
+import { lazy, Suspense } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -7,22 +8,23 @@ import { BrowserRouter, Routes, Route, Navigate, Outlet } from "react-router-dom
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
 import Dashboard from "./pages/Admin/Dashboard";
-import AdminHome from "./pages/Admin/Home";
-import AdminOrders from "./pages/Admin/Orders";
-import AdminMenu from "./pages/Admin/Menu";
-import AdminSettings from "./pages/Admin/Settings";
-import AdminEmployees from "./pages/Admin/Employees";
-import AdminReports from "./pages/Admin/Reports";
-import AdminStock from "./pages/Admin/Stock";
-import AdminAutomation from "./components/AdminAutomation";
-import EmployeeTable from "./pages/Admin/EmployeeTable";
-import AdminKDS from "./pages/Admin/KDS";
-import Cashier from "./pages/Admin/Cashier";
+import { lazyWithPreload } from "./lib/lazy-with-preload";
+const AdminHome = lazyWithPreload(() => import("./pages/Admin/Home"));
+const AdminOrders = lazyWithPreload(() => import("./pages/Admin/Orders"));
+const AdminMenu = lazyWithPreload(() => import("./pages/Admin/Menu"));
+const AdminSettings = lazyWithPreload(() => import("./pages/Admin/Settings"));
+const AdminEmployees = lazyWithPreload(() => import("./pages/Admin/Employees"));
+const AdminReports = lazyWithPreload(() => import("./pages/Admin/Reports"));
+const AdminStock = lazyWithPreload(() => import("./pages/Admin/Stock"));
+const AdminAutomation = lazyWithPreload(() => import("./components/AdminAutomation"));
+const EmployeeTable = lazyWithPreload(() => import("./pages/Admin/EmployeeTable"));
+const AdminKDS = lazyWithPreload(() => import("./pages/Admin/KDS"));
+const Cashier = lazyWithPreload(() => import("./pages/Admin/Cashier"));
 import AdminLogin from "./pages/Admin/Login";
 import AdminAuthGuard from "./components/AdminAuthGuard";
 import ProfessionalCustomerHome from "./components/ProfessionalCustomerHome"; // Import the new component
 import OrderTracking from "./pages/OrderTracking";
-import StaffPage from "./pages/Admin/StaffPage";
+const StaffPage = lazyWithPreload(() => import("./pages/Admin/StaffPage"));
 import StaffLogin from "./pages/Admin/StaffLogin";
 import StaffAuthGuard from "./components/StaffAuthGuard";
 import AccountIndex from "./pages/Customer/AccountIndex";
@@ -50,19 +52,77 @@ const App = () => (
             <Route
               path="/admin/*"
               element={
-                <AdminAuthGuard>
-                  <Dashboard />
-                </AdminAuthGuard>
+                <Suspense fallback={<div className="min-h-screen flex items-center justify-center text-slate-400">Loading admin section…</div>}>
+                  <AdminAuthGuard>
+                    <Dashboard />
+                  </AdminAuthGuard>
+                </Suspense>
               }
             >
-              <Route index element={<AdminHome />} />
-              <Route path="orders" element={<AdminOrders />} />
-              <Route path="reports" element={<AdminReports />} />
-              <Route path="automation" element={<AdminAutomation />} />
-              <Route path="menu" element={<AdminMenu />} />
-              <Route path="employees" element={<AdminEmployees />} />
-              <Route path="stock" element={<AdminStock />} />
-              <Route path="settings" element={<AdminSettings />} />
+              <Route
+                index
+                element={
+                  <Suspense fallback={<div className="min-h-[20rem] flex items-center justify-center text-slate-400">Loading dashboard…</div>}>
+                    <AdminHome />
+                  </Suspense>
+                }
+              />
+              <Route
+                path="orders"
+                element={
+                  <Suspense fallback={<div className="min-h-[20rem] flex items-center justify-center text-slate-400">Loading orders…</div>}>
+                    <AdminOrders />
+                  </Suspense>
+                }
+              />
+              <Route
+                path="reports"
+                element={
+                  <Suspense fallback={<div className="min-h-[20rem] flex items-center justify-center text-slate-400">Loading reports…</div>}>
+                    <AdminReports />
+                  </Suspense>
+                }
+              />
+              <Route
+                path="automation"
+                element={
+                  <Suspense fallback={<div className="min-h-[20rem] flex items-center justify-center text-slate-400">Loading automation…</div>}>
+                    <AdminAutomation />
+                  </Suspense>
+                }
+              />
+              <Route
+                path="menu"
+                element={
+                  <Suspense fallback={<div className="min-h-[20rem] flex items-center justify-center text-slate-400">Loading menu…</div>}>
+                    <AdminMenu />
+                  </Suspense>
+                }
+              />
+              <Route
+                path="employees"
+                element={
+                  <Suspense fallback={<div className="min-h-[20rem] flex items-center justify-center text-slate-400">Loading employees…</div>}>
+                    <AdminEmployees />
+                  </Suspense>
+                }
+              />
+              <Route
+                path="stock"
+                element={
+                  <Suspense fallback={<div className="min-h-[20rem] flex items-center justify-center text-slate-400">Loading stock…</div>}>
+                    <AdminStock />
+                  </Suspense>
+                }
+              />
+              <Route
+                path="settings"
+                element={
+                  <Suspense fallback={<div className="min-h-[20rem] flex items-center justify-center text-slate-400">Loading settings…</div>}>
+                    <AdminSettings />
+                  </Suspense>
+                }
+              />
             </Route>
             <Route path="/track/:orderId?" element={<OrderTracking />} /> {/* New Customer Tracking Route */}
             <Route path="/account/*" element={<Outlet />}>
@@ -79,7 +139,13 @@ const App = () => (
             
             {/* Staff Workstation Group - Separated from Admin Sidebar Layout */}
             <Route path="/staff/login" element={<StaffLogin />} />
-            <Route path="/staff" element={<StaffAuthGuard><Outlet /></StaffAuthGuard>}>
+            <Route path="/staff" element={
+              <StaffAuthGuard>
+                <Suspense fallback={<div className="min-h-screen flex items-center justify-center text-slate-400">Loading staff section…</div>}>
+                  <Outlet />
+                </Suspense>
+              </StaffAuthGuard>
+            }>
               <Route index element={<StaffPage />} />
               <Route path="pos" element={<EmployeeTable />} />
               <Route path="kds" element={<AdminKDS />} />

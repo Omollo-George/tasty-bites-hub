@@ -2,6 +2,7 @@ import React from 'react'
 import { NavLink, Link } from 'react-router-dom'
 import { Home, ShoppingBag, BarChart3, Menu as MenuIcon, Settings, Users, Package, Zap } from 'lucide-react'
 import { getAdminToken } from '@/lib/admin-session'
+import { preloadAdminRoute } from '@/lib/admin-route-prefetch'
 import TastyBitesIcon from './TastyBitesIcon' // Monitor is already imported here. No change needed.
 
 const navItems = [
@@ -33,6 +34,8 @@ const AdminSidebar: React.FC = () => {
             key={label}
             to={to}
             end={end}
+            onMouseEnter={() => preloadAdminRoute(to)}
+            onFocus={() => preloadAdminRoute(to)}
             className={({ isActive }) =>
               `flex items-center gap-3 rounded-2xl px-4 py-3.5 text-sm font-medium transition-all duration-200 ${
                 isActive
