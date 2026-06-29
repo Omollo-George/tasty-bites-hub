@@ -3922,6 +3922,8 @@ def _empty_report_summary_payload(range_label: str = '') -> dict:
         'hourly_sales': [],
         'best_waiter': None,
         'least_waiter': None,
+        'wastage': [],
+        'miscellaneous': [],
         'totals': {
             'revenue': 0,
             'cash_revenue': 0,
@@ -3956,85 +3958,117 @@ def _build_report_summary(start_date: datetime.datetime, end_date: datetime.date
         ).values_list('id', flat=True)[:10000]  # Limit to prevent memory explosion
         
         paid_orders_list = list(paid_orders)
-        
-        if not paid_orders_list:
-            return _empty_report_summary_payload(range_label)
 
-        # OPTIMIZATION: Batch all item queries
-        order_items = list(OrderItem.objects.filter(
-            order__id__in=paid_orders_list
-        ).annotate(
-            item_revenue=ExpressionWrapper(F('price') * F('quantity'), output_field=DecimalField()),
-            item_food_cost=ExpressionWrapper(F('food_cost') * F('quantity'), output_field=DecimalField()),
-        ).values('name', 'item_revenue', 'item_food_cost', 'quantity'))
+        # OPTIMIZATION: Batch all item queries, but still return expenses even when there are no paid orders
+        if paid_orders_list:
+            order_items = list(OrderItem.objects.filter(
+                order__id__in=paid_orders_list
+            ).annotate(
+                item_revenue=ExpressionWrapper(F('price') * F('quantity'), output_field=DecimalField()),
+                item_food_cost=ExpressionWrapper(F('food_cost') * F('quantity'), output_field=DecimalField()),
+            ).values('name', 'item_revenue', 'item_food_cost', 'quantity'))
 
-        # OPTIMIZATION: Single pass through items for all aggregations
-        item_map = {}
-        for item in order_items:
-            name = item['name']
-            if name not in item_map:
-                item_map[name] = {'quantity': 0, 'revenue': Decimal('0'), 'food_cost': Decimal('0')}
-            item_map[name]['quantity'] += item['quantity']
-            item_map[name]['revenue'] += item['item_revenue'] or Decimal('0')
-            item_map[name]['food_cost'] += item['item_food_cost'] or Decimal('0')
+            # OPTIMIZATION: Single pass through items for all aggregations
+            item_map = {}
+            for item in order_items:
+                name = item['name']
+                if name not in item_map:
+                    item_map[name] = {'quantity': 0, 'revenue': Decimal('0'), 'food_cost': Decimal('0')}
+                item_map[name]['quantity'] += item['quantity']
+                item_map[name]['revenue'] += item['item_revenue'] or Decimal('0')
+                item_map[name]['food_cost'] += item['item_food_cost'] or Decimal('0')
 
-        # Build best and worst items
-        sorted_items = sorted(item_map.items(), key=lambda x: x[1]['quantity'], reverse=True)
-        best_items = [{
-            'name': name,
-            'quantity': data['quantity'],
-            'revenue': _to_display_currency(data['revenue']),
-            'food_cost': _to_display_currency(data['food_cost']),
-        } for name, data in sorted_items[:5]]
-        
-        worst_items = [{
-            'name': name,
-            'quantity': data['quantity'],
-            'revenue': _to_display_currency(data['revenue']),
-            'food_cost': _to_display_currency(data['food_cost']),
-        } for name, data in sorted(sorted_items, key=lambda x: x[1]['quantity'])[:5]]
+            # Build best and worst items
+            sorted_items = sorted(item_map.items(), key=lambda x: x[1]['quantity'], reverse=True)
+            best_items = [{
+                'name': name,
+                'quantity': data['quantity'],
+                'revenue': _to_display_currency(data['revenue']),
+                'food_cost': _to_display_currency(data['food_cost']),
+            } for name, data in sorted_items[:5]]
 
-        # OPTIMIZATION: Single query for hourly data with database grouping
-        hourly_data = Order.objects.filter(
-            id__in=paid_orders_list
-        ).annotate(
-            hour=ExtractHour('created_at')
-        ).values('hour').annotate(
-            orders=Count('id'),
-            revenue=Sum('total_amount'),
-        ).order_by('hour')
-        
-        hourly = [{
-            'hour': row['hour'],
-            'orders': row['orders'],
-            'revenue': _to_display_currency(row['revenue'] or 0),
-        } for row in hourly_data]
+            worst_items = [{
+                'name': name,
+                'quantity': data['quantity'],
+                'revenue': _to_display_currency(data['revenue']),
+                'food_cost': _to_display_currency(data['food_cost']),
+            } for name, data in sorted(sorted_items, key=lambda x: x[1]['quantity'])[:5]]
 
-        # OPTIMIZATION: Single aggregation query for all revenue types
-        transactions = Transaction.objects.filter(
-            order__id__in=paid_orders_list,
-            status='success'
-        ).values('method').annotate(total=Sum('amount'))
-        
-        total_revenue = Decimal('0')
-        cash_revenue = Decimal('0')
-        mpesa_revenue = Decimal('0')
-        
-        for tx in transactions:
-            if tx['method'] == Transaction.METHOD_CASH:
-                cash_revenue = Decimal(str(tx['total'] or 0))
-            elif tx['method'] == Transaction.METHOD_M_PESA:
-                mpesa_revenue = Decimal(str(tx['total'] or 0))
-            total_revenue += Decimal(str(tx['total'] or 0))
+            # OPTIMIZATION: Single query for hourly data with database grouping
+            hourly_data = Order.objects.filter(
+                id__in=paid_orders_list
+            ).annotate(
+                hour=ExtractHour('created_at')
+            ).values('hour').annotate(
+                orders=Count('id'),
+                revenue=Sum('total_amount'),
+            ).order_by('hour')
 
-        # OPTIMIZATION: Aggregate food cost from materialized item_map
-        total_food_cost = sum(data['food_cost'] for data in item_map.values())
-        
+            hourly = [{
+                'hour': row['hour'],
+                'orders': row['orders'],
+                'revenue': _to_display_currency(row['revenue'] or 0),
+            } for row in hourly_data]
+
+            # OPTIMIZATION: Single aggregation query for all revenue types
+            transactions = Transaction.objects.filter(
+                order__id__in=paid_orders_list,
+                status='success'
+            ).values('method').annotate(total=Sum('amount'))
+
+            total_revenue = Decimal('0')
+            cash_revenue = Decimal('0')
+            mpesa_revenue = Decimal('0')
+
+            for tx in transactions:
+                if tx['method'] == Transaction.METHOD_CASH:
+                    cash_revenue = Decimal(str(tx['total'] or 0))
+                elif tx['method'] == Transaction.METHOD_M_PESA:
+                    mpesa_revenue = Decimal(str(tx['total'] or 0))
+                total_revenue += Decimal(str(tx['total'] or 0))
+
+            # OPTIMIZATION: Aggregate food cost from materialized item_map
+            total_food_cost = sum(data['food_cost'] for data in item_map.values())
+
+            # OPTIMIZATION: Single waiter query with aggregation
+            waiter_stats_raw = Order.objects.filter(
+                id__in=paid_orders_list
+            ).exclude(Q(waiter_name__isnull=True) | Q(waiter_name='')).values(
+                'waiter_id', 'waiter_name'
+            ).annotate(orders=Count('id')).order_by('-orders')
+
+            best_waiter = None
+            least_waiter = None
+
+            if waiter_stats_raw:
+                waiter_list = list(waiter_stats_raw)
+                if waiter_list:
+                    best_waiter = {
+                        'waiter_id': waiter_list[0]['waiter_id'],
+                        'waiter_name': waiter_list[0]['waiter_name'],
+                        'orders': waiter_list[0]['orders'],
+                    }
+                    least_waiter = {
+                        'waiter_id': waiter_list[-1]['waiter_id'],
+                        'waiter_name': waiter_list[-1]['waiter_name'],
+                        'orders': waiter_list[-1]['orders'],
+                    }
+        else:
+            best_items = []
+            worst_items = []
+            hourly = []
+            total_revenue = Decimal('0')
+            cash_revenue = Decimal('0')
+            mpesa_revenue = Decimal('0')
+            total_food_cost = Decimal('0')
+            best_waiter = None
+            least_waiter = None
+
         # Get other expenses (cached queries)
         total_wastage = Decimal(str(WastageLog.objects.filter(
             created_at__gte=start_date, created_at__lte=end_date
         ).aggregate(total=Sum('cost'))['total'] or 0))
-        
+
         total_misc = Decimal(str(MiscellaneousExpense.objects.filter(
             created_at__gte=start_date, created_at__lte=end_date
         ).aggregate(total=Sum('cost'))['total'] or 0))
@@ -4042,29 +4076,14 @@ def _build_report_summary(start_date: datetime.datetime, end_date: datetime.date
         final_profit = total_revenue - total_food_cost - total_wastage - total_misc
         food_cost_ratio = float((total_food_cost / total_revenue * 100) if total_revenue else 0)
 
-        # OPTIMIZATION: Single waiter query with aggregation
-        waiter_stats_raw = Order.objects.filter(
-            id__in=paid_orders_list
-        ).exclude(Q(waiter_name__isnull=True) | Q(waiter_name='')).values(
-            'waiter_id', 'waiter_name'
-        ).annotate(orders=Count('id')).order_by('-orders')
-
-        best_waiter = None
-        least_waiter = None
-        
-        if waiter_stats_raw:
-            waiter_list = list(waiter_stats_raw)
-            if waiter_list:
-                best_waiter = {
-                    'waiter_id': waiter_list[0]['waiter_id'],
-                    'waiter_name': waiter_list[0]['waiter_name'],
-                    'orders': waiter_list[0]['orders'],
-                }
-                least_waiter = {
-                    'waiter_id': waiter_list[-1]['waiter_id'],
-                    'waiter_name': waiter_list[-1]['waiter_name'],
-                    'orders': waiter_list[-1]['orders'],
-                }
+        wastage_logs = list(WastageLog.objects.filter(
+            created_at__gte=start_date,
+            created_at__lte=end_date
+        ).order_by('-created_at')[:100].values('id', 'item_name', 'quantity', 'reason', 'cost', 'created_at'))
+        misc_logs = list(MiscellaneousExpense.objects.filter(
+            created_at__gte=start_date,
+            created_at__lte=end_date
+        ).order_by('-created_at')[:100].values('id', 'item_name', 'reason', 'cost', 'created_at'))
 
         result = {
             'range_days': (end_date - start_date).days + 1,
@@ -4074,6 +4093,27 @@ def _build_report_summary(start_date: datetime.datetime, end_date: datetime.date
             'hourly_sales': hourly,
             'best_waiter': best_waiter,
             'least_waiter': least_waiter,
+            'wastage': [
+                {
+                    'id': log['id'],
+                    'item_name': log['item_name'],
+                    'quantity': log['quantity'],
+                    'reason': log['reason'],
+                    'cost': _to_display_currency(log['cost']),
+                    'created_at': log['created_at'].isoformat() if log['created_at'] else None,
+                }
+                for log in wastage_logs
+            ],
+            'miscellaneous': [
+                {
+                    'id': log['id'],
+                    'item_name': log['item_name'],
+                    'reason': log['reason'],
+                    'cost': _to_display_currency(log['cost']),
+                    'created_at': log['created_at'].isoformat() if log['created_at'] else None,
+                }
+                for log in misc_logs
+            ],
             'totals': {
                 'revenue': _to_display_currency(total_revenue),
                 'cash_revenue': _to_display_currency(cash_revenue),
@@ -4099,6 +4139,7 @@ def report_summary(request):
     if not _is_admin(request):
         return JsonResponse({'error': 'unauthorized'}, status=403)
 
+    label = ''
     try:
         period_type = request.GET.get('period_type', 'week') # Default to week
         date_str = request.GET.get('date') # YYYY-MM-DD

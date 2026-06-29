@@ -10,7 +10,7 @@ from decimal import Decimal
 from datetime import timedelta
 
 from .views import admin_signin, _payments_schema_ready, order_detail, order_status_update, report_summary, create_pos_order, menu_items
-from .models import AdminToken, AdminUser, Employee, Order, OrderItem, StaffToken, Transaction
+from .models import AdminToken, AdminUser, Employee, MiscellaneousExpense, Order, OrderItem, StaffToken, Transaction, WastageLog
 
 
 class SchemaCleanupMixin:
@@ -77,6 +77,23 @@ class AdminSigninSchemaTests(SchemaCleanupMixin, TestCase):
         self.assertEqual(payload['totals']['revenue'], 0)
         self.assertEqual(payload['best_items'], [])
         self.assertEqual(payload['hourly_sales'], [])
+
+    def test_report_summary_includes_wastage_and_miscellaneous_logs(self):
+        WastageLog.objects.create(item_name='Tomato', quantity=2, reason='Spoilage', cost=Decimal('40'))
+        MiscellaneousExpense.objects.create(item_name='Fuel', reason='Delivery', cost=Decimal('10'))
+
+        request = self.factory.get(
+            '/api/payments/reports/summary/',
+            {'period_type': 'week', 'date': timezone.now().date().isoformat(), 'admin_token': 'dev-admin-token'},
+        )
+        response = report_summary(request)
+
+        self.assertEqual(response.status_code, 200)
+        payload = json.loads(response.content.decode('utf-8'))
+        self.assertEqual(len(payload['wastage']), 1)
+        self.assertEqual(payload['wastage'][0]['item_name'], 'Tomato')
+        self.assertEqual(len(payload['miscellaneous']), 1)
+        self.assertEqual(payload['miscellaneous'][0]['item_name'], 'Fuel')
 
     def test_admin_signin_returns_safe_payload_when_auth_tables_are_missing(self):
         for table_name in ['payments_admintoken', 'payments_adminsessionlog', 'payments_adminuser']:
