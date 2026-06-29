@@ -192,7 +192,7 @@ class WastageLog(models.Model):
     quantity = models.PositiveIntegerField(default=1)
     reason = models.CharField(max_length=512, blank=True)
     cost = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('0.00'))
-    created_at = models.DateTimeField(auto_now_add=True)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
 
     if TYPE_CHECKING:
         id: int
@@ -200,17 +200,30 @@ class WastageLog(models.Model):
     def __str__(self):
         return f"{self.quantity}x {self.item_name} wasted on {self.created_at.date()}"
 
+    class Meta:
+        """Database optimizations: index for date-range queries."""
+        indexes = [
+            models.Index(fields=['-created_at'], name='wastage_created_desc_idx'),
+        ]
+
+
 class MiscellaneousExpense(models.Model):
     item_name = models.CharField(max_length=255)
     reason = models.CharField(max_length=512, blank=True)
     cost = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('0.00'))
-    created_at = models.DateTimeField(auto_now_add=True)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
 
     if TYPE_CHECKING:
         id: int
 
     def __str__(self):
         return f"{self.item_name} - {self.cost} on {self.created_at.date()}"
+
+    class Meta:
+        """Database optimizations: index for date-range queries."""
+        indexes = [
+            models.Index(fields=['-created_at'], name='miscexp_created_desc_idx'),
+        ]
 
 
 class AdminSessionLog(models.Model):
@@ -227,7 +240,7 @@ class StaffActivity(models.Model):
     order = models.ForeignKey('Order', on_delete=models.SET_NULL, null=True, blank=True, related_name='staff_activities')
     action = models.CharField(max_length=255)
     details = models.JSONField(blank=True, null=True, default=dict)
-    created_at = models.DateTimeField(auto_now_add=True)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
 
     if TYPE_CHECKING:
         id: int
@@ -235,15 +248,28 @@ class StaffActivity(models.Model):
     def __str__(self):
         return f"{self.employee.name} - {self.action} @ {self.created_at}"
 
+    class Meta:
+        """Database optimizations: indexes for activity queries."""
+        indexes = [
+            models.Index(fields=['-created_at'], name='staffact_created_desc_idx'),
+            models.Index(fields=['employee_id', '-created_at'], name='staffact_emp_created_idx'),
+        ]
+
 
 class StockLog(models.Model):
     item = models.ForeignKey(MenuItem, on_delete=models.CASCADE, related_name='stock_logs')
     quantity = models.IntegerField()
     cost = models.DecimalField(max_digits=10, decimal_places=2)
-    created_at = models.DateTimeField(default=timezone.now)
+    created_at = models.DateTimeField(default=timezone.now, db_index=True)
 
     def __str__(self):
         return f"Added {self.quantity} to {self.item.name} at {self.created_at}"
+
+    class Meta:
+        """Database optimizations: index for log queries."""
+        indexes = [
+            models.Index(fields=['-created_at'], name='stocklog_created_desc_idx'),
+        ]
 
 
 class AdminUser(models.Model):
@@ -313,7 +339,7 @@ class Employee(models.Model):
     special_id = models.CharField(max_length=50, blank=True, default='', help_text='Special waiter ID number')
     document = models.FileField(upload_to='employee-documents/', blank=True, null=True)
     status = models.CharField(max_length=32, default='active')
-    created_at = models.DateTimeField(auto_now_add=True)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
 
     if TYPE_CHECKING:
         id: int
@@ -328,6 +354,15 @@ class Employee(models.Model):
 
     def __str__(self):
         return f"{self.name} ({self.role})"
+
+    class Meta:
+        """Database optimizations: indexes for employee queries."""
+        indexes = [
+            models.Index(fields=['-created_at'], name='employee_created_desc_idx'),
+            models.Index(fields=['status', '-created_at'], name='employee_status_created_idx'),
+            models.Index(fields=['role'], name='employee_role_idx'),
+        ]
+        ordering = ['-created_at']
 
 
 class Review(models.Model):
