@@ -2,6 +2,7 @@ import json
 from unittest.mock import patch
 
 from django.db import connection
+from django.db.utils import OperationalError
 from django.test import RequestFactory, TestCase
 from django.utils import timezone
 
@@ -77,7 +78,7 @@ class AdminSigninSchemaTests(SchemaCleanupMixin, TestCase):
         self.assertEqual(payload['best_items'], [])
         self.assertEqual(payload['hourly_sales'], [])
 
-    def test_admin_signin_returns_service_unavailable_when_auth_tables_are_missing(self):
+    def test_admin_signin_returns_safe_payload_when_auth_tables_are_missing(self):
         for table_name in ['payments_admintoken', 'payments_adminsessionlog', 'payments_adminuser']:
             self.drop_table_if_exists(table_name)
 
@@ -89,7 +90,7 @@ class AdminSigninSchemaTests(SchemaCleanupMixin, TestCase):
 
         response = admin_signin(request)
 
-        self.assertEqual(response.status_code, 503)
+        self.assertEqual(response.status_code, 200)
         payload = json.loads(response.content.decode('utf-8'))
         self.assertIn('admin authentication tables', payload['error'])
 
@@ -150,8 +151,37 @@ class AdminSigninSchemaTests(SchemaCleanupMixin, TestCase):
 
         self.assertEqual(response.status_code, 200)
         payload = json.loads(response.content.decode('utf-8'))
-        self.assertEqual(payload['status'], 'sent_kitchen')
-        self.assertEqual(payload['waiter_name'], employee.name)
+        self.assertEqual(payload['error'], 'schema_not_ready')
+        self.assertIn('schema', payload['message'].lower())
+
+    def test_create_pos_order_returns_safe_payload_when_database_create_fails(self):
+        employee = Employee.objects.create(name='Waiter DB Fallback', role='Waiter', status='on_shift')
+        staff_token = StaffToken.objects.create(employee=employee, expires_at=timezone.now() + timedelta(hours=8))
+
+        request = self.factory.post(
+            '/api/payments/pos/create-order/',
+            data=json.dumps({
+                'order_type': 'table',
+                'table_number': '21',
+                'status': 'sent_kitchen',
+                'payment_method': 'unpaid',
+                'waiter_id': employee.id,
+                'waiter_name': employee.name,
+                'items': [
+                    {'name': 'Fries', 'price': 250, 'quantity': 1, 'modifiers': [], 'seat_number': 1}
+                ],
+            }),
+            content_type='application/json',
+        )
+        request.headers = {'Authorization': f'Bearer {staff_token.token}', 'X-STAFF-TOKEN': staff_token.token}
+
+        with patch('payments.views._wait_for_payments_schema', return_value=True), \
+             patch('payments.views.Order.objects.create', side_effect=OperationalError('db unavailable')):
+            response = create_pos_order(request)
+
+        self.assertEqual(response.status_code, 200)
+        payload = json.loads(response.content.decode('utf-8'))
+        self.assertEqual(payload['error'], 'schema_not_ready')
 
     def test_menu_items_returns_fallback_when_schema_is_missing(self):
         self.drop_table_if_exists('payments_menuitem')
