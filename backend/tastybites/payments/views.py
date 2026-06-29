@@ -599,8 +599,12 @@ def _payments_schema_ready() -> bool:
     return _ensure_required_tables() and _ensure_required_columns()
 
 
-def _schema_error_response(message='Payments database schema is not available. Please apply database migrations.'):
-    return JsonResponse({'error': 'schema_not_ready', 'message': message}, status=503)
+def _schema_error_response(message='Payments database schema is not available. Please apply database migrations.', status: int = 503):
+    return JsonResponse({'error': 'schema_not_ready', 'message': message}, status=status)
+
+
+def _schema_fallback_response(message='Payments database schema is not available. Please apply database migrations.'):
+    return JsonResponse({'ok': False, 'error': 'schema_not_ready', 'message': message}, status=200)
 
 
 def _wait_for_payments_schema(max_attempts: int = 3, delay_seconds: float = 1.0) -> bool:
@@ -4116,19 +4120,27 @@ def table_list(request):
         if not number:
             return JsonResponse({'error': 'number is required'}, status=400)
 
-        if Table.objects.filter(number=number).exists():
-            return JsonResponse({'error': 'table number already exists'}, status=400)
+        try:
+            if Table.objects.filter(number=number).exists():
+                return JsonResponse({'error': 'table number already exists'}, status=400)
 
-        table = Table.objects.create(number=number, name=name)
-        return JsonResponse({'id': table.id, 'number': table.number, 'name': table.name, 'status': table.status})
+            table = Table.objects.create(number=number, name=name)
+            return JsonResponse({'id': table.id, 'number': table.number, 'name': table.name, 'status': table.status})
+        except (db_utils.ProgrammingError, db_utils.OperationalError) as exc:
+            logger.warning('table_list schema issue: %s', exc)
+            return JsonResponse({'tables': [], 'ok': False, 'error': 'schema_not_ready', 'message': 'Table service is warming up.'}, status=200)
 
-    tables = Table.objects.all().order_by('number')
-    return JsonResponse({
-        'tables': [
-            {'id': t.id, 'number': t.number, 'name': t.name, 'status': t.status}
-            for t in tables
-        ]
-    })
+    try:
+        tables = Table.objects.all().order_by('number')
+        return JsonResponse({
+            'tables': [
+                {'id': t.id, 'number': t.number, 'name': t.name, 'status': t.status}
+                for t in tables
+            ]
+        })
+    except (db_utils.ProgrammingError, db_utils.OperationalError) as exc:
+        logger.warning('table_list schema issue: %s', exc)
+        return JsonResponse({'tables': [], 'ok': False, 'error': 'schema_not_ready', 'message': 'Table service is warming up.'}, status=200)
 
 @csrf_exempt
 def table_update(request, table_id):
@@ -4193,8 +4205,9 @@ def get_active_pos_order(request):
     if request.method != 'GET':
         return HttpResponseBadRequest('Only GET allowed')
 
-    if not _payments_schema_ready():
-        return _schema_error_response()
+    if not _wait_for_payments_schema():
+        logger.warning('get_active_pos_order schema warm-up did not complete; returning empty response')
+        return _schema_fallback_response()
 
     if not _is_staff(request):
         return JsonResponse({'error': 'unauthorized'}, status=403)
@@ -4230,7 +4243,7 @@ def create_pos_order(request):
     if not _wait_for_payments_schema():
         logger.warning('create_pos_order schema warm-up did not complete; attempting one more repair pass')
         if not _payments_schema_ready():
-            return _schema_error_response()
+            return _schema_fallback_response()
 
     # Initialize msisdn at function scope to avoid unbound variable errors
     msisdn = ""
@@ -4466,7 +4479,7 @@ def add_to_pos_order(request, order_id):
     """Adds new items to an existing active order (KOT update)."""
     if not _wait_for_payments_schema():
         logger.warning('add_to_pos_order aborted because payments schema was not ready after retries')
-        return _schema_error_response()
+        return _schema_fallback_response()
 
     if not _is_staff(request):
         return JsonResponse({'error': 'unauthorized'}, status=403)
@@ -4664,6 +4677,10 @@ def kds_queue(request):
         return JsonResponse({'error': 'unauthorized'}, status=403)
 
     try:
+        if not _wait_for_payments_schema():
+            logger.warning('kds_queue schema warm-up did not complete; returning empty queue')
+            return JsonResponse({'queue': [], 'ok': False, 'error': 'schema_not_ready', 'message': 'Kitchen queue is warming up.'}, status=200)
+
         # Optimization: use select_related and prefetch_related to reduce DB queries
         # Include 'sent_kitchen' so orders sent from POS by waiters are visible to the KDS
         orders = Order.objects.filter(
@@ -4705,7 +4722,7 @@ def kds_queue(request):
     except Exception as e:
         # Log the actual error to server console and return a JSON error instead of crashing
         print(f"KDS Queue Error: {str(e)}")
-        return JsonResponse({'error': 'server_error', 'message': str(e)}, status=500)
+        return JsonResponse({'queue': [], 'ok': False, 'error': 'server_error', 'message': str(e)}, status=200)
 
 @csrf_exempt
 def order_complete(request, order_id):
