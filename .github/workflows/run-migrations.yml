@@ -3,8 +3,7 @@ name: Run Django migrations
 on:
   push:
     branches:
-      - main
-      - master
+      - '**'
   workflow_dispatch: {}
 
 jobs:
