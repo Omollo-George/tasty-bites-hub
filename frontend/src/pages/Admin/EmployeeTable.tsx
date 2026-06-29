@@ -106,6 +106,14 @@ const EmployeeTable: React.FC = () => {
   const authToken = getAuthToken();
   const canAccess = isAdmin || ['waiter', 'cashier', 'manager'].includes(staffRole || '');
 
+  const normalizeOrder = (value: any): PosOrderReceipt | null => {
+    if (!value || typeof value !== 'object') return null;
+    return {
+      ...value,
+      items: Array.isArray(value.items) ? value.items : [],
+    } as PosOrderReceipt;
+  };
+
   // Determine final waiter name: use override if set, otherwise use staffName, fallback to 'Staff'
   const finalWaiterName = waiterNameOverride || staffName || 'Staff';
 
@@ -138,7 +146,8 @@ const EmployeeTable: React.FC = () => {
           // Fetch active order for this table to show existing items
           try { // Use authToken for auth
             const orderData: any = await apiFetch(`/payments/pos/active-order/?table_number=${urlTable}`, { headers: getAuthHeaders() })
-            if (orderData?.order) setActiveOrder(orderData.order)
+            const normalizedOrder = normalizeOrder(orderData?.order || orderData);
+            if (normalizedOrder) setActiveOrder(normalizedOrder)
           } catch (err) {
             console.error("Failed to fetch active order", err);
           }
@@ -174,7 +183,8 @@ const EmployeeTable: React.FC = () => {
                 const res = await fetch(getApiUrl(`/payments/orders/${activeOrder.order_id}/`), { headers: getAuthHeaders() });
                 if (res.ok) {
                   const od = await res.json();
-                  setActiveOrder(od.order || od);
+                  const normalizedOrder = normalizeOrder(od.order || od);
+                  if (normalizedOrder) setActiveOrder(normalizedOrder);
                 }
               } catch (e) {
                 // ignore
@@ -294,7 +304,7 @@ const EmployeeTable: React.FC = () => {
       });
       if (res.ok) {
         const data = await res.json();
-        const order = data.order || data; // Robustly handle both nested or direct object responses
+        const order = normalizeOrder(data.order || data) || { order_id: '', status: 'unknown', items: [] } as PosOrderReceipt;
         setCart([]); // Clear new items cart
         // If the order was sent to kitchen, clear the activeOrder so waiter can start a new one,
         // but retain a preview of the last sent order so items remain visible.
@@ -461,6 +471,8 @@ const EmployeeTable: React.FC = () => {
   };
 
   const total = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+  const visibleOrder = activeOrder ?? lastSentOrder;
+  const visibleOrderItems = Array.isArray(visibleOrder?.items) ? visibleOrder.items : [];
 
   const handlePrintTicket = async () => {
     if (!activeOrder) {
@@ -567,7 +579,7 @@ const EmployeeTable: React.FC = () => {
 
         <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-900/50">
           {/* Locked Sent Items */}
-          {(activeOrder || lastSentOrder) && (activeOrder || lastSentOrder)!.items.length > 0 && (
+          {visibleOrder && visibleOrderItems.length > 0 && (
             <div className="flex items-center justify-between">
               <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Sent to Kitchen</p>
               {lastSentOrder && !activeOrder && (
@@ -575,7 +587,7 @@ const EmployeeTable: React.FC = () => {
               )}
             </div>
           )}
-          {(activeOrder || lastSentOrder) && (activeOrder || lastSentOrder)!.items.map((item, idx) => ( // Display items already sent to kitchen
+          {visibleOrder && visibleOrderItems.map((item, idx) => ( // Display items already sent to kitchen
             <div key={idx} className="flex items-center justify-between gap-2 bg-slate-950/50 p-3 rounded-xl border border-slate-800/50 opacity-80">
               <div className="flex-1">
                 <div className="flex items-center gap-2">
@@ -587,7 +599,7 @@ const EmployeeTable: React.FC = () => {
                 )}
               </div>
               {!item.is_served && (
-                <button onClick={() => markItemServed((activeOrder || lastSentOrder)!.order_id, idx)} disabled={loading} className="text-[10px] font-bold text-orange-500 hover:text-orange-400 uppercase">Serve</button>
+                <button onClick={() => markItemServed(visibleOrder!.order_id, idx)} disabled={loading} className="text-[10px] font-bold text-orange-500 hover:text-orange-400 uppercase">Serve</button>
               )}
             </div>
           ))}
