@@ -577,6 +577,20 @@ def _schema_error_response(message='Payments database schema is not available. P
     return JsonResponse({'error': 'schema_not_ready', 'message': message}, status=503)
 
 
+def _wait_for_payments_schema(max_attempts: int = 3, delay_seconds: float = 1.0) -> bool:
+    for attempt in range(1, max_attempts + 1):
+        try:
+            if _payments_schema_ready():
+                return True
+        except Exception as exc:
+            logger.warning('Payments schema check attempt %s/%s failed: %s', attempt, max_attempts, exc)
+
+        if attempt < max_attempts:
+            time.sleep(delay_seconds)
+
+    return False
+
+
 def _default_config_payload() -> dict:
     return {
         'base_currency': 'KES',
@@ -4151,7 +4165,8 @@ def create_pos_order(request):
     if request.method != 'POST':
         return JsonResponse({'error': 'method_not_allowed', 'message': 'Only POST allowed'}, status=405)
 
-    if not _payments_schema_ready():
+    if not _wait_for_payments_schema():
+        logger.warning('create_pos_order aborted because payments schema was not ready after retries')
         return _schema_error_response()
 
     # Initialize msisdn at function scope to avoid unbound variable errors
@@ -4386,7 +4401,8 @@ def create_pos_order(request):
 @csrf_exempt
 def add_to_pos_order(request, order_id):
     """Adds new items to an existing active order (KOT update)."""
-    if not _payments_schema_ready():
+    if not _wait_for_payments_schema():
+        logger.warning('add_to_pos_order aborted because payments schema was not ready after retries')
         return _schema_error_response()
 
     if not _is_staff(request):
