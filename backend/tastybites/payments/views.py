@@ -4117,6 +4117,9 @@ def get_active_pos_order(request):
     if request.method != 'GET':
         return HttpResponseBadRequest('Only GET allowed')
 
+    if not _payments_schema_ready():
+        return _schema_error_response()
+
     if not _is_staff(request):
         return JsonResponse({'error': 'unauthorized'}, status=403)
 
@@ -4147,6 +4150,9 @@ def create_pos_order(request):
     """Creates a full order with items and modifiers."""
     if request.method != 'POST':
         return JsonResponse({'error': 'method_not_allowed', 'message': 'Only POST allowed'}, status=405)
+
+    if not _payments_schema_ready():
+        return _schema_error_response()
 
     # Initialize msisdn at function scope to avoid unbound variable errors
     msisdn = ""
@@ -4380,6 +4386,9 @@ def create_pos_order(request):
 @csrf_exempt
 def add_to_pos_order(request, order_id):
     """Adds new items to an existing active order (KOT update)."""
+    if not _payments_schema_ready():
+        return _schema_error_response()
+
     if not _is_staff(request):
         return JsonResponse({'error': 'unauthorized'}, status=403)
         
