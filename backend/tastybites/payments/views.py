@@ -3513,11 +3513,47 @@ def create_order(request):
 
 
 def queue_list(request):
+    """List recent orders with pagination (lightweight format)."""
     if not _is_admin(request):
         return JsonResponse({'error': 'unauthorized'}, status=403)
 
-    orders = Order.objects.all().order_by('-created_at')[:100]
-    return JsonResponse({'results': [_serialize_order(order) for order in orders]})
+    try:
+        page = int(request.GET.get('page', 1))
+        page_size = int(request.GET.get('page_size', 25))
+    except (ValueError, TypeError):
+        page = 1
+        page_size = 25
+
+    page_size = min(page_size, 100)  # Cap at 100
+    offset = (page - 1) * page_size
+
+    # Count total for pagination
+    total = Order.objects.count()
+
+    # Use lightweight serialization for list
+    orders = Order.objects.select_related('table', 'waiter').order_by('-created_at')[offset:offset + page_size]
+    data = [
+        {
+            'order_id': o.order_id,
+            'table': o.table.number if o.table else ('Delivery' if o.delivery_address else 'Takeaway'),
+            'status': o.status,
+            'total_amount': float(o.total_amount or 0),
+            'is_paid': o.is_paid,
+            'created_at': o.created_at.isoformat() if o.created_at else None,
+            'waiter_name': o.waiter_name or (o.waiter.name if o.waiter else ''),
+        }
+        for o in orders
+    ]
+    
+    return JsonResponse({
+        'results': data,
+        'pagination': {
+            'page': page,
+            'page_size': page_size,
+            'total': total,
+            'total_pages': (total + page_size - 1) // page_size
+        }
+    })
 
 
 @csrf_exempt
@@ -3725,17 +3761,34 @@ def order_receipt(request, order_id: str):
 
 
 def orders_list(request):
+    """List recent orders with pagination and proper query optimization."""
     if not _payments_schema_ready():
         return _schema_error_response()
 
     if not _is_admin(request):
         return JsonResponse({'error': 'unauthorized'}, status=403)
 
-    orders = Order.objects.all().order_by('-created_at')[:100]
+    try:
+        page = int(request.GET.get('page', 1))
+        page_size = int(request.GET.get('page_size', 20))
+    except (ValueError, TypeError):
+        page = 1
+        page_size = 20
+
+    page_size = min(page_size, 100)  # Cap at 100
+    offset = (page - 1) * page_size
+
+    # Count total for pagination
+    total = Order.objects.count()
+
+    # Optimize with select_related and prefetch_related
+    orders = Order.objects.select_related('table', 'waiter').prefetch_related('items').order_by('-created_at')[offset:offset + page_size]
+    
     data = [
         {
             'order_id': order.order_id,
             'table': order.table.number if order.table else ('Delivery' if order.delivery_address else 'Takeaway'),
+            'table_id': order.table.id if order.table else None,
             'phone': order.phone,
             'delivery_address': order.delivery_address,
             'delivery_distance_km': float(order.delivery_distance_km) if order.delivery_address and order.delivery_distance_km is not None else None,
@@ -3743,16 +3796,25 @@ def orders_list(request):
             'delivery_cost': float(order.delivery_cost or 0),
             'status': order.status,
             'total_amount': float(order.total_amount or 0),
-            'item_count': order.items.count(),
+            'item_count': len(order.items.all()),  # Uses prefetch cache, not query
             'is_paid': order.is_paid,
             'split_count': order.split_count,
             'created_at': order.created_at.isoformat() if order.created_at else None,
-            'waiter_id': order.waiter.id if getattr(order, 'waiter', None) else None,
-            'waiter_name': (order.waiter_name or (order.waiter.name if getattr(order, 'waiter', None) else '')),
+            'waiter_id': order.waiter.id if order.waiter else None,
+            'waiter_name': order.waiter_name or (order.waiter.name if order.waiter else ''),
         }
         for order in orders
     ]
-    return JsonResponse({'results': data})
+    
+    return JsonResponse({
+        'results': data,
+        'pagination': {
+            'page': page,
+            'page_size': page_size,
+            'total': total,
+            'total_pages': (total + page_size - 1) // page_size
+        }
+    })
 
 
 def order_detail(request, order_id: str):
@@ -4564,15 +4626,53 @@ def add_to_pos_order(request, order_id):
         return JsonResponse({'error': 'server_error', 'message': str(e)}, status=500)
 
 def cashier_pending_bills(request):
-    """Retrieve all orders that cashier should review for payment."""
+    """Retrieve orders pending cashier review with pagination."""
     if not _is_staff(request):
         return JsonResponse({'error': 'unauthorized'}, status=403)
 
     try:
-        bills = Order.objects.filter(status__in=['pending', 'sent_kitchen', 'bill_pending', 'ready']).select_related('table').prefetch_related('items').order_by('-created_at')
-        results = [_serialize_order(order) for order in bills]
-        return JsonResponse({'bills': results})
+        try:
+            page = int(request.GET.get('page', 1))
+            page_size = int(request.GET.get('page_size', 15))
+        except (ValueError, TypeError):
+            page = 1
+            page_size = 15
+
+        page_size = min(page_size, 50)  # Cap at 50
+        offset = (page - 1) * page_size
+
+        # Count total
+        total = Order.objects.filter(status__in=['pending', 'sent_kitchen', 'bill_pending', 'ready']).count()
+
+        # Use lightweight format for list (not full serialization)
+        bills = Order.objects.filter(
+            status__in=['pending', 'sent_kitchen', 'bill_pending', 'ready']
+        ).select_related('table', 'waiter').order_by('-created_at')[offset:offset + page_size]
+        
+        results = [
+            {
+                'order_id': b.order_id,
+                'table': b.table.number if b.table else 'Takeaway',
+                'status': b.status,
+                'total_amount': float(b.total_amount or 0),
+                'phone': b.phone,
+                'created_at': b.created_at.isoformat() if b.created_at else None,
+                'waiter_name': b.waiter_name or (b.waiter.name if b.waiter else ''),
+            }
+            for b in bills
+        ]
+        
+        return JsonResponse({
+            'bills': results,
+            'pagination': {
+                'page': page,
+                'page_size': page_size,
+                'total': total,
+                'total_pages': (total + page_size - 1) // page_size
+            }
+        })
     except Exception as e:
+        logger.exception('Error in cashier_pending_bills: %s', e)
         return JsonResponse({'error': str(e)}, status=500)
 
 
@@ -4703,7 +4803,7 @@ def cashier_confirm_payment(request, order_id):
 
 
 def kds_queue(request):
-    """Live queue for the kitchen."""
+    """Live queue for the kitchen with response caching."""
     # Allow unauthenticated access in local development for convenience when
     # `DEBUG` is enabled so developers and waiters can view the KDS without
     # requiring staff tokens. In production, this remains staff-only.
@@ -4719,13 +4819,15 @@ def kds_queue(request):
     try:
         if not _wait_for_payments_schema():
             logger.warning('kds_queue schema warm-up did not complete; returning empty queue')
-            return JsonResponse({'queue': [], 'ok': False, 'error': 'schema_not_ready', 'message': 'Kitchen queue is warming up.'}, status=200)
+            response = JsonResponse({'queue': [], 'ok': False, 'error': 'schema_not_ready', 'message': 'Kitchen queue is warming up.'}, status=200)
+            response['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+            return response
 
         # Optimization: use select_related and prefetch_related to reduce DB queries
         # Include 'sent_kitchen' so orders sent from POS by waiters are visible to the KDS
         orders = Order.objects.filter(
             status__in=['sent_kitchen', 'preparing', 'pending', 'paid']
-        ).select_related('table').prefetch_related('items').order_by('created_at')
+        ).select_related('table', 'waiter').prefetch_related('items').order_by('created_at')
 
         results = []
         for o in orders:
@@ -4758,11 +4860,17 @@ def kds_queue(request):
                 'waiter_name': o.waiter_name,
             })
 
-        return JsonResponse({'queue': results})
+        response = JsonResponse({'queue': results})
+        # Add short-lived cache header - SSE will still push updates immediately
+        response['Cache-Control'] = 'public, max-age=2'
+        response['ETag'] = str(hash(frozenset((tuple(sorted(r.items())) for r in results))))
+        return response
     except Exception as e:
         # Log the actual error to server console and return a JSON error instead of crashing
-        print(f"KDS Queue Error: {str(e)}")
-        return JsonResponse({'queue': [], 'ok': False, 'error': 'server_error', 'message': str(e)}, status=200)
+        logger.exception('KDS Queue Error: %s', str(e))
+        response = JsonResponse({'queue': [], 'ok': False, 'error': 'server_error', 'message': str(e)}, status=200)
+        response['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+        return response
 
 @csrf_exempt
 def order_complete(request, order_id):

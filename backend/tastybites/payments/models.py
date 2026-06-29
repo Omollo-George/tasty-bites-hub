@@ -98,7 +98,7 @@ class Order(models.Model):
 
     order_id = models.CharField(max_length=64, unique=True, default=generate_uuid_hex, editable=False)
     table = models.ForeignKey(Table, on_delete=models.SET_NULL, null=True, blank=True, related_name='orders')
-    waiter = models.ForeignKey('Employee', on_delete=models.SET_NULL, null=True, blank=True, related_name='orders')
+    waiter = models.ForeignKey('Employee', on_delete=models.SET_NULL, null=True, blank=True, related_name='orders', db_index=True)
     waiter_name = models.CharField(max_length=255, blank=True, default='')
     phone = models.CharField(max_length=32, blank=True)
     delivery_address = models.CharField(max_length=512, blank=True, default='')
@@ -108,7 +108,7 @@ class Order(models.Model):
     status = models.CharField(max_length=32, choices=STATUS_CHOICES, default=STATUS_PENDING, db_index=True)
     split_count = models.PositiveIntegerField(default=1)
     total_amount = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('0.00'))
-    created_at = models.DateTimeField(auto_now_add=True)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
 
     if TYPE_CHECKING:
         id: int
@@ -127,6 +127,16 @@ class Order(models.Model):
     def amount_remaining(self):
         paid_sum = sum(t.amount for t in self.transactions.filter(status='success'))
         return max(0, self.total_amount - paid_sum)
+
+    class Meta:
+        """Database optimizations: indexes for common query patterns."""
+        indexes = [
+            models.Index(fields=['status', '-created_at'], name='order_status_created_idx'),
+            models.Index(fields=['waiter_id', '-created_at'], name='order_waiter_created_idx'),
+            models.Index(fields=['-created_at'], name='order_created_desc_idx'),
+            models.Index(fields=['status', 'waiter_id'], name='order_status_waiter_idx'),
+        ]
+        ordering = ['-created_at']
 
 
 class OrderItem(models.Model):
