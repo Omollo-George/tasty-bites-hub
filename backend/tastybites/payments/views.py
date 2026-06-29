@@ -603,8 +603,8 @@ def _schema_error_response(message='Payments database schema is not available. P
     return JsonResponse({'error': 'schema_not_ready', 'message': message}, status=status)
 
 
-def _schema_fallback_response(message='Payments database schema is not available. Please apply database migrations.'):
-    return JsonResponse({'ok': False, 'error': 'schema_not_ready', 'message': message}, status=200)
+def _schema_fallback_response(message='Payments database schema is not available. Please apply database migrations.', error_code='schema_not_ready'):
+    return JsonResponse({'ok': False, 'error': error_code, 'message': message}, status=200)
 
 
 def _wait_for_payments_schema(max_attempts: int = 3, delay_seconds: float = 1.0) -> bool:
@@ -1439,11 +1439,9 @@ def admin_signin(request):
         return JsonResponse({'token': token.token, 'username': user.username})
     except (db_utils.ProgrammingError, db_utils.OperationalError, AttributeError) as exc:
         logger.warning('Admin sign-in failed due to schema issue: %s', exc)
-        return JsonResponse(
-            {
-                'error': 'Admin authentication is temporarily unavailable because the admin authentication tables are missing or incomplete. Please redeploy or run database migrations.'
-            },
-            status=503,
+        return _schema_fallback_response(
+            'Admin authentication is temporarily unavailable because the admin authentication tables are missing or incomplete. Please redeploy or run database migrations.',
+            error_code='Admin authentication is temporarily unavailable because the admin authentication tables are missing or incomplete. Please redeploy or run database migrations.'
         )
     except Exception as e:
         logger.exception('Unexpected admin sign-in failure: %s', e)
@@ -4241,9 +4239,8 @@ def create_pos_order(request):
         return JsonResponse({'error': 'method_not_allowed', 'message': 'Only POST allowed'}, status=405)
 
     if not _wait_for_payments_schema():
-        logger.warning('create_pos_order schema warm-up did not complete; attempting one more repair pass')
-        if not _payments_schema_ready():
-            return _schema_fallback_response()
+        logger.warning('create_pos_order schema warm-up did not complete; returning a safe fallback response')
+        return _schema_fallback_response('Payments database schema is not available. Migrations are being applied. Please try again in a moment.')
 
     # Initialize msisdn at function scope to avoid unbound variable errors
     msisdn = ""
@@ -4465,10 +4462,7 @@ def create_pos_order(request):
     except (db_utils.ProgrammingError, db_utils.OperationalError) as exc:
         logger.error('create_pos_order failed due to missing payments schema. Exception: %s', exc)
         logger.error('This usually means database migrations have not been applied. Check DATABASE_URL is set and migrations have run.')
-        return JsonResponse({
-            'error': 'schema_not_ready',
-            'message': 'Payments database schema is not available. Migrations are being applied. Please try again in a moment.'
-        }, status=503)
+        return _schema_fallback_response('Payments database schema is not available. Migrations are being applied. Please try again in a moment.')
     except Exception as exc:
         error_message = str(exc)
         logger.exception('create_pos_order unexpected error: %s', exc)
