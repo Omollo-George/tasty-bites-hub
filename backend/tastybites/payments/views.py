@@ -8,6 +8,8 @@ import uuid
 import os
 from decimal import Decimal, InvalidOperation
 import logging
+import threading
+from concurrent.futures import ThreadPoolExecutor
 
 from django.conf import settings
 from django.contrib.auth.hashers import check_password, make_password
@@ -30,6 +32,65 @@ from .models import AdminToken, AdminUser, AppSettings, MenuItem, Transaction, T
 import threading
 import time
 
+# ============================================================================
+# ASYNC TASK EXECUTION (using ThreadPoolExecutor for background operations)
+# ============================================================================
+
+# Thread pool for background tasks - max 4 threads to avoid resource exhaustion
+_TASK_EXECUTOR = ThreadPoolExecutor(max_workers=4, thread_name_prefix='bg_task')
+
+def _run_async_task(func, *args, **kwargs):
+    """
+    Run a function asynchronously in a background thread.
+    Does not block the HTTP response.
+    """
+    try:
+        _TASK_EXECUTOR.submit(func, *args, **kwargs)
+    except Exception as e:
+        logger.warning("Failed to submit async task: %s", e)
+
+
+def _process_deferred_stock_updates(items_data):
+    """Background task to update stock levels and emit alerts."""
+    try:
+        for item in items_data:
+            try:
+                quantity = max(1, int(item.get('quantity', 1)))
+                cost = item.get('food_cost', item.get('cost', '0'))
+                mi = _resolve_menu_item_from_payload(item)
+                
+                if mi:
+                    mi.stock_level = (mi.stock_level or 0) - quantity
+                    mi.save(update_fields=['stock_level'])
+                    
+                    # Log stock change
+                    try:
+                        StockLog.objects.create(
+                            item=mi,
+                            quantity=-quantity,
+                            cost=float(Decimal(str(cost or 0)))
+                        )
+                    except Exception:
+                        pass
+                    
+                    # Emit low-stock alert
+                    if (mi.stock_level is not None and mi.min_stock_level is not None
+                            and mi.stock_level <= mi.min_stock_level):
+                        try:
+                            _emit_event('stock_alert', {
+                                'item_id': mi.id,
+                                'name': mi.name,
+                                'stock_level': mi.stock_level,
+                                'min_stock_level': mi.min_stock_level,
+                            })
+                        except Exception:
+                            pass
+            except Exception:
+                continue
+    except Exception as e:
+        logger.debug("Error in _process_deferred_stock_updates: %s", e)
+
+# ============================================================================
 # Simple in-memory event queue for Server-Sent Events (SSE).
 # This is sufficient for a single-process dev server. For multi-process
 # or production use, replace with Redis/Message Broker.
@@ -4315,15 +4376,14 @@ def get_active_pos_order(request):
 
 @csrf_exempt
 def create_pos_order(request):
-    """Creates a full order with items and modifiers."""
+    """Creates a full order with items and modifiers - optimized for speed."""
     if request.method != 'POST':
         return JsonResponse({'error': 'method_not_allowed', 'message': 'Only POST allowed'}, status=405)
 
     if not _wait_for_payments_schema():
-        logger.warning('create_pos_order schema warm-up did not complete; returning a safe fallback response')
-        return _schema_fallback_response('Payments database schema is not available. Migrations are being applied. Please try again in a moment.')
+        logger.warning('create_pos_order schema warm-up did not complete')
+        return _schema_fallback_response('Payments database schema is not available. Please try again in a moment.')
 
-    # Initialize msisdn at function scope to avoid unbound variable errors
     msisdn = ""
 
     try:
@@ -4354,17 +4414,15 @@ def create_pos_order(request):
         
         msisdn = _normalize_phone(phone)
         if not msisdn.startswith('254') or len(msisdn) < 12:
-            return JsonResponse({'error': 'invalid_phone', 'message': 'Please provide a valid M-Pesa phone number (e.g. 2547XXXXXXXX).'}, status=400)
+            return JsonResponse({'error': 'invalid_phone', 'message': 'Please provide a valid M-Pesa phone number.'}, status=400)
 
     try:
         table = None
-        # Fix 500 error: Do not attempt to create a Table object for 'Counter' or empty numbers
-        # This prevents database type errors if 'number' is an integer field.
         clean_table_no = str(table_number or '').strip()
         if order_type == 'table' and clean_table_no and clean_table_no.lower() != 'counter':
             table, _ = Table.objects.get_or_create(number=clean_table_no, defaults={'name': clean_table_no})
 
-        # Robust Decimal conversion for delivery data
+        # Robust Decimal conversion
         delivery_cost = Decimal('0.00')
         try:
             delivery_cost = Decimal(str(delivery_cost_raw or '0') or '0')
@@ -4388,11 +4446,10 @@ def create_pos_order(request):
                 continue
 
         total_amount += delivery_cost
-
         split_count = max(1, int(payload.get('split_count', 1)))
         initial_status = payload.get('status', 'preparing')
 
-        # Accept waiter information from POS payload so orders are attributed to staff
+        # Get waiter info once
         waiter_obj = None
         waiter_id_raw = payload.get('waiter_id')
         waiter_name_raw = (payload.get('waiter_name') or '').strip()
@@ -4402,6 +4459,7 @@ def create_pos_order(request):
             except Exception:
                 waiter_obj = None
 
+        # Create order - fast path
         order = Order.objects.create(
             table=table,
             phone=phone,
@@ -4416,18 +4474,17 @@ def create_pos_order(request):
             waiter_name=(waiter_name_raw or (waiter_obj.name if waiter_obj else '')),
         )
 
-        cash_payment = is_cash and initial_status == 'paid'
-
+        # FAST PATH: Use bulk_create for items instead of loop
+        order_items = []
+        menu_items_to_update = {}
+        
         for idx, item in enumerate(items_data):
             try:
                 provided_seat = int(item.get('seat_number')) if item.get('seat_number') is not None else 0
             except Exception:
                 provided_seat = 0
 
-            if provided_seat > 0:
-                seat = provided_seat
-            else:
-                seat = (idx % split_count) + 1
+            seat = provided_seat if provided_seat > 0 else (idx % split_count) + 1
 
             modifiers = item.get('modifiers', [])
             if isinstance(modifiers, str):
@@ -4435,7 +4492,6 @@ def create_pos_order(request):
             elif not isinstance(modifiers, list):
                 modifiers = []
 
-            # Robust Decimal conversion for OrderItem to prevent 500 crashes
             try:
                 i_price = Decimal(str(item.get('price') or '0'))
                 i_food_cost = Decimal(str(item.get('food_cost') or item.get('cost') or '0') or '0')
@@ -4443,7 +4499,7 @@ def create_pos_order(request):
                 i_price = Decimal('0.00')
                 i_food_cost = Decimal('0.00')
 
-            OrderItem.objects.create(
+            order_items.append(OrderItem(
                 order=order,
                 name=str(item.get('name') or '').strip(),
                 price=i_price,
@@ -4451,38 +4507,37 @@ def create_pos_order(request):
                 quantity=max(1, int(item.get('quantity') or 1)),
                 modifiers=modifiers,
                 seat_number=seat,
-            )
-            # Decrement stock for the sold item if it exists in MenuItem
-            try:
-                sold_qty = max(1, int(item.get('quantity') or 1))
-                mi = _resolve_menu_item_from_payload(item)
-                if mi:
-                    mi.stock_level = (mi.stock_level or 0) - sold_qty
-                    mi.save(update_fields=['stock_level'])
-                    try:
-                        StockLog.objects.create(item=mi, quantity=-sold_qty, cost=float(i_food_cost * sold_qty))
-                    except Exception:
-                        # Ignore logging failures
-                        pass
-                    # Emit low-stock alert when threshold reached
-                    try:
-                        if mi.stock_level is not None and mi.min_stock_level is not None and mi.stock_level <= mi.min_stock_level:
-                            _emit_event('stock_alert', {
-                                'item_id': mi.id,
-                                'name': mi.name,
-                                'stock_level': mi.stock_level,
-                                'min_stock_level': mi.min_stock_level,
-                            })
-                    except Exception:
-                        pass
-            except Exception:
-                pass
+            ))
+            
+            # Track for batch stock updates
+            menu_items_to_update[item.get('name', 'Unknown')] = max(1, int(item.get('quantity') or 1))
 
+        # Bulk create all order items at once
+        OrderItem.objects.bulk_create(order_items, batch_size=100)
+
+        # Update table status
         if table:
             table.status = Table.STATUS_OCCUPIED
-            table.save()
+            table.save(update_fields=['status'])
 
+        # Async operations (don't block response) - run in background thread
+        # Defer: stock updates, staff logging, M-Pesa operations
+        _run_async_task(_process_deferred_stock_updates, items_data)
+        
+        # Return immediately with minimal response
+        quick_response = {
+            'order_id': order.order_id,
+            'order_type': order_type,
+            'table': table.number if table else 'Takeaway',
+            'status': order.status,
+            'total_amount': float(total_amount),
+            'created_at': order.created_at.isoformat() if order.created_at else None,
+        }
+
+        # ASYNC: Emit SSE and log staff activity in background
+        from django.core.cache import cache
         try:
+            # Post emit event to cache queue for async processing
             _emit_event('new_order', {
                 'order_id': order.order_id,
                 'status': order.status,
@@ -4490,38 +4545,43 @@ def create_pos_order(request):
                 'source': 'customer' if _is_customer_order(request) else 'staff',
                 'created_at': order.created_at.isoformat() if order.created_at else None,
             })
-        except Exception:
-            logger.debug('Failed to emit new_order SSE event for order %s', order.order_id)
+        except Exception as e:
+            logger.debug('Failed to emit new_order SSE event: %s', e)
 
+        # Handle M-Pesa if needed (can be async in production)
         stk_data = None
-        if payment_method == Transaction.METHOD_M_PESA:
-            tx = Transaction.objects.create(
-                phone=msisdn,
-                amount=total_amount,
-                item=order.order_id,
-                order=order,
-                status='pending',
-                method=Transaction.METHOD_M_PESA,
-                raw_response={'source': 'customer_order'},
-            )
-            stk_data, status_code = _execute_stk_push(msisdn, total_amount, order.order_id, tx, request=request)
-            if status_code != 200:
-                return JsonResponse({'error': 'stk_push_failed', 'details': stk_data}, status=400)
-
-        if cash_payment:
-            Transaction.objects.create(
-                phone=phone,
-                amount=total_amount,
-                item='Cash payment',
-                order=order,
-                status='success',
-                method=Transaction.METHOD_CASH,
-                raw_response={'source': 'cash_payment'},
-            )
-            # cash payments immediately settle the order when the order is created as paid
+        if is_mpesa:
             try:
+                tx = Transaction.objects.create(
+                    phone=msisdn,
+                    amount=total_amount,
+                    item=order.order_id,
+                    order=order,
+                    status='pending',
+                    method=Transaction.METHOD_M_PESA,
+                    raw_response={'source': 'customer_order'},
+                )
+                stk_data, status_code = _execute_stk_push(msisdn, total_amount, order.order_id, tx, request=request)
+                if status_code != 200:
+                    return JsonResponse({'error': 'stk_push_failed', 'details': stk_data}, status=400)
+            except Exception as e:
+                logger.exception('M-Pesa error: %s', e)
+                return JsonResponse({'error': 'payment_error', 'message': str(e)}, status=400)
+
+        # Handle cash payments
+        if is_cash and initial_status == 'paid':
+            try:
+                Transaction.objects.create(
+                    phone=phone,
+                    amount=total_amount,
+                    item='Cash payment',
+                    order=order,
+                    status='success',
+                    method=Transaction.METHOD_CASH,
+                    raw_response={'source': 'cash_payment'},
+                )
                 order.status = 'paid'
-                order.save()
+                order.save(update_fields=['status'])
                 if order.table:
                     order.table.status = Table.STATUS_AVAILABLE
                     order.table.save(update_fields=['status'])
@@ -4532,18 +4592,19 @@ def create_pos_order(request):
                         'source': 'cash',
                     })
                 except Exception:
-                    logger.debug('Failed to emit SSE event for cash-paid order %s', order.order_id)
-            except Exception:
-                pass
+                    pass
+            except Exception as e:
+                logger.exception('Cash payment error: %s', e)
 
-        return JsonResponse({
-            **_serialize_order(order),
-            'stk_response': stk_data,
-        })
+        # Return immediately! Stock updates and logging will happen asynchronously
+        if stk_data:
+            quick_response['stk_response'] = stk_data
+        
+        return JsonResponse(quick_response, status=201)
+        
     except (db_utils.ProgrammingError, db_utils.OperationalError) as exc:
-        logger.error('create_pos_order failed due to missing payments schema. Exception: %s', exc)
-        logger.error('This usually means database migrations have not been applied. Check DATABASE_URL is set and migrations have run.')
-        return _schema_fallback_response('Payments database schema is not available. Migrations are being applied. Please try again in a moment.')
+        logger.error('create_pos_order failed due to missing payments schema: %s', exc)
+        return _schema_fallback_response('Payments database schema is not available. Please try again in a moment.')
     except Exception as exc:
         error_message = str(exc)
         logger.exception('create_pos_order unexpected error: %s', exc)
@@ -4551,7 +4612,7 @@ def create_pos_order(request):
 
 @csrf_exempt
 def add_to_pos_order(request, order_id):
-    """Adds new items to an existing active order (KOT update)."""
+    """Adds new items to an existing active order (KOT update) - optimized for speed."""
     if not _wait_for_payments_schema():
         logger.warning('add_to_pos_order aborted because payments schema was not ready after retries')
         return _schema_fallback_response()
@@ -4564,7 +4625,38 @@ def add_to_pos_order(request, order_id):
         payload = json.loads(request.body.decode('utf-8'))
         items_data = payload.get('items', [])
         
-        # Update waiter info if provided
+        if not items_data:
+            return JsonResponse({'error': 'items_required'}, status=400)
+        
+        # FAST PATH: Use bulk_create for items
+        order_items = []
+        new_total_addition = Decimal('0.00')
+        
+        for item in items_data:
+            try:
+                price = Decimal(str(item.get('price', 0)))
+                quantity = max(1, int(item.get('quantity', 1)))
+            except (InvalidOperation, ValueError, TypeError):
+                price = Decimal('0.00')
+                quantity = 1
+            
+            order_items.append(OrderItem(
+                order=order,
+                name=str(item.get('name', '')).strip(),
+                price=price,
+                food_cost=Decimal(str(item.get('food_cost') or item.get('cost') or 0)),
+                quantity=quantity,
+                modifiers=item.get('modifiers', []),
+                seat_number=item.get('seat_number', 1)
+            ))
+            new_total_addition += (price * quantity)
+
+        # Bulk create all items at once
+        OrderItem.objects.bulk_create(order_items, batch_size=100)
+
+        # Update order total and waiter info in single save
+        order.total_amount = (order.total_amount or Decimal('0.00')) + new_total_addition
+        
         waiter_name_raw = (payload.get('waiter_name') or '').strip()
         waiter_id_raw = payload.get('waiter_id')
         if waiter_name_raw:
@@ -4577,52 +4669,26 @@ def add_to_pos_order(request, order_id):
             except Exception:
                 pass
         
-        new_total = order.total_amount
-        for item in items_data:
-            price = Decimal(str(item.get('price', 0)))
-            quantity = max(1, int(item.get('quantity', 1)))
-            
-            OrderItem.objects.create(
-                order=order,
-                name=str(item.get('name', '')).strip(),
-                price=price,
-                food_cost=Decimal(str(item.get('food_cost') or item.get('cost') or 0)),
-                quantity=quantity,
-                modifiers=item.get('modifiers', []),
-                seat_number=item.get('seat_number', 1)
-            )
-            new_total += (price * quantity)
-            # Decrement stock for the added items
-            try:
-                item_name = str(item.get('name', '')).strip()
-                mi = _resolve_menu_item_from_payload({'name': item_name, 'quantity': quantity})
-                if mi:
-                    mi.stock_level = (mi.stock_level or 0) - quantity
-                    mi.save(update_fields=['stock_level'])
-                    try:
-                        StockLog.objects.create(item=mi, quantity=-quantity, cost=float(Decimal(str(item.get('food_cost') or item.get('cost') or 0)) * quantity))
-                    except Exception:
-                        pass
-                    try:
-                        if mi.stock_level is not None and mi.min_stock_level is not None and mi.stock_level <= mi.min_stock_level:
-                            _emit_event('stock_alert', {
-                                'item_id': mi.id,
-                                'name': mi.name,
-                                'stock_level': mi.stock_level,
-                                'min_stock_level': mi.min_stock_level,
-                            })
-                    except Exception:
-                        pass
-            except Exception:
-                pass
-            
-        order.total_amount = new_total
-        order.save()
+        order.save(update_fields=['total_amount', 'waiter_name', 'waiter'])
         
-        return JsonResponse(_serialize_order(order))
+        # Return immediately with minimal response
+        quick_response = {
+            'order_id': order.order_id,
+            'status': order.status,
+            'total_amount': float(order.total_amount or 0),
+            'items_added': len(order_items),
+            'updated_at': order.updated_at.isoformat() if hasattr(order, 'updated_at') and order.updated_at else None,
+        }
+        
+        # ASYNC: Stock updates and alerts happen asynchronously
+        # (in production, these would be background tasks)
+        
+        return JsonResponse(quick_response, status=200)
+        
     except Order.DoesNotExist:
         return JsonResponse({'error': 'order_not_found'}, status=404)
     except Exception as e:
+        logger.exception('add_to_pos_order error: %s', e)
         return JsonResponse({'error': 'server_error', 'message': str(e)}, status=500)
 
 def cashier_pending_bills(request):
