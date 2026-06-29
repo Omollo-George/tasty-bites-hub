@@ -51,10 +51,20 @@ const AdminKDS: React.FC = () => {
           'Content-Type': 'application/json'
         }
       });
+      
+      // Check content type first
+      const contentType = res.headers.get("content-type") || '';
+      if (!contentType.includes("application/json")) {
+        throw new Error(`Server Error (${res.status}): Invalid response format. Expected JSON.`);
+      }
+      
       if (!res.ok) {
-        if (!res.headers.get("content-type")?.includes("application/json")) throw new Error(`Server Error (${res.status}): Invalid response format.`);
-        const errorData = await res.json();
-        throw new Error(errorData.error || 'Failed to fetch KDS queue');
+        try {
+          const errorData = await res.json();
+          throw new Error(errorData.error || `Server Error (${res.status}): Failed to fetch KDS queue`);
+        } catch (e: any) {
+          throw new Error(`Server Error (${res.status}): ${e.message || 'Failed to fetch KDS queue'}`);
+        }
       }
       const data = await res.json();
       setQueue(data.queue || []);
@@ -110,11 +120,22 @@ const AdminKDS: React.FC = () => {
         },
         body: JSON.stringify({ status: newStatus })
       });
-      if (!res.ok) {
-        if (!res.headers.get("content-type")?.includes("application/json")) throw new Error(`Server Error (${res.status}): Invalid response format.`);
-        const errorData = await res.json();
-        throw new Error(errorData.error || 'Failed to update order status');
+      
+      // Check content type first
+      const contentType = res.headers.get("content-type") || '';
+      if (!contentType.includes("application/json")) {
+        throw new Error(`Server Error (${res.status}): Invalid response format. Expected JSON.`);
       }
+      
+      if (!res.ok) {
+        try {
+          const errorData = await res.json();
+          throw new Error(errorData.error || `Server Error (${res.status}): Failed to update order status`);
+        } catch (e: any) {
+          throw new Error(`Server Error (${res.status}): ${e.message || 'Failed to update order status'}`);
+        }
+      }
+      
       toast({
         title: "Order Updated",
         description: `Order ${orderId} status changed to ${newStatus}.`,
