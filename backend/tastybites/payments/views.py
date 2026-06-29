@@ -3522,133 +3522,152 @@ def queue_list(request):
 
 @csrf_exempt
 def order_status_update(request, order_id: str):
-    if request.method != 'POST':
-        return HttpResponseBadRequest('Only POST allowed')
-    if not (_is_admin(request) or _is_staff(request)):
-        return JsonResponse({'error': 'unauthorized'}, status=403)
-
+    """Update order status with full error handling."""
     try:
-        payload = json.loads(request.body.decode('utf-8'))
-    except Exception:
-        return JsonResponse({'error': 'Invalid JSON'}, status=400)
+        if request.method != 'POST':
+            return HttpResponseBadRequest('Only POST allowed')
+        if not (_is_admin(request) or _is_staff(request)):
+            return JsonResponse({'error': 'unauthorized'}, status=403)
 
-    status = (payload.get('status') or '').strip()
-    waiter_id_raw = payload.get('waiter_id')
-    waiter_name_raw = (payload.get('waiter_name') or '').strip()
-    if not status and waiter_id_raw is None and not waiter_name_raw:
-        return JsonResponse({'error': 'status is required'}, status=400)
-
-    order = Order.objects.filter(order_id=order_id).first()
-    if not order:
-        return JsonResponse({'error': 'not_found'}, status=404)
-
-    if status:
-        order.status = status
-
-    if waiter_id_raw is not None and waiter_id_raw != '':
         try:
-            waiter_obj = Employee.objects.filter(id=int(waiter_id_raw)).first()
-        except (TypeError, ValueError):
-            return JsonResponse({'error': 'invalid waiter_id'}, status=400)
-        if not waiter_obj:
-            return JsonResponse({'error': 'waiter_not_found'}, status=404)
-        order.waiter = waiter_obj
-        order.waiter_name = waiter_obj.name
-    elif waiter_name_raw:
-        order.waiter_name = waiter_name_raw
-
-    if 'split_count' in payload:
-        order.split_count = max(1, int(payload.get('split_count') or 1))
-
-    # If admin marks order as paid, create a transaction record and release table.
-    if status == 'paid':
-        payment_method = (payload.get('payment_method') or 'cash').strip().lower()
-        try:
-            Transaction.objects.create(
-                phone=order.phone or '',
-                amount=order.total_amount,
-                item=order.order_id,
-                status='success',
-                method=Transaction.METHOD_CASH if payment_method == 'cash' else Transaction.METHOD_M_PESA,
-                order=order,
-            )
+            payload = json.loads(request.body.decode('utf-8'))
         except Exception:
-            logger.exception('Failed to create transaction for admin-paid order %s', order.order_id)
+            return JsonResponse({'error': 'Invalid JSON'}, status=400)
 
-        if order.table:
+        status = (payload.get('status') or '').strip()
+        waiter_id_raw = payload.get('waiter_id')
+        waiter_name_raw = (payload.get('waiter_name') or '').strip()
+        if not status and waiter_id_raw is None and not waiter_name_raw:
+            return JsonResponse({'error': 'status is required'}, status=400)
+
+        order = Order.objects.filter(order_id=order_id).first()
+        if not order:
+            return JsonResponse({'error': 'not_found'}, status=404)
+
+        if status:
+            order.status = status
+
+        if waiter_id_raw is not None and waiter_id_raw != '':
+            try:
+                waiter_obj = Employee.objects.filter(id=int(waiter_id_raw)).first()
+            except (TypeError, ValueError):
+                return JsonResponse({'error': 'invalid waiter_id'}, status=400)
+            if not waiter_obj:
+                return JsonResponse({'error': 'waiter_not_found'}, status=404)
+            order.waiter = waiter_obj
+            order.waiter_name = waiter_obj.name
+        elif waiter_name_raw:
+            order.waiter_name = waiter_name_raw
+
+        if 'split_count' in payload:
+            order.split_count = max(1, int(payload.get('split_count') or 1))
+
+        # If admin marks order as paid, create a transaction record and release table.
+        if status == 'paid':
+            payment_method = (payload.get('payment_method') or 'cash').strip().lower()
+            try:
+                Transaction.objects.create(
+                    phone=order.phone or '',
+                    amount=order.total_amount,
+                    item=order.order_id,
+                    status='success',
+                    method=Transaction.METHOD_CASH if payment_method == 'cash' else Transaction.METHOD_M_PESA,
+                    order=order,
+                )
+            except Exception:
+                logger.exception('Failed to create transaction for admin-paid order %s', order.order_id)
+
+            if order.table:
+                order.table.status = Table.STATUS_AVAILABLE
+                order.table.save(update_fields=['status'])
+
+            # Log admin activity
+            try:
+                _log_staff_activity(request, 'Admin cleared payment', {'order_id': order.order_id, 'payment_method': payment_method}, order=order)
+            except Exception:
+                logger.debug('Failed to log admin activity for order %s', order.order_id)
+
+            # Emit SSE event so UIs update immediately
+            try:
+                _emit_event('order_update', {'order_id': order.order_id, 'status': 'paid'})
+            except Exception:
+                logger.debug('Failed to emit SSE event for admin-paid order %s', order.order_id)
+
+        elif status in ['ready', 'served']:
+            # Notify waiter that order is ready to be picked up or served
+            table_display = f"Table {order.table.number}" if order.table else 'Takeaway'
+
+            # Record a staff activity for the waiter so the notification time is persisted
+            try:
+                waiter_emp = None
+                if getattr(order, 'waiter', None):
+                    waiter_emp = order.waiter
+                elif getattr(order, 'waiter_id', None):
+                    waiter_emp = Employee.objects.filter(id=order.waiter_id).first()
+                # If waiter_id not set but waiter_name is present, try to resolve by name
+                if not waiter_emp and getattr(order, 'waiter_name', None):
+                    try:
+                        waiter_emp = Employee.objects.filter(name__iexact=order.waiter_name).first()
+                    except Exception:
+                        waiter_emp = None
+                if waiter_emp:
+                    activity = StaffActivity.objects.create(
+                        employee=waiter_emp,
+                        order=order,
+                        action='Order Ready Notification',
+                        details={'order_id': order.order_id, 'table': table_display, 'status': status}
+                    )
+                    logger.info('Created StaffActivity id=%s for waiter=%s order=%s action=Order Ready Notification', getattr(activity, 'id', 'n/a'), getattr(waiter_emp, 'id', 'n/a'), order.order_id)
+                    try:
+                        print(f"[LOG] Created StaffActivity id={getattr(activity,'id','n/a')} waiter={getattr(waiter_emp,'id','n/a')} order={order.order_id} action=Order Ready Notification")
+                    except Exception:
+                        pass
+            except Exception:
+                logger.debug('Failed to create StaffActivity for order_ready for order %s', order.order_id)
+
+            # Emit SSE event so waiter UIs update immediately
+            try:
+                payload = {
+                    'order_id': order.order_id,
+                    'status': status,
+                    'table': table_display,
+                    'table_id': order.table_id,
+                    'waiter_id': order.waiter_id if getattr(order, 'waiter_id', None) is not None else None,
+                    'waiter_name': order.waiter_name or (order.waiter.name if getattr(order, 'waiter', None) else ''),
+                    'created_at': order.created_at.isoformat() if order.created_at else None,
+                }
+                _emit_event('order_ready', payload)
+                logger.info('Emitted SSE order_ready for order=%s waiter_id=%s waiter_name=%s', order.order_id, payload.get('waiter_id'), payload.get('waiter_name'))
+                try:
+                    print(f"[LOG] Emitted SSE order_ready order={order.order_id} waiter_id={payload.get('waiter_id')} waiter_name={payload.get('waiter_name')}")
+                except Exception:
+                    pass
+            except Exception as e:
+                logger.exception('Failed to emit order_ready SSE event for order %s: %s', order.order_id, e)
+
+        elif status in ['completed', 'cancelled'] and order.table:
             order.table.status = Table.STATUS_AVAILABLE
             order.table.save(update_fields=['status'])
 
-        # Log admin activity
+        order.save()
+        
+        # Safely serialize order with error handling
         try:
-            _log_staff_activity(request, 'Admin cleared payment', {'order_id': order.order_id, 'payment_method': payment_method}, order=order)
-        except Exception:
-            logger.debug('Failed to log admin activity for order %s', order.order_id)
-
-        # Emit SSE event so UIs update immediately
-        try:
-            _emit_event('order_update', {'order_id': order.order_id, 'status': 'paid'})
-        except Exception:
-            logger.debug('Failed to emit SSE event for admin-paid order %s', order.order_id)
-
-    elif status in ['ready', 'served']:
-        # Notify waiter that order is ready to be picked up or served
-        table_display = f"Table {order.table.number}" if order.table else 'Takeaway'
-
-        # Record a staff activity for the waiter so the notification time is persisted
-        try:
-            waiter_emp = None
-            if getattr(order, 'waiter', None):
-                waiter_emp = order.waiter
-            elif getattr(order, 'waiter_id', None):
-                waiter_emp = Employee.objects.filter(id=order.waiter_id).first()
-            # If waiter_id not set but waiter_name is present, try to resolve by name
-            if not waiter_emp and getattr(order, 'waiter_name', None):
-                try:
-                    waiter_emp = Employee.objects.filter(name__iexact=order.waiter_name).first()
-                except Exception:
-                    waiter_emp = None
-            if waiter_emp:
-                activity = StaffActivity.objects.create(
-                    employee=waiter_emp,
-                    order=order,
-                    action='Order Ready Notification',
-                    details={'order_id': order.order_id, 'table': table_display, 'status': status}
-                )
-                logger.info('Created StaffActivity id=%s for waiter=%s order=%s action=Order Ready Notification', getattr(activity, 'id', 'n/a'), getattr(waiter_emp, 'id', 'n/a'), order.order_id)
-                try:
-                    print(f"[LOG] Created StaffActivity id={getattr(activity,'id','n/a')} waiter={getattr(waiter_emp,'id','n/a')} order={order.order_id} action=Order Ready Notification")
-                except Exception:
-                    pass
-        except Exception:
-            logger.debug('Failed to create StaffActivity for order_ready for order %s', order.order_id)
-
-        # Emit SSE event so waiter UIs update immediately
-        try:
-            payload = {
-                'order_id': order.order_id,
-                'status': status,
-                'table': table_display,
-                'table_id': order.table_id,
-                'waiter_id': order.waiter_id if getattr(order, 'waiter_id', None) is not None else None,
-                'waiter_name': order.waiter_name or (order.waiter.name if getattr(order, 'waiter', None) else ''),
-                'created_at': order.created_at.isoformat() if order.created_at else None,
-            }
-            _emit_event('order_ready', payload)
-            logger.info('Emitted SSE order_ready for order=%s waiter_id=%s waiter_name=%s', order.order_id, payload.get('waiter_id'), payload.get('waiter_name'))
-            try:
-                print(f"[LOG] Emitted SSE order_ready order={order.order_id} waiter_id={payload.get('waiter_id')} waiter_name={payload.get('waiter_name')}")
-            except Exception:
-                pass
+            serialized = _serialize_order(order)
+            return JsonResponse(serialized)
         except Exception as e:
-            logger.exception('Failed to emit order_ready SSE event for order %s: %s', order.order_id, e)
-
-    elif status in ['completed', 'cancelled'] and order.table:
-        order.table.status = Table.STATUS_AVAILABLE
-        order.table.save(update_fields=['status'])
-
-    order.save()
-    return JsonResponse(_serialize_order(order))
+            logger.exception('Failed to serialize order %s: %s', order.order_id, e)
+            # Return minimal response if serialization fails
+            return JsonResponse({
+                'ok': True,
+                'order_id': order.order_id,
+                'status': order.status,
+                'message': 'Order updated successfully'
+            })
+    
+    except Exception as e:
+        logger.exception('Error in order_status_update for order_id=%s: %s', order_id, e)
+        return JsonResponse({'error': f'Internal server error: {str(e)}'}, status=500)
 
 
 @csrf_exempt
@@ -4560,100 +4579,127 @@ def cashier_pending_bills(request):
 @csrf_exempt
 def cashier_confirm_payment(request, order_id):
     """Cashier confirms payment and marks order as paid."""
-    if not _is_staff(request):
-        return JsonResponse({'error': 'unauthorized'}, status=403)
-
-    if request.method != 'POST':
-        return HttpResponseBadRequest('Only POST allowed')
-
     try:
-        payload = json.loads(request.body.decode('utf-8'))
-    except Exception:
-        return JsonResponse({'error': 'Invalid JSON'}, status=400)
+        if not _is_staff(request):
+            return JsonResponse({'error': 'unauthorized'}, status=403)
 
-    if not _payments_schema_ready():
-        return JsonResponse({
-            'error': 'schema_not_ready',
-            'message': 'Payments database schema is not available. Please apply database migrations.'
-        }, status=503)
+        if request.method != 'POST':
+            return HttpResponseBadRequest('Only POST allowed')
 
-    try:
-        order = Order.objects.get(order_id=order_id)
+        try:
+            payload = json.loads(request.body.decode('utf-8'))
+        except Exception:
+            return JsonResponse({'error': 'Invalid JSON'}, status=400)
 
-        if order.status not in ['pending', 'sent_kitchen', 'bill_pending', 'ready']:
-            return JsonResponse({'error': 'order_not_in_billable_state'}, status=400)
+        if not _payments_schema_ready():
+            return JsonResponse({
+                'error': 'schema_not_ready',
+                'message': 'Payments database schema is not available. Please apply database migrations.'
+            }, status=503)
 
-        payment_method = payload.get('payment_method', 'cash')
+        try:
+            order = Order.objects.get(order_id=order_id)
 
-        if payment_method == 'mpesa':
-            mpesa_number = (payload.get('mpesa_number') or order.phone or '').strip()
-            if not mpesa_number:
-                return JsonResponse({'error': 'mpesa_number_required'}, status=400)
+            if order.status not in ['pending', 'sent_kitchen', 'bill_pending', 'ready']:
+                return JsonResponse({'error': 'order_not_in_billable_state'}, status=400)
 
-            msisdn = _normalize_phone(mpesa_number)
-            if not msisdn.startswith('254') or len(msisdn) < 12:
-                return JsonResponse({'error': 'invalid_mpesa_number'}, status=400)
+            payment_method = payload.get('payment_method', 'cash')
 
-            tx = Transaction.objects.create(
-                phone=msisdn,
-                amount=order.total_amount,
-                item=order.order_id,
-                status='initiated',
-                method=Transaction.METHOD_M_PESA,
-                order=order,
-            )
+            if payment_method == 'mpesa':
+                mpesa_number = (payload.get('mpesa_number') or order.phone or '').strip()
+                if not mpesa_number:
+                    return JsonResponse({'error': 'mpesa_number_required'}, status=400)
 
-            resp_json, status_code = _execute_stk_push(msisdn, order.total_amount, order.order_id, tx, request=request)
+                msisdn = _normalize_phone(mpesa_number)
+                if not msisdn.startswith('254') or len(msisdn) < 12:
+                    return JsonResponse({'error': 'invalid_mpesa_number'}, status=400)
 
-            response_data = {'ok': True, 'order': _serialize_order(order), 'payment_method': payment_method, 'mpesa': resp_json}
-            response_data['checkout_request_id'] = resp_json.get('CheckoutRequestID') if isinstance(resp_json, dict) else None
-
-            return JsonResponse(response_data, status=200 if status_code == 200 else 400)
-
-        if payment_method == 'cash':
-            order.status = 'paid'
-            order.save()
-
-            Transaction.objects.create(
-                phone=order.phone or '',
-                amount=order.total_amount,
-                item=order.order_id,
-                status='success',
-                method=Transaction.METHOD_CASH,
-                order=order,
-            )
-
-            if order.table:
-                order.table.status = Table.STATUS_AVAILABLE
-                order.table.save(update_fields=['status'])
-
-            try:
-                _log_staff_activity(
-                    request,
-                    'Confirmed cash payment',
-                    {
-                        'order_id': order.order_id,
-                        'payment_method': payment_method,
-                        'table': order.table.number if order.table else 'Takeaway',
-                        'amount': float(order.total_amount or 0),
-                    },
-                    order=order
+                tx = Transaction.objects.create(
+                    phone=msisdn,
+                    amount=order.total_amount,
+                    item=order.order_id,
+                    status='initiated',
+                    method=Transaction.METHOD_M_PESA,
+                    order=order,
                 )
-            except Exception:
-                pass
 
-            try:
-                _emit_event('order_update', {'order_id': order.order_id, 'status': 'paid', 'source': 'cashier'})
-            except Exception:
-                logger.debug('Failed to emit SSE event for cashier-paid order %s', order.order_id)
+                resp_json, status_code = _execute_stk_push(msisdn, order.total_amount, order.order_id, tx, request=request)
 
-            return JsonResponse({'ok': True, 'order': _serialize_order(order), 'payment_method': payment_method})
+                try:
+                    serialized = _serialize_order(order)
+                except Exception as e:
+                    logger.exception('Failed to serialize order %s in cashier_confirm_payment: %s', order.order_id, e)
+                    serialized = {
+                        'ok': True,
+                        'order_id': order.order_id,
+                        'status': order.status,
+                        'message': 'Payment initiated successfully'
+                    }
 
-        return JsonResponse({'error': 'unsupported_payment_method'}, status=400)
-    except Order.DoesNotExist:
-        return JsonResponse({'error': 'order_not_found'}, status=404)
+                response_data = {'ok': True, 'order': serialized, 'payment_method': payment_method, 'mpesa': resp_json}
+                response_data['checkout_request_id'] = resp_json.get('CheckoutRequestID') if isinstance(resp_json, dict) else None
+
+                return JsonResponse(response_data, status=200 if status_code == 200 else 400)
+
+            if payment_method == 'cash':
+                order.status = 'paid'
+                order.save()
+
+                Transaction.objects.create(
+                    phone=order.phone or '',
+                    amount=order.total_amount,
+                    item=order.order_id,
+                    status='success',
+                    method=Transaction.METHOD_CASH,
+                    order=order,
+                )
+
+                if order.table:
+                    order.table.status = Table.STATUS_AVAILABLE
+                    order.table.save(update_fields=['status'])
+
+                try:
+                    _log_staff_activity(
+                        request,
+                        'Confirmed cash payment',
+                        {
+                            'order_id': order.order_id,
+                            'payment_method': payment_method,
+                            'table': order.table.number if order.table else 'Takeaway',
+                            'amount': float(order.total_amount or 0),
+                        },
+                        order=order
+                    )
+                except Exception:
+                    pass
+
+                try:
+                    _emit_event('order_update', {'order_id': order.order_id, 'status': 'paid', 'source': 'cashier'})
+                except Exception:
+                    logger.debug('Failed to emit SSE event for cashier-paid order %s', order.order_id)
+
+                try:
+                    serialized = _serialize_order(order)
+                except Exception as e:
+                    logger.exception('Failed to serialize order %s in cashier_confirm_payment: %s', order.order_id, e)
+                    serialized = {
+                        'ok': True,
+                        'order_id': order.order_id,
+                        'status': order.status,
+                        'message': 'Payment confirmed successfully'
+                    }
+
+                return JsonResponse({'ok': True, 'order': serialized, 'payment_method': payment_method})
+
+            return JsonResponse({'error': 'unsupported_payment_method'}, status=400)
+        except Order.DoesNotExist:
+            return JsonResponse({'error': 'order_not_found'}, status=404)
+        except Exception as e:
+            logger.exception('Error in cashier_confirm_payment inner try for order_id=%s: %s', order_id, e)
+            return JsonResponse({'error': f'Internal server error: {str(e)}'}, status=500)
     except Exception as e:
-        return JsonResponse({'error': str(e)}, status=500)
+        logger.exception('Error in cashier_confirm_payment outer try for order_id=%s: %s', order_id, e)
+        return JsonResponse({'error': f'Internal server error: {str(e)}'}, status=500)
 
 
 def kds_queue(request):
@@ -4721,60 +4767,64 @@ def kds_queue(request):
 @csrf_exempt
 def order_complete(request, order_id):
     """Kitchen marks order as ready/served."""
-    order = Order.objects.filter(order_id=order_id).first()
-    if not order:
-        return JsonResponse({'error': 'not_found'}, status=404)
-
-    order.status = 'ready'
-    order.save()
-
-    table_display = f"Table {order.table.number}" if order.table else 'Takeaway'
-
-    # Record a staff activity for the waiter when the kitchen marks the order ready
     try:
-        waiter_emp = None
-        if getattr(order, 'waiter', None):
-            waiter_emp = order.waiter
-        elif getattr(order, 'waiter_id', None):
-            waiter_emp = Employee.objects.filter(id=order.waiter_id).first()
-        if not waiter_emp and getattr(order, 'waiter_name', None):
-            waiter_emp = Employee.objects.filter(name__iexact=order.waiter_name).first()
+        order = Order.objects.filter(order_id=order_id).first()
+        if not order:
+            return JsonResponse({'error': 'not_found'}, status=404)
 
-        if waiter_emp:
-            StaffActivity.objects.create(
-                employee=waiter_emp,
-                order=order,
-                action='Order Ready Notification',
-                details={'order_id': order.order_id, 'table': table_display, 'status': 'ready'}
-            )
+        order.status = 'ready'
+        order.save()
+
+        table_display = f"Table {order.table.number}" if order.table else 'Takeaway'
+
+        # Record a staff activity for the waiter when the kitchen marks the order ready
+        try:
+            waiter_emp = None
+            if getattr(order, 'waiter', None):
+                waiter_emp = order.waiter
+            elif getattr(order, 'waiter_id', None):
+                waiter_emp = Employee.objects.filter(id=order.waiter_id).first()
+            if not waiter_emp and getattr(order, 'waiter_name', None):
+                waiter_emp = Employee.objects.filter(name__iexact=order.waiter_name).first()
+
+            if waiter_emp:
+                StaffActivity.objects.create(
+                    employee=waiter_emp,
+                    order=order,
+                    action='Order Ready Notification',
+                    details={'order_id': order.order_id, 'table': table_display, 'status': 'ready'}
+                )
+                try:
+                    print(f"[LOG] KDS created StaffActivity waiter={getattr(waiter_emp,'id','n/a')} order={order.order_id} action=Order Ready Notification")
+                except Exception:
+                    pass
+        except Exception:
+            logger.debug('Failed to create StaffActivity for order_ready for order %s', order.order_id)
+
+        # Emit SSE event so waiter UIs update immediately
+        try:
+            payload = {
+                'order_id': order.order_id,
+                'status': 'ready',
+                'table': table_display,
+                'table_id': order.table_id,
+                'waiter_id': order.waiter_id if getattr(order, 'waiter_id', None) is not None else None,
+                'waiter_name': order.waiter_name or (order.waiter.name if getattr(order, 'waiter', None) else ''),
+                'created_at': order.created_at.isoformat() if order.created_at else None,
+            }
+            _emit_event('order_ready', payload)
+            logger.info('Emitted SSE order_ready for order=%s waiter_id=%s waiter_name=%s', order.order_id, payload.get('waiter_id'), payload.get('waiter_name'))
             try:
-                print(f"[LOG] KDS created StaffActivity waiter={getattr(waiter_emp,'id','n/a')} order={order.order_id} action=Order Ready Notification")
+                print(f"[LOG] KDS emitted SSE order_ready order={order.order_id} waiter_id={payload.get('waiter_id')} waiter_name={payload.get('waiter_name')}")
             except Exception:
                 pass
-    except Exception:
-        logger.debug('Failed to create StaffActivity for order_ready for order %s', order.order_id)
+        except Exception as e:
+            logger.exception('Failed to emit order_ready SSE event for order %s: %s', order.order_id, e)
 
-    # Emit SSE event so waiter UIs update immediately
-    try:
-        payload = {
-            'order_id': order.order_id,
-            'status': 'ready',
-            'table': table_display,
-            'table_id': order.table_id,
-            'waiter_id': order.waiter_id if getattr(order, 'waiter_id', None) is not None else None,
-            'waiter_name': order.waiter_name or (order.waiter.name if getattr(order, 'waiter', None) else ''),
-            'created_at': order.created_at.isoformat() if order.created_at else None,
-        }
-        _emit_event('order_ready', payload)
-        logger.info('Emitted SSE order_ready for order=%s waiter_id=%s waiter_name=%s', order.order_id, payload.get('waiter_id'), payload.get('waiter_name'))
-        try:
-            print(f"[LOG] KDS emitted SSE order_ready order={order.order_id} waiter_id={payload.get('waiter_id')} waiter_name={payload.get('waiter_name')}")
-        except Exception:
-            pass
+        return JsonResponse({'ok': True})
     except Exception as e:
-        logger.exception('Failed to emit order_ready SSE event for order %s: %s', order.order_id, e)
-
-    return JsonResponse({'ok': True})
+        logger.exception('Error in order_complete for order_id=%s: %s', order_id, e)
+        return JsonResponse({'error': f'Internal server error: {str(e)}'}, status=500)
 
 @csrf_exempt
 def mark_item_served(request, order_id, item_index):
@@ -4792,13 +4842,43 @@ def mark_item_served(request, order_id, item_index):
             item = items[idx]
             item.is_served = True
             item.save()
-            return JsonResponse({'ok': True, 'order': _serialize_order(order)})
+            
+            # Log the activity
+            try:
+                _log_staff_activity(
+                    request,
+                    'Marked item served',
+                    {
+                        'order_id': order.order_id,
+                        'item_id': item.id,
+                        'item_name': item.name,
+                        'item_index': idx,
+                    },
+                    order=order
+                )
+            except Exception:
+                logger.debug('Failed to log mark_item_served activity for order %s', order.order_id)
+            
+            # Safely serialize order with error handling
+            try:
+                serialized = _serialize_order(order)
+                return JsonResponse({'ok': True, 'order': serialized})
+            except Exception as e:
+                logger.exception('Failed to serialize order %s in mark_item_served: %s', order.order_id, e)
+                # Return minimal response if serialization fails
+                return JsonResponse({
+                    'ok': True,
+                    'order_id': order.order_id,
+                    'item_index': idx,
+                    'message': 'Item marked as served successfully'
+                })
         else:
             return JsonResponse({'error': 'item_not_found'}, status=404)
     except Order.DoesNotExist:
         return JsonResponse({'error': 'order_not_found'}, status=404)
     except Exception as e:
-        return JsonResponse({'error': str(e)}, status=500)
+        logger.exception('Error in mark_item_served for order_id=%s item_index=%s: %s', order_id, item_index, e)
+        return JsonResponse({'error': f'Internal server error: {str(e)}'}, status=500)
 
 @csrf_exempt
 def request_bill(request, order_id):
