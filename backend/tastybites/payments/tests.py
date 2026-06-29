@@ -8,7 +8,7 @@ from django.utils import timezone
 from decimal import Decimal
 from datetime import timedelta
 
-from .views import admin_signin, _payments_schema_ready, order_detail, order_status_update, report_summary, create_pos_order
+from .views import admin_signin, _payments_schema_ready, order_detail, order_status_update, report_summary, create_pos_order, menu_items
 from .models import AdminToken, AdminUser, Employee, Order, OrderItem, StaffToken, Transaction
 
 
@@ -120,6 +120,49 @@ class AdminSigninSchemaTests(SchemaCleanupMixin, TestCase):
 
         self.assertIn('food_cost', columns)
         self.assertIn('is_served', columns)
+
+    def test_create_pos_order_recovers_when_schema_check_reports_unavailable(self):
+        self.drop_table_if_exists('payments_order')
+        self.drop_table_if_exists('payments_orderitem')
+
+        employee = Employee.objects.create(name='Waiter Recovery', role='Waiter', status='on_shift')
+        staff_token = StaffToken.objects.create(employee=employee, expires_at=timezone.now() + timedelta(hours=8))
+
+        request = self.factory.post(
+            '/api/payments/pos/create-order/',
+            data=json.dumps({
+                'order_type': 'table',
+                'table_number': '19',
+                'status': 'sent_kitchen',
+                'payment_method': 'unpaid',
+                'waiter_id': employee.id,
+                'waiter_name': employee.name,
+                'items': [
+                    {'name': 'Fries', 'price': 250, 'quantity': 1, 'modifiers': [], 'seat_number': 1}
+                ],
+            }),
+            content_type='application/json',
+        )
+        request.headers = {'Authorization': f'Bearer {staff_token.token}', 'X-STAFF-TOKEN': staff_token.token}
+
+        with patch('payments.views._wait_for_payments_schema', return_value=False):
+            response = create_pos_order(request)
+
+        self.assertEqual(response.status_code, 200)
+        payload = json.loads(response.content.decode('utf-8'))
+        self.assertEqual(payload['status'], 'sent_kitchen')
+        self.assertEqual(payload['waiter_name'], employee.name)
+
+    def test_menu_items_returns_fallback_when_schema_is_missing(self):
+        self.drop_table_if_exists('payments_menuitem')
+
+        request = self.factory.get('/api/payments/menu-items/')
+        response = menu_items(request)
+
+        self.assertEqual(response.status_code, 200)
+        payload = json.loads(response.content.decode('utf-8'))
+        self.assertIn('menu_items', payload)
+        self.assertGreaterEqual(len(payload['menu_items']), 1)
 
     def test_config_returns_defaults_when_appsettings_table_is_missing(self):
         self.drop_table_if_exists('payments_appsettings')

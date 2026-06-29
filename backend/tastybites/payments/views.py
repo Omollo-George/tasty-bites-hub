@@ -257,24 +257,36 @@ def _ensure_required_tables() -> bool:
             CREATE TABLE payments_order (
                 id integer PRIMARY KEY AUTOINCREMENT,
                 order_id varchar(64) NOT NULL UNIQUE,
-                phone varchar(32) NOT NULL,
+                phone varchar(32) NOT NULL DEFAULT '',
+                delivery_address varchar(512) NOT NULL DEFAULT '',
+                delivery_distance_km numeric NULL,
+                delivery_time varchar(128) NOT NULL DEFAULT '',
+                delivery_cost numeric NOT NULL DEFAULT 0.00,
                 status varchar(32) NOT NULL,
-                split_count integer NOT NULL,
-                total_amount numeric NOT NULL,
+                split_count integer NOT NULL DEFAULT 1,
+                total_amount numeric NOT NULL DEFAULT 0.00,
                 created_at datetime NOT NULL,
-                table_id integer NULL REFERENCES payments_table(id)
+                table_id integer NULL REFERENCES payments_table(id),
+                waiter_id integer NULL,
+                waiter_name varchar(255) NOT NULL DEFAULT ''
             )
             ''' if vendor != 'postgresql' else
             '''
             CREATE TABLE payments_order (
                 id bigserial PRIMARY KEY,
                 order_id varchar(64) NOT NULL UNIQUE,
-                phone varchar(32) NOT NULL,
+                phone varchar(32) NOT NULL DEFAULT '',
+                delivery_address varchar(512) NOT NULL DEFAULT '',
+                delivery_distance_km numeric NULL,
+                delivery_time varchar(128) NOT NULL DEFAULT '',
+                delivery_cost numeric NOT NULL DEFAULT 0.00,
                 status varchar(32) NOT NULL,
-                split_count integer NOT NULL,
-                total_amount numeric NOT NULL,
+                split_count integer NOT NULL DEFAULT 1,
+                total_amount numeric NOT NULL DEFAULT 0.00,
                 created_at timestamp with time zone NOT NULL,
-                table_id bigint NULL REFERENCES payments_table(id)
+                table_id bigint NULL REFERENCES payments_table(id),
+                waiter_id bigint NULL,
+                waiter_name varchar(255) NOT NULL DEFAULT ''
             )
             '''
         )
@@ -558,6 +570,20 @@ def _ensure_required_columns() -> bool:
 
             if 'payments_order' in table_names:
                 columns = {col.name for col in connection.introspection.get_table_description(cursor, 'payments_order')}
+                if 'phone' not in columns:
+                    cursor.execute('ALTER TABLE payments_order ADD COLUMN phone varchar(32) NOT NULL DEFAULT ""')
+                if 'delivery_address' not in columns:
+                    cursor.execute('ALTER TABLE payments_order ADD COLUMN delivery_address varchar(512) NOT NULL DEFAULT ""')
+                if 'delivery_distance_km' not in columns:
+                    cursor.execute('ALTER TABLE payments_order ADD COLUMN delivery_distance_km numeric NULL')
+                if 'delivery_time' not in columns:
+                    cursor.execute('ALTER TABLE payments_order ADD COLUMN delivery_time varchar(128) NOT NULL DEFAULT ""')
+                if 'delivery_cost' not in columns:
+                    cursor.execute('ALTER TABLE payments_order ADD COLUMN delivery_cost numeric NOT NULL DEFAULT 0.00')
+                if 'split_count' not in columns:
+                    cursor.execute('ALTER TABLE payments_order ADD COLUMN split_count integer NOT NULL DEFAULT 1')
+                if 'total_amount' not in columns:
+                    cursor.execute('ALTER TABLE payments_order ADD COLUMN total_amount numeric NOT NULL DEFAULT 0.00')
                 if 'waiter_id' not in columns:
                     cursor.execute('ALTER TABLE payments_order ADD COLUMN waiter_id integer NULL')
                 if 'waiter_name' not in columns:
@@ -1696,38 +1722,66 @@ def _ensure_menu_items(seed: bool = True):
     # Only seed default menu items when explicitly requested.
     if not seed:
         return
-    
+
+    try:
+        default_items = _get_default_menu_items()
+
+        # 1. If DB is empty, seed everything
+        if not MenuItem.objects.exists():
+            for item_data in default_items:
+                MenuItem.objects.create(
+                    name=item_data['name'],
+                    category=item_data['category'],
+                    price=item_data['price'],
+                    food_cost=item_data['food_cost'],
+                    description=item_data['description'],
+                    popular=item_data['popular'],
+                    spicy=item_data['spicy'],
+                    image_url=item_data['image'],
+                    stock_level=50,
+                    min_stock_level=10,
+                )
+        else:
+            # 2. If items exist but lack images/stock, update them so they look "pro"
+            image_map = {i['name']: i['image'] for i in default_items}
+            existing_items = MenuItem.objects.all()
+            for item in existing_items:
+                updated = False
+                if (not item.image_url or "placeholder" in item.image_url) and item.name in image_map:
+                    item.image_url = image_map[item.name]
+                    updated = True
+                if item.stock_level <= 0:
+                    item.stock_level = 50
+                    updated = True
+                if updated:
+                    item.save()
+    except (db_utils.ProgrammingError, db_utils.OperationalError) as exc:
+        logger.warning('Unable to seed menu items because payments schema is unavailable: %s', exc)
+
+
+def _fallback_menu_items_payload():
     default_items = _get_default_menu_items()
-    
-    # 1. If DB is empty, seed everything
-    if not MenuItem.objects.exists():
-        for item_data in default_items:
-            MenuItem.objects.create(
-                name=item_data['name'],
-                category=item_data['category'],
-                price=item_data['price'],
-                food_cost=item_data['food_cost'],
-                description=item_data['description'],
-                popular=item_data['popular'],
-                spicy=item_data['spicy'],
-                image_url=item_data['image'],
-                stock_level=50,
-                min_stock_level=10,
-            )
-    else:
-        # 2. If items exist but lack images/stock, update them so they look "pro"
-        image_map = {i['name']: i['image'] for i in default_items}
-        existing_items = MenuItem.objects.all()
-        for item in existing_items:
-            updated = False
-            if (not item.image_url or "placeholder" in item.image_url) and item.name in image_map:
-                item.image_url = image_map[item.name]
-                updated = True
-            if item.stock_level <= 0:
-                item.stock_level = 50
-                updated = True
-            if updated:
-                item.save()
+    return {
+        'menu_items': [
+            {
+                'id': idx + 1,
+                'sku': None,
+                'name': item['name'],
+                'category': item['category'],
+                'price': float(item['price']),
+                'food_cost': float(item['food_cost']),
+                'description': item['description'],
+                'popular': bool(item['popular']),
+                'spicy': bool(item['spicy']),
+                'stock_level': 50,
+                'min_stock_level': 10,
+                'image_url': item['image'],
+                'is_available': True,
+            }
+            for idx, item in enumerate(default_items)
+        ]
+    }
+
 
 def _customer_home_fallback_response(message: str = 'Using default menu data while the database schema is being updated.'):
     default_items = _get_default_menu_items()
@@ -1838,9 +1892,17 @@ def menu_items(request):
 
     seed_flag = request.GET.get('seed', '1')
     seed = str(seed_flag).strip().lower() not in ('0', 'false', 'no', 'off')
-    _ensure_menu_items(seed=seed)
-    items = list(MenuItem.objects.all().order_by('category', 'name'))
-    return JsonResponse({'menu_items': [_serialize_menu_item(item) for item in items]})
+
+    try:
+        _ensure_menu_items(seed=seed)
+        items = list(MenuItem.objects.all().order_by('category', 'name'))
+        return JsonResponse({'menu_items': [_serialize_menu_item(item) for item in items]})
+    except (db_utils.ProgrammingError, db_utils.OperationalError) as exc:
+        logger.warning('menu_items missing DB schema; returning fallback menu: %s', exc)
+        return JsonResponse(_fallback_menu_items_payload())
+    except Exception as exc:
+        logger.exception('menu_items failed; returning fallback menu')
+        return JsonResponse(_fallback_menu_items_payload())
 
 
 
@@ -4166,8 +4228,9 @@ def create_pos_order(request):
         return JsonResponse({'error': 'method_not_allowed', 'message': 'Only POST allowed'}, status=405)
 
     if not _wait_for_payments_schema():
-        logger.warning('create_pos_order aborted because payments schema was not ready after retries')
-        return _schema_error_response()
+        logger.warning('create_pos_order schema warm-up did not complete; attempting one more repair pass')
+        if not _payments_schema_ready():
+            return _schema_error_response()
 
     # Initialize msisdn at function scope to avoid unbound variable errors
     msisdn = ""
