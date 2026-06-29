@@ -3,7 +3,8 @@ name: Apply production migrations (push-to-run)
 on:
   push:
     branches:
-      - apply-prod-migrations
+      - '**'
+  workflow_dispatch: {}
 
 jobs:
   migrate:
