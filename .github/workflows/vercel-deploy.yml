@@ -4,6 +4,34 @@ on:
   push:
     branches:
       - '**'
+    paths:
+      - 'backend/**'
+      - 'frontend/**'
+      - '.github/workflows/**'
+      - 'requirements.txt'
+      - 'docker-compose.yml'
+      - 'Dockerfile'
+      - 'render.yaml'
+      - 'vercel.json'
+      - 'fly.toml'
+      - 'package.json'
+      - 'frontend/package.json'
+  pull_request:
+    branches:
+      - main
+      - master
+    paths:
+      - 'backend/**'
+      - 'frontend/**'
+      - '.github/workflows/**'
+      - 'requirements.txt'
+      - 'docker-compose.yml'
+      - 'Dockerfile'
+      - 'render.yaml'
+      - 'vercel.json'
+      - 'fly.toml'
+      - 'package.json'
+      - 'frontend/package.json'
   workflow_dispatch: {}
 
 jobs:
