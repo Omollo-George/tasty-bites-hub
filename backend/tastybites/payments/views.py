@@ -4671,6 +4671,9 @@ def add_to_pos_order(request, order_id):
         
         order.save(update_fields=['total_amount', 'waiter_name', 'waiter'])
         
+        # ASYNC: Stock updates and alerts happen asynchronously in background thread
+        _run_async_task(_process_deferred_stock_updates, items_data)
+        
         # Return immediately with minimal response
         quick_response = {
             'order_id': order.order_id,
@@ -4679,9 +4682,6 @@ def add_to_pos_order(request, order_id):
             'items_added': len(order_items),
             'updated_at': order.updated_at.isoformat() if hasattr(order, 'updated_at') and order.updated_at else None,
         }
-        
-        # ASYNC: Stock updates and alerts happen asynchronously
-        # (in production, these would be background tasks)
         
         return JsonResponse(quick_response, status=200)
         
