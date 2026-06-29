@@ -1,4 +1,5 @@
 import json
+from unittest.mock import patch
 
 from django.db import connection
 from django.test import RequestFactory, TestCase
@@ -20,6 +21,35 @@ class SchemaCleanupMixin:
 class AdminSigninSchemaTests(SchemaCleanupMixin, TestCase):
     def setUp(self):
         self.factory = RequestFactory()
+
+    def test_create_pos_order_retries_when_schema_check_is_transient(self):
+        employee = Employee.objects.create(name='Waiter Mike', role='Waiter', status='on_shift')
+        staff_token = StaffToken.objects.create(employee=employee, expires_at=timezone.now() + timedelta(hours=8))
+
+        request = self.factory.post(
+            '/api/payments/pos/create-order/',
+            data=json.dumps({
+                'order_type': 'table',
+                'table_number': '7',
+                'status': 'sent_kitchen',
+                'payment_method': 'unpaid',
+                'waiter_id': employee.id,
+                'waiter_name': employee.name,
+                'items': [
+                    {'name': 'Fries', 'price': 250, 'quantity': 1, 'modifiers': [], 'seat_number': 1}
+                ],
+            }),
+            content_type='application/json',
+        )
+        request.headers = {'Authorization': f'Bearer {staff_token.token}', 'X-STAFF-TOKEN': staff_token.token}
+
+        with patch('payments.views._payments_schema_ready', side_effect=[False, True]):
+            response = create_pos_order(request)
+
+        self.assertEqual(response.status_code, 200)
+        payload = json.loads(response.content.decode('utf-8'))
+        self.assertEqual(payload['status'], 'sent_kitchen')
+        self.assertEqual(payload['waiter_name'], employee.name)
 
     def test_report_summary_returns_empty_payload_when_report_tables_are_broken(self):
         self.drop_table_if_exists('payments_orderitem')
