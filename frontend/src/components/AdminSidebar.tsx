@@ -3,7 +3,7 @@ import { NavLink, Link } from 'react-router-dom'
 import { Home, ShoppingBag, BarChart3, Menu as MenuIcon, Settings, Users, Package, Zap } from 'lucide-react'
 import { getAdminToken } from '@/lib/admin-session'
 import { preloadAdminRoute } from '@/lib/admin-route-prefetch'
-import { preloadEmployeesData } from '@/lib/admin-data-cache'
+import { preloadEmployeesData, preloadReportsData, preloadStockData } from '@/lib/admin-data-cache'
 import TastyBitesIcon from './TastyBitesIcon' // Monitor is already imported here. No change needed.
 
 const navItems = [
@@ -25,6 +25,10 @@ const AdminSidebar: React.FC = () => {
     // Preload data for specific routes
     if (path === '/admin/employees') {
       preloadEmployeesData()
+    } else if (path === '/admin/reports') {
+      preloadReportsData()
+    } else if (path === '/admin/stock') {
+      preloadStockData()
     }
   }
 
