@@ -2,6 +2,7 @@
 import React, { useEffect, useState } from 'react'
 import { getApiUrl } from '@/lib/api'
 import { getAdminToken } from '@/lib/admin-session'
+import { getCachedEmployees, preloadEmployeesData, clearEmployeesCache } from '@/lib/admin-data-cache'
 
 type Employee = {
   id: number
@@ -75,7 +76,21 @@ const AdminEmployees: React.FC = () => {
     }
   }
 
-  useEffect(() => { fetchEmployees() }, [])
+  useEffect(() => {
+    // Try to use cached data first for instant display
+    const cachedData = getCachedEmployees()
+    if (cachedData) {
+      setEmployees(cachedData)
+      setLoading(false)
+      // Refresh in background
+      fetchEmployees()
+    } else {
+      // No cache, fetch normally
+      fetchEmployees()
+    }
+    // Preload for next visit
+    preloadEmployeesData()
+  }, [])
 
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -134,6 +149,7 @@ const AdminEmployees: React.FC = () => {
         setExistingDocumentName(null)
         setRemoveDocument(false)
         setNewEmp({ name: '', role: 'Waiter', phone: '', email: '', salary: 0, account_number: '', username: '', password: '' })
+        clearEmployeesCache()
         fetchEmployees()
         alert(isUpdating ? 'Employee updated!' : 'Employee added!')
       } else {
@@ -172,6 +188,7 @@ const AdminEmployees: React.FC = () => {
         headers: { Authorization: `Bearer ${adminToken}` }
       })
       if (res.ok) {
+        clearEmployeesCache()
         fetchEmployees()
       } else {
         if (!res.headers.get("content-type")?.includes("application/json")) {

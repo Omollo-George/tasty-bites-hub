@@ -3,6 +3,7 @@ import { NavLink, Link } from 'react-router-dom'
 import { Home, ShoppingBag, BarChart3, Menu as MenuIcon, Settings, Users, Package, Zap } from 'lucide-react'
 import { getAdminToken } from '@/lib/admin-session'
 import { preloadAdminRoute } from '@/lib/admin-route-prefetch'
+import { preloadEmployeesData } from '@/lib/admin-data-cache'
 import TastyBitesIcon from './TastyBitesIcon' // Monitor is already imported here. No change needed.
 
 const navItems = [
@@ -18,6 +19,14 @@ const navItems = [
 
 const AdminSidebar: React.FC = () => {
   const token = getAdminToken()
+
+  const handleNavItemHover = (path: string) => {
+    preloadAdminRoute(path)
+    // Preload data for specific routes
+    if (path === '/admin/employees') {
+      preloadEmployeesData()
+    }
+  }
 
   return (
     <aside className="w-full border-b border-slate-700 bg-slate-900/95 text-slate-300 p-4 backdrop-blur md:w-72 md:border-b-0 md:border-r md:min-h-screen md:sticky md:top-0 md:flex-shrink-0 md:overflow-y-auto">
@@ -36,8 +45,8 @@ const AdminSidebar: React.FC = () => {
             key={label}
             to={to}
             end={end}
-            onMouseEnter={() => preloadAdminRoute(to)}
-            onFocus={() => preloadAdminRoute(to)}
+            onMouseEnter={() => handleNavItemHover(to)}
+            onFocus={() => handleNavItemHover(to)}
             className={({ isActive }) =>
               `flex items-center justify-center gap-2 rounded-2xl px-3 py-3 text-sm font-medium transition-all duration-200 md:justify-start md:px-4 md:py-3.5 ${
                 isActive
