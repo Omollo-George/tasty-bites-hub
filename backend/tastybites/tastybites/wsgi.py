@@ -13,13 +13,18 @@ from django.core.wsgi import get_wsgi_application
 
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'tastybites.settings')
 
-# Optional DB readiness check at WSGI startup.
-# By default this is disabled for serverless/cold-start runtimes like Vercel,
-# because waiting on the database during function import can cause function
-# startup failures and invocation errors.
-# Enable it explicitly with DB_STARTUP_RETRIES > 0.
+# DB readiness + optional auto-migrate at WSGI startup.
+# Default to a conservative retry count when a DATABASE_URL is present in
+# production so deployments that start before the DB will wait a bit instead
+# of immediately failing with a 503 schema_not_ready.
 try:
-	DB_STARTUP_RETRIES = int(os.environ.get('DB_STARTUP_RETRIES', '0'))
+	# If user explicitly sets DB_STARTUP_RETRIES, respect it; otherwise default
+	# to 5 retries for real DATABASE_URL deployments (safe and conservative).
+	raw_retries = os.environ.get('DB_STARTUP_RETRIES')
+	if raw_retries is None and os.environ.get('DATABASE_URL'):
+		DB_STARTUP_RETRIES = 5
+	else:
+		DB_STARTUP_RETRIES = int(raw_retries or 0)
 except Exception:
 	DB_STARTUP_RETRIES = 0
 try:
@@ -30,18 +35,23 @@ except Exception:
 if DB_STARTUP_RETRIES > 0 and os.environ.get('DATABASE_URL'):
 	import time
 	import sys
-	import psycopg2
+	try:
+		import psycopg2
+	except Exception:
+		psycopg2 = None
 
 	db = os.environ.get('DATABASE_URL')
 	for i in range(DB_STARTUP_RETRIES):
 		try:
-			# allow optional sslmode via PGSSLMODE or DATABASE_SSL_REQUIRE
-			sslmode = os.environ.get('PGSSLMODE') or os.environ.get('DATABASE_SSL_REQUIRE')
-			conn_args = {'dsn': db, 'connect_timeout': 5}
-			if sslmode and str(sslmode).strip().lower() in ('1', 'true', 'yes'):
-				conn_args['sslmode'] = 'require'
-			conn = psycopg2.connect(**conn_args)
-			conn.close()
+			if psycopg2:
+				# allow optional sslmode via PGSSLMODE or DATABASE_SSL_REQUIRE
+				sslmode = os.environ.get('PGSSLMODE') or os.environ.get('DATABASE_SSL_REQUIRE')
+				conn_args = {'dsn': db, 'connect_timeout': 5}
+				if sslmode and str(sslmode).strip().lower() in ('1', 'true', 'yes'):
+					conn_args['sslmode'] = 'require'
+				conn = psycopg2.connect(**conn_args)
+				conn.close()
+			# If psycopg2 not installed, skip low-level check and rely on migrate call
 			break
 		except Exception as e:
 			if i + 1 >= DB_STARTUP_RETRIES:
@@ -51,25 +61,23 @@ if DB_STARTUP_RETRIES > 0 and os.environ.get('DATABASE_URL'):
 				print(f"WSGI waiting for DB ({i+1}/{DB_STARTUP_RETRIES}): {e}")
 				time.sleep(DB_STARTUP_DELAY)
 
-application = get_wsgi_application()
-
-# Automatically apply any pending migrations on startup in production.
+# Decide whether to auto-apply migrations on startup.
 AUTO_MIGRATE = os.environ.get('DJANGO_AUTO_MIGRATE', '').strip().lower() in ('1', 'true', 'yes')
-# If not explicitly disabled, auto-run migrations in production containers when a
-# real DATABASE_URL is present. This helps avoid the common "payments schema"
-# failure mode caused by missing runtime migrations.
+# If not explicitly enabled, auto-run migrations in production containers when a
+# real DATABASE_URL is present and DEBUG is not enabled.
 if not AUTO_MIGRATE:
-    dj_debug = os.environ.get('DJANGO_DEBUG', os.environ.get('DEBUG', 'False')).strip().lower()
-    if os.environ.get('DATABASE_URL') and dj_debug not in ('1', 'true', 'yes', 'on'):
-        AUTO_MIGRATE = True
+	dj_debug = os.environ.get('DJANGO_DEBUG', os.environ.get('DEBUG', 'False')).strip().lower()
+	if os.environ.get('DATABASE_URL') and dj_debug not in ('1', 'true', 'yes', 'on'):
+		AUTO_MIGRATE = True
 
-# By default do NOT auto-run migrations on serverless/Vercel unless env opts in.
 if AUTO_MIGRATE:
-    try:
-        from django.core.management import call_command
-        print('Applying pending Django migrations on startup...')
-        call_command('migrate', '--noinput')
-    except Exception as exc:
-        import traceback
-        print('Warning: automatic migration failed:')
-        traceback.print_exc()
+	try:
+		from django.core.management import call_command
+		print('Applying pending Django migrations on startup...')
+		call_command('migrate', '--noinput')
+	except Exception as exc:
+		import traceback
+		print('Warning: automatic migration failed:')
+		traceback.print_exc()
+
+application = get_wsgi_application()

@@ -4563,7 +4563,16 @@ def cashier_confirm_payment(request, order_id):
 
 def kds_queue(request):
     """Live queue for the kitchen."""
-    if not _is_staff(request):
+    # Allow unauthenticated access in local development for convenience when
+    # `DEBUG` is enabled so developers and waiters can view the KDS without
+    # requiring staff tokens. In production, this remains staff-only.
+    try:
+        from django.conf import settings as _conf_settings
+        debug_mode = bool(getattr(_conf_settings, 'DEBUG', False))
+    except Exception:
+        debug_mode = False
+
+    if not (_is_staff(request) or debug_mode):
         return JsonResponse({'error': 'unauthorized'}, status=403)
 
     try:
