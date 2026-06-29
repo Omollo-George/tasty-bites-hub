@@ -14,6 +14,7 @@ import {
 } from 'recharts'
 import { getApiUrl } from '@/lib/api'
 import { getAdminToken } from '@/lib/admin-session'
+import { getCachedReports, clearReportsCache, preloadReportsData } from '@/lib/admin-data-cache'
 
 type ReportData = {
   range_days: number
@@ -225,6 +226,18 @@ const Reports: React.FC = () => {
     fetchReport();
   }, [selectedPeriodType, selectedDate, customStartDate, customEndDate]);
 
+  // On mount, try to use cached data for instant display
+  useEffect(() => {
+    const cachedData = getCachedReports()
+    if (cachedData) {
+      setData(cachedData)
+      setWastageLogs(Array.isArray(cachedData.wastage) ? cachedData.wastage : [])
+      setMiscLogs(Array.isArray(cachedData.miscellaneous) ? cachedData.miscellaneous : [])
+    }
+    // Preload for next visit
+    preloadReportsData()
+  }, [])
+
   // Subscribe to SSE so reports refresh when orders are paid
   useEffect(() => {
     let es: EventSource | null = null
@@ -295,6 +308,7 @@ const Reports: React.FC = () => {
       const json = await res.json()
       if (res.ok) {
         setNewWastage({ item_name: '', quantity: 1, reason: '', cost: 0 })
+        clearReportsCache()
         fetchReport() // Refresh dashboard totals to include new wastage
       } else {
         console.error(json)
@@ -322,6 +336,7 @@ const Reports: React.FC = () => {
         headers: makeAuthHeaders(token),
       })
       if (res.ok) {
+        clearReportsCache()
         fetchReport()
       } else {
         const json = await res.json()
@@ -355,6 +370,7 @@ const Reports: React.FC = () => {
         });
         const json = await res.json();
         if (res.ok) {
+            clearReportsCache();
             fetchReport(); // Refresh the report summary (profit, total logged cost)
         } else {
             console.error(json);
@@ -390,6 +406,7 @@ const Reports: React.FC = () => {
       const json = await res.json()
       if (res.ok) {
         setNewMisc({ item_name: '', reason: '', cost: 0 })
+        clearReportsCache()
         fetchReport()
       } else {
         alert(json.error || 'Failed to log expense. Check your connection or session.');
@@ -416,6 +433,7 @@ const Reports: React.FC = () => {
         headers: makeAuthHeaders(token),
       })
       if (res.ok) {
+        clearReportsCache()
         fetchReport()
       }
     } catch (error) {
@@ -439,6 +457,7 @@ const Reports: React.FC = () => {
         headers: makeAuthHeaders(token),
       })
       if (res.ok) {
+        clearReportsCache()
         fetchReport()
       }
     } catch (error) {
