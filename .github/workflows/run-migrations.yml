@@ -2,7 +2,9 @@ name: Run Django migrations
 
 on:
   push:
-    branches: [ main ]
+    branches:
+      - main
+      - master
   workflow_dispatch: {}
 
 jobs:
