@@ -668,6 +668,32 @@ def _schema_fallback_response(message='Payments database schema is not available
     return JsonResponse({'ok': False, 'error': error_code, 'message': message}, status=200)
 
 
+def _get_env_admin_credentials():
+    env_username = os.environ.get('DJANGO_ADMIN_USERNAME', '').strip()
+    env_password = os.environ.get('DJANGO_ADMIN_PASSWORD', '')
+    return env_username, env_password
+
+
+def _is_env_admin_credentials(username: str, password: str) -> bool:
+    env_username, env_password = _get_env_admin_credentials()
+    return bool(env_username and env_password and username == env_username and password == env_password)
+
+
+def _validate_admin_password(password: str) -> list[str]:
+    errors = []
+    if len(password or '') < 8:
+        errors.append('Password must be at least 8 characters long.')
+    if not re.search(r'[A-Z]', password or ''):
+        errors.append('Password must include at least one uppercase letter.')
+    if not re.search(r'[a-z]', password or ''):
+        errors.append('Password must include at least one lowercase letter.')
+    if not re.search(r'\d', password or ''):
+        errors.append('Password must include at least one number.')
+    if not re.search(r'[!@#$%^&*()_+\-=[\]{};\'":\\|,.<>/?]', password or ''):
+        errors.append('Password must include at least one special character.')
+    return errors
+
+
 def _wait_for_payments_schema(max_attempts: int = 3, delay_seconds: float = 1.0) -> bool:
     for attempt in range(1, max_attempts + 1):
         try:
@@ -1351,6 +1377,17 @@ def admin_signup(request):
     if not username or not password:
         return JsonResponse({'error': 'username and password are required'}, status=400)
 
+    password_errors = _validate_admin_password(password)
+    if password_errors:
+        return JsonResponse(
+            {
+                'error': 'invalid_password',
+                'message': ' '.join(password_errors),
+                'errors': password_errors,
+            },
+            status=400,
+        )
+
     users_exist = AdminUser.objects.exists()
     if users_exist and not _is_admin(request):
         return JsonResponse({'error': 'unauthorized'}, status=403)
@@ -1450,22 +1487,29 @@ def admin_signin(request):
 
     try:
         user = AdminUser.objects.filter(username=username).first()
+        env_admin = _is_env_admin_credentials(username, password)
         lockout_length = timedelta(minutes=5)
         max_attempts = 3
 
-        if user:
-            if user.lockout_until and user.lockout_until > timezone.now():
-                remaining = int((user.lockout_until - timezone.now()).total_seconds())
-                return JsonResponse(
-                    {
-                        'error': 'Too many failed attempts. Please wait before signing in again.',
-                        'lockout_seconds': remaining,
-                    },
-                    status=429,
-                )
+        if user and user.lockout_until and user.lockout_until > timezone.now() and not env_admin:
+            remaining = int((user.lockout_until - timezone.now()).total_seconds())
+            return JsonResponse(
+                {
+                    'error': 'Too many failed attempts. Please wait before signing in again.',
+                    'lockout_seconds': remaining,
+                },
+                status=429,
+            )
 
         if not user or not user.check_password(password):
-            if user:
+            if env_admin:
+                if not user:
+                    user = AdminUser(username=username)
+                user.set_password(password)
+                user.failed_login_attempts = 0
+                user.lockout_until = None
+                user.save()
+            elif user:
                 user.failed_login_attempts += 1
                 if user.failed_login_attempts >= max_attempts:
                     user.lockout_until = timezone.now() + lockout_length
@@ -1488,7 +1532,8 @@ def admin_signin(request):
                         },
                         status=401,
                     )
-            return JsonResponse({'error': 'Invalid credentials.'}, status=401)
+            else:
+                return JsonResponse({'error': 'Invalid credentials.'}, status=401)
 
         user.failed_login_attempts = 0
         user.lockout_until = None
@@ -1681,6 +1726,17 @@ def admin_users(request):
 
         if not username or not password:
             return JsonResponse({'error': 'username and password are required'}, status=400)
+
+        password_errors = _validate_admin_password(password)
+        if password_errors:
+            return JsonResponse(
+                {
+                    'error': 'invalid_password',
+                    'message': ' '.join(password_errors),
+                    'errors': password_errors,
+                },
+                status=400,
+            )
 
         if AdminUser.objects.filter(username=username).exists():
             return JsonResponse({'error': 'username already exists'}, status=400)
