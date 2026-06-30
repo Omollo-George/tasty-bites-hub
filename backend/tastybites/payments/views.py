@@ -628,6 +628,11 @@ def _ensure_required_columns() -> bool:
                 columns = {col.name for col in connection.introspection.get_table_description(cursor, 'payments_transaction')}
                 if 'mpesa_receipt' not in columns:
                     cursor.execute('ALTER TABLE payments_transaction ADD COLUMN mpesa_receipt varchar(64) NULL')
+                if 'order_id' not in columns:
+                    if connection.vendor == 'postgresql':
+                        cursor.execute('ALTER TABLE payments_transaction ADD COLUMN order_id bigint NULL REFERENCES payments_order(id)')
+                    else:
+                        cursor.execute('ALTER TABLE payments_transaction ADD COLUMN order_id integer NULL REFERENCES payments_order(id)')
 
             if 'payments_order' in table_names:
                 columns = {col.name for col in connection.introspection.get_table_description(cursor, 'payments_order')}
