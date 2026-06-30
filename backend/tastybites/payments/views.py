@@ -626,8 +626,32 @@ def _ensure_required_columns() -> bool:
 
             if 'payments_transaction' in table_names:
                 columns = {col.name for col in connection.introspection.get_table_description(cursor, 'payments_transaction')}
+                if 'merchant_request_id' not in columns:
+                    cursor.execute('ALTER TABLE payments_transaction ADD COLUMN merchant_request_id varchar(64) NULL')
+                if 'checkout_request_id' not in columns:
+                    cursor.execute('ALTER TABLE payments_transaction ADD COLUMN checkout_request_id varchar(64) NULL')
+                if 'phone' not in columns:
+                    cursor.execute('ALTER TABLE payments_transaction ADD COLUMN phone varchar(32) NOT NULL DEFAULT ""')
+                if 'amount' not in columns:
+                    cursor.execute('ALTER TABLE payments_transaction ADD COLUMN amount numeric NOT NULL DEFAULT 0.00')
+                if 'item' not in columns:
+                    cursor.execute('ALTER TABLE payments_transaction ADD COLUMN item varchar(255) NOT NULL DEFAULT ""')
+                if 'status' not in columns:
+                    cursor.execute('ALTER TABLE payments_transaction ADD COLUMN status varchar(32) NOT NULL DEFAULT "pending"')
+                if 'method' not in columns:
+                    cursor.execute('ALTER TABLE payments_transaction ADD COLUMN method varchar(32) NOT NULL DEFAULT "mpesa"')
                 if 'mpesa_receipt' not in columns:
                     cursor.execute('ALTER TABLE payments_transaction ADD COLUMN mpesa_receipt varchar(64) NULL')
+                if 'raw_response' not in columns:
+                    if connection.vendor == 'postgresql':
+                        cursor.execute('ALTER TABLE payments_transaction ADD COLUMN raw_response jsonb NULL')
+                    else:
+                        cursor.execute('ALTER TABLE payments_transaction ADD COLUMN raw_response text NULL')
+                if 'created_at' not in columns:
+                    if connection.vendor == 'postgresql':
+                        cursor.execute('ALTER TABLE payments_transaction ADD COLUMN created_at timestamp with time zone NOT NULL DEFAULT CURRENT_TIMESTAMP')
+                    else:
+                        cursor.execute('ALTER TABLE payments_transaction ADD COLUMN created_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP')
                 if 'order_id' not in columns:
                     if connection.vendor == 'postgresql':
                         cursor.execute('ALTER TABLE payments_transaction ADD COLUMN order_id bigint NULL REFERENCES payments_order(id)')
