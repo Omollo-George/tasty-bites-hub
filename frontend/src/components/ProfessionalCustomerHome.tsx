@@ -251,10 +251,15 @@ const ProfessionalCustomerHome = () => {
   const [processing, setProcessing] = useState(false);
   const [awaitingMpesaConfirm, setAwaitingMpesaConfirm] = useState(false);
   const [currentOrderId, setCurrentOrderId] = useState<string | null>(null); // To track order for cancellation
+  const [mpesaCheckoutId, setMpesaCheckoutId] = useState<string | null>(null);
   const [points, setPoints] = useState<number>(() => parseInt(localStorage.getItem('loyaltyPoints') || '0'));
   const [orderType, setOrderType] = useState<'takeaway' | 'delivery'>('takeaway');
   const [deliveryAddress, setDeliveryAddress] = useState('');
   const navigate = useNavigate();
+
+  const getMpesaCheckoutId = (payload: any): string | null => {
+    return payload?.stk_response?.CheckoutRequestID || payload?.checkout_request_id || payload?.mpesa?.CheckoutRequestID || null;
+  };
 
   const pollTimerRef = useRef<any>(null);
   const safetyTimeoutRef = useRef<any>(null);
@@ -474,8 +479,10 @@ const ProfessionalCustomerHome = () => {
       return;
     }
 
+    clearTimers();
     setProcessing(true);
     setCurrentOrderId(null); // Reset current order ID for a new transaction
+    setMpesaCheckoutId(null);
 
     try {
       const response = await fetch(getApiUrl("/payments/pos/create-order/"), {
@@ -518,12 +525,13 @@ const ProfessionalCustomerHome = () => {
         throw new Error(errorMessage || `Failed to initiate payment (${response.status} ${response.statusText})`);
       }
 
-      const checkoutId = dataRes.stk_response?.CheckoutRequestID;
+      const checkoutId = getMpesaCheckoutId(dataRes);
       if (!checkoutId) {
         throw new Error(errorMessage || "M-Pesa STK Push could not be initiated. Try again.");
       }
 
-      setCurrentOrderId(dataRes.order_id); // Store the order ID
+      setCurrentOrderId(dataRes.order_id || null);
+      setMpesaCheckoutId(checkoutId);
       setProcessing(false);
       setAwaitingMpesaConfirm(true);
       toast.info("M-Pesa Push Sent", { description: "Check your phone for the M-Pesa prompt." });
@@ -534,12 +542,13 @@ const ProfessionalCustomerHome = () => {
         if (transactionSettled) return;
 
         try {
-          const statusRes = await fetch(getApiUrl(`/payments/status/?checkout_id=${checkoutId}`));
+          const statusRes = await fetch(getApiUrl(`/payments/status/?checkout_id=${encodeURIComponent(checkoutId)}`));
           if (statusRes.ok) {
             const statusData = await statusRes.json();
             if (statusData.status === "success") {
               transactionSettled = true;
               clearTimers();
+              setMpesaCheckoutId(null);
 
               // Loyalty logic: Orders > 1000 gain 10 points
               if (cartTotalPrice > 1000) {
@@ -595,6 +604,7 @@ const ProfessionalCustomerHome = () => {
         if (!transactionSettled) {
           transactionSettled = true;
           clearTimers();
+          setMpesaCheckoutId(null);
           setAwaitingMpesaConfirm(false);
           toast.error("Payment Timeout", { description: "We didn't receive your payment in time. Please try again." });
         }
@@ -605,6 +615,7 @@ const ProfessionalCustomerHome = () => {
       toast.error("Order Failed", { description: message });
       setProcessing(false);
       setAwaitingMpesaConfirm(false);
+      setMpesaCheckoutId(null);
     }
   };
 
@@ -627,6 +638,7 @@ const ProfessionalCustomerHome = () => {
 
     setProcessing(false);
     setAwaitingMpesaConfirm(false);
+    setMpesaCheckoutId(null);
     setCurrentOrderId(null);
     toast.info("Payment Cancelled", { description: "The M-Pesa payment process has been stopped." });
     // Optionally, you might want to clear the phone number or cart here,

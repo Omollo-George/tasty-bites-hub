@@ -4740,6 +4740,11 @@ def create_pos_order(request):
         # Return immediately! Stock updates and logging will happen asynchronously
         if stk_data:
             quick_response['stk_response'] = stk_data
+            if isinstance(stk_data, dict):
+                quick_response['checkout_request_id'] = stk_data.get('CheckoutRequestID') or tx.checkout_request_id
+            else:
+                quick_response['checkout_request_id'] = tx.checkout_request_id
+            quick_response['payment_method'] = payment_method
         
         return JsonResponse(quick_response, status=201)
         
@@ -4943,8 +4948,17 @@ def cashier_confirm_payment(request, order_id):
                         'message': 'Payment initiated successfully'
                     }
 
-                response_data = {'ok': True, 'order': serialized, 'payment_method': payment_method, 'mpesa': resp_json}
-                response_data['checkout_request_id'] = resp_json.get('CheckoutRequestID') if isinstance(resp_json, dict) else None
+                response_data = {
+                    'ok': True,
+                    'order': serialized,
+                    'payment_method': payment_method,
+                    'mpesa': resp_json,
+                }
+                if isinstance(resp_json, dict):
+                    response_data['checkout_request_id'] = resp_json.get('CheckoutRequestID') or tx.checkout_request_id
+                else:
+                    response_data['checkout_request_id'] = tx.checkout_request_id
+                response_data['payment_method'] = payment_method
 
                 return JsonResponse(response_data, status=200 if status_code == 200 else 400)
 

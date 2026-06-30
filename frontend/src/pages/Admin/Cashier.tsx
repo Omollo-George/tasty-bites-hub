@@ -68,6 +68,10 @@ export default function Cashier() {
   const [mpesaPolling, setMpesaPolling] = useState(false);
   const mpesaIntervalRef = useRef<number | null>(null);
 
+  const getMpesaCheckoutId = (payload: any): string | null => {
+    return payload?.checkout_request_id || payload?.mpesa?.CheckoutRequestID || null;
+  };
+
   useEffect(() => {
     if (!staffName) {
       navigate('/staff/login');
@@ -188,7 +192,7 @@ export default function Cashier() {
 
       // If MPESA flow started, backend returns checkout_request_id; poll status
       if (method === 'mpesa') {
-        const checkoutId = data.checkout_request_id || (data.mpesa && data.mpesa.CheckoutRequestID) || null;
+        const checkoutId = getMpesaCheckoutId(data);
         if (!checkoutId) {
           setMpesaError('Failed to initiate M-Pesa payment. Please try again.');
           setProcessingPayment(false);
@@ -204,7 +208,7 @@ export default function Cashier() {
         mpesaIntervalRef.current = window.setInterval(async () => {
           attempts += 1;
           try {
-            const st = await fetch(getApiUrl(`/payments/status/?checkout_id=${checkoutId}`), { headers: getAuthHeaders() });
+            const st = await fetch(getApiUrl(`/payments/status/?checkout_id=${encodeURIComponent(checkoutId)}`), { headers: getAuthHeaders() });
             if (st.ok) {
               const stData = await st.json();
               if (stData.status === 'success') {
