@@ -69,6 +69,9 @@ const MenuSection = () => {
   const [paymentMethod, setPaymentMethod] = useState<"mpesa" | "cash">("mpesa");
   const [phoneNumber, setPhoneNumber] = useState("");
   const [isQrFlow, setIsQrFlow] = useState(false);
+  const getMpesaCheckoutId = (payload: any): string | null => {
+    return payload?.stk_response?.CheckoutRequestID || payload?.checkout_request_id || payload?.mpesa?.CheckoutRequestID || null;
+  };
   const [deliveryAddress, setDeliveryAddress] = useState("");
   const [processing, setProcessing] = useState(false);
   const [awaitingMpesaConfirm, setAwaitingMpesaConfirm] = useState(false);
@@ -76,6 +79,17 @@ const MenuSection = () => {
   const [currentOrderId, setCurrentOrderId] = useState<string | null>(null);
   const pollTimerRef = useRef<any>(null);
   const safetyTimeoutRef = useRef<any>(null);
+
+  const clearTimers = () => {
+    if (pollTimerRef.current) {
+      window.clearTimeout(pollTimerRef.current);
+      pollTimerRef.current = null;
+    }
+    if (safetyTimeoutRef.current) {
+      window.clearTimeout(safetyTimeoutRef.current);
+      safetyTimeoutRef.current = null;
+    }
+  };
 
   const { toast } = useToast();
 
@@ -256,6 +270,7 @@ const MenuSection = () => {
 
     setLastOrder(null);
 
+    clearTimers();
     setProcessing(true);
 
     const allItems = [...sessionOrders.flatMap(o => o), ...cart];
@@ -310,15 +325,14 @@ const MenuSection = () => {
       };
 
       if (paymentMethod === "mpesa") {
-        if (!data.stk_response?.CheckoutRequestID) {
+        const checkoutId = getMpesaCheckoutId(data);
+        if (!checkoutId) {
           toast({ title: "System Busy", description: "The payment gateway is currently handling high traffic. Please try again.", variant: "destructive" });
           setProcessing(false);
           setCurrentOrderId(null);
           fetch(getApiUrl(`/payments/orders/${encodeURIComponent(data.order_id)}/discard/`), { method: 'DELETE' }).catch(() => {});
           return;
         }
-
-        const checkoutId = data.stk_response.CheckoutRequestID;
         setProcessing(false);
         setAwaitingMpesaConfirm(true);
 
@@ -333,7 +347,7 @@ const MenuSection = () => {
           if (transactionSettled || !pollTimerRef.current) return;
 
           try {
-            const statusRes = await fetch(getApiUrl(`/payments/status/?checkout_id=${checkoutId}`));
+            const statusRes = await fetch(getApiUrl(`/payments/status/?checkout_id=${encodeURIComponent(checkoutId)}`));
             if (statusRes.ok) {
               const statusData = await statusRes.json();
               if (statusData.status === "success") {
