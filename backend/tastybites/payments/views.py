@@ -848,7 +848,7 @@ def _get_oauth_token():
     try:
         session = requests.Session()
         headers = {'Accept': 'application/json', 'User-Agent': 'TastyBites/1.0'}
-        resp = session.get(oauth_url, auth=(key, secret), headers=headers, timeout=15)
+        resp = session.get(oauth_url, auth=(key, secret), headers=headers, timeout=10)
         resp.raise_for_status()
         token_data = resp.json()
         access_token = token_data.get('access_token')
@@ -1235,7 +1235,7 @@ def _execute_stk_push(msisdn, amount, account_ref, tx, request=None):
     }
 
     try:
-        r = session.post(stk_url, json=body, headers=headers, timeout=30)
+        r = session.post(stk_url, json=body, headers=headers, timeout=12)
         # Safaricom often returns 400/401/500 with a JSON body explaining why
         try:
             resp_json = r.json()
