@@ -139,6 +139,32 @@ class AdminSigninSchemaTests(SchemaCleanupMixin, TestCase):
         self.assertIn('food_cost', columns)
         self.assertIn('is_served', columns)
 
+    def test_schema_repair_adds_missing_transaction_columns(self):
+        self.drop_table_if_exists('payments_transaction')
+        with connection.cursor() as cursor:
+            cursor.execute('''
+                CREATE TABLE payments_transaction (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    phone VARCHAR(32) NOT NULL,
+                    amount NUMERIC NOT NULL,
+                    item VARCHAR(255) NOT NULL,
+                    status VARCHAR(32) NOT NULL,
+                    method VARCHAR(32) NOT NULL,
+                    raw_response TEXT,
+                    created_at DATETIME NOT NULL
+                )
+            ''')
+
+        from .views import _ensure_required_columns
+
+        self.assertTrue(_ensure_required_columns())
+        with connection.cursor() as cursor:
+            columns = {col.name for col in connection.introspection.get_table_description(cursor, 'payments_transaction')}
+
+        self.assertIn('checkout_request_id', columns)
+        self.assertIn('quantity', columns)
+        self.assertIn('order_id', columns)
+
     def test_create_pos_order_recovers_when_schema_check_reports_unavailable(self):
         self.drop_table_if_exists('payments_order')
         self.drop_table_if_exists('payments_orderitem')
