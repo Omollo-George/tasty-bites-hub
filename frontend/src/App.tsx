@@ -36,6 +36,7 @@ import Wishlist from "./pages/Customer/Wishlist";
 import Following from "./pages/Customer/Following";
 import RecentlyViewed from "./pages/Customer/RecentlyViewed";
 import Settings from "./pages/Customer/Settings";
+import WhyUs from "./pages/Customer/WhyUs";
 
 const queryClient = new QueryClient();
 
@@ -135,6 +136,7 @@ const App = () => (
               <Route path="following" element={<Following />} />
               <Route path="settings" element={<Settings />} />
               <Route path="recent" element={<RecentlyViewed />} />
+              <Route path="why-us" element={<WhyUs />} />
             </Route>
             
             {/* Staff Workstation Group - Separated from Admin Sidebar Layout */}
