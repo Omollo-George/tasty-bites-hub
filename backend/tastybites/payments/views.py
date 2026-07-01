@@ -4561,8 +4561,12 @@ def create_pos_order(request):
         return JsonResponse({'error': 'method_not_allowed', 'message': 'Only POST allowed'}, status=405)
 
     if not _wait_for_payments_schema():
-        logger.warning('create_pos_order schema warm-up did not complete')
-        return _schema_fallback_response('Payments database schema is not available. Please try again in a moment.')
+        logger.warning('create_pos_order schema warm-up did not complete; attempting repair')
+        _ensure_required_tables()
+        _ensure_required_columns()
+        if not _wait_for_payments_schema():
+            logger.error('create_pos_order schema warm-up failed after repair attempt')
+            return _schema_fallback_response('Payments database schema is not available. Please try again in a moment.')
 
     msisdn = ""
 
@@ -4799,8 +4803,12 @@ def create_pos_order(request):
 def add_to_pos_order(request, order_id):
     """Adds new items to an existing active order (KOT update) - optimized for speed."""
     if not _wait_for_payments_schema():
-        logger.warning('add_to_pos_order aborted because payments schema was not ready after retries')
-        return _schema_fallback_response()
+        logger.warning('add_to_pos_order schema warm-up did not complete; attempting repair')
+        _ensure_required_tables()
+        _ensure_required_columns()
+        if not _wait_for_payments_schema():
+            logger.error('add_to_pos_order schema warm-up failed after repair attempt')
+            return _schema_fallback_response()
 
     if not _is_staff(request):
         return JsonResponse({'error': 'unauthorized'}, status=403)
