@@ -622,6 +622,10 @@ def _ensure_required_columns() -> bool:
 
         with connection.cursor() as cursor:
             table_names = set(connection.introspection.table_names(cursor))
+            try:
+                logger.info('Payments schema repair starting. Existing tables: %s', table_names)
+            except Exception:
+                pass
 
             if 'payments_orderitem' in table_names:
                 columns = {col.name for col in connection.introspection.get_table_description(cursor, 'payments_orderitem')}
@@ -631,7 +635,12 @@ def _ensure_required_columns() -> bool:
                     cursor.execute('ALTER TABLE payments_orderitem ADD COLUMN is_served boolean NOT NULL DEFAULT 0')
 
             if 'payments_transaction' in table_names:
-                columns = {col.name for col in connection.introspection.get_table_description(cursor, 'payments_transaction')}
+                try:
+                    columns = {col.name for col in connection.introspection.get_table_description(cursor, 'payments_transaction')}
+                    logger.info('payments_transaction columns before repair: %s', sorted(columns))
+                except Exception as exc:
+                    logger.warning('Could not introspect payments_transaction columns: %s', exc)
+                    columns = set()
                 if 'merchant_request_id' not in columns:
                     cursor.execute('ALTER TABLE payments_transaction ADD COLUMN merchant_request_id varchar(64) NULL')
                 if 'checkout_request_id' not in columns:
@@ -689,7 +698,7 @@ def _ensure_required_columns() -> bool:
 
             return True
     except Exception as exc:
-        logger.warning('Could not ensure required payments columns: %s', exc)
+        logger.exception('Could not ensure required payments columns: %s', exc)
         return False
 
 
@@ -1136,7 +1145,10 @@ def _simulate_stk_success(tx, amount, account_ref):
 def _build_mpesa_callback_url(request=None):
     callback_url = getattr(settings, 'MPESA_CALLBACK_URL', '').strip()
     if callback_url:
-        return callback_url
+        # Ignore placeholder callback values that are clearly not a live production URL.
+        if callback_url != 'https://example.ngrok-free.app/api/payments/callback/':
+            return callback_url
+
     if request is not None:
         try:
             built = request.build_absolute_uri('/api/payments/stk/callback/')

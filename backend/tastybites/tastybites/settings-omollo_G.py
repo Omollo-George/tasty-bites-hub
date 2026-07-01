@@ -145,7 +145,7 @@ else:
         MEDIA_ROOT.mkdir(parents=True, exist_ok=True)
 
 # M-Pesa Daraja API Config
-MPESA_ENVIRONMENT = 'sandbox'
+MPESA_ENVIRONMENT = os.environ.get('MPESA_ENVIRONMENT', 'sandbox')
 
 MPESA_CONSUMER_KEY = os.environ.get('MPESA_CONSUMER_KEY', 'kwCn9sG1ySJ6NWcHduKaXOAnNu6DkbwI9v096WTmsHG8XMVq')
 MPESA_CONSUMER_SECRET = os.environ.get('MPESA_CONSUMER_SECRET', '6PcwyDSoN8R4V4VxVUAP9uGCGYi9Cm67xDRUtiUCA0RzXvXIE8FtCEc1zYPOnZXu')
@@ -190,8 +190,8 @@ MPESA_CALLBACK_URL = os.environ.get(
     'MPESA_CALLBACK_URL',
     # IMPORTANT: Safaricom requires a public HTTPS callback.
     # For local/dev without ngrok/webhook, set MPESA_CALLBACK_URL to a reachable HTTPS URL.
-    # Leaving it blank will cause stk_push to fail with invalid_callback.
-    'https://example.ngrok-free.app/api/payments/callback/'
+    # Leaving it blank will allow the request-based callback URL builder to construct the correct hosted URL.
+    ''
 )
 
 
