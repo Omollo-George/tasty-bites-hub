@@ -388,6 +388,7 @@ def _ensure_required_tables() -> bool:
                 merchant_request_id varchar(64),
                 checkout_request_id varchar(64),
                 phone varchar(32) NOT NULL DEFAULT '',
+                quantity integer NOT NULL DEFAULT 1,
                 amount numeric NOT NULL DEFAULT 0.00,
                 item varchar(255) NOT NULL DEFAULT '',
                 status varchar(32) NOT NULL DEFAULT 'pending',
@@ -404,6 +405,7 @@ def _ensure_required_tables() -> bool:
                 merchant_request_id varchar(64),
                 checkout_request_id varchar(64),
                 phone varchar(32) NOT NULL DEFAULT '',
+                quantity integer NOT NULL DEFAULT 1,
                 amount numeric NOT NULL DEFAULT 0.00,
                 item varchar(255) NOT NULL DEFAULT '',
                 status varchar(32) NOT NULL DEFAULT 'pending',
@@ -632,6 +634,8 @@ def _ensure_required_columns() -> bool:
                     cursor.execute('ALTER TABLE payments_transaction ADD COLUMN checkout_request_id varchar(64) NULL')
                 if 'phone' not in columns:
                     cursor.execute('ALTER TABLE payments_transaction ADD COLUMN phone varchar(32) NOT NULL DEFAULT ""')
+                if 'quantity' not in columns:
+                    cursor.execute('ALTER TABLE payments_transaction ADD COLUMN quantity integer NOT NULL DEFAULT 1')
                 if 'amount' not in columns:
                     cursor.execute('ALTER TABLE payments_transaction ADD COLUMN amount numeric NOT NULL DEFAULT 0.00')
                 if 'item' not in columns:
