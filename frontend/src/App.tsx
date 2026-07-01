@@ -50,6 +50,7 @@ const App = () => (
           <Routes>
             <Route path="/" element={<ProfessionalCustomerHome />} /> {/* Render the new professional home page */}
             <Route path="/admin/login" element={<AdminLogin />} />
+            <Route path="/why-us" element={<WhyUs />} />
             <Route
               path="/admin/*"
               element={
@@ -136,7 +137,6 @@ const App = () => (
               <Route path="following" element={<Following />} />
               <Route path="settings" element={<Settings />} />
               <Route path="recent" element={<RecentlyViewed />} />
-              <Route path="why-us" element={<WhyUs />} />
             </Route>
             
             {/* Staff Workstation Group - Separated from Admin Sidebar Layout */}
