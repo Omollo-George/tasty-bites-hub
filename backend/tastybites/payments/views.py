@@ -10,6 +10,7 @@ from decimal import Decimal, InvalidOperation
 import logging
 import threading
 from concurrent.futures import ThreadPoolExecutor
+from urllib.parse import urlparse, urlunparse
 
 from django.conf import settings
 from django.contrib.auth.hashers import check_password, make_password
@@ -25,9 +26,12 @@ from django.core.mail import send_mail
 from django.views.decorators.csrf import csrf_exempt
 from django.db import connection, utils as db_utils
 from django.core.exceptions import FieldError
-logger = logging.getLogger(__name__)
 from datetime import timedelta
 from .models import AdminToken, AdminUser, AppSettings, MenuItem, Transaction, Table, Order, OrderItem, WastageLog, Employee, StockLog, AdminSessionLog, StaffActivity, MiscellaneousExpense, StaffToken, Review
+
+logger = logging.getLogger(__name__)
+
+_SCHEMA_READY = False
 
 import threading
 import time
@@ -646,17 +650,17 @@ def _ensure_required_columns() -> bool:
                 if 'checkout_request_id' not in columns:
                     cursor.execute('ALTER TABLE payments_transaction ADD COLUMN checkout_request_id varchar(64) NULL')
                 if 'phone' not in columns:
-                    cursor.execute('ALTER TABLE payments_transaction ADD COLUMN phone varchar(32) NOT NULL DEFAULT ""')
+                    cursor.execute("ALTER TABLE payments_transaction ADD COLUMN phone varchar(32) NOT NULL DEFAULT ''")
                 if 'quantity' not in columns:
                     cursor.execute('ALTER TABLE payments_transaction ADD COLUMN quantity integer NOT NULL DEFAULT 1')
                 if 'amount' not in columns:
                     cursor.execute('ALTER TABLE payments_transaction ADD COLUMN amount numeric NOT NULL DEFAULT 0.00')
                 if 'item' not in columns:
-                    cursor.execute('ALTER TABLE payments_transaction ADD COLUMN item varchar(255) NOT NULL DEFAULT ""')
+                    cursor.execute("ALTER TABLE payments_transaction ADD COLUMN item varchar(255) NOT NULL DEFAULT ''")
                 if 'status' not in columns:
-                    cursor.execute('ALTER TABLE payments_transaction ADD COLUMN status varchar(32) NOT NULL DEFAULT "pending"')
+                    cursor.execute("ALTER TABLE payments_transaction ADD COLUMN status varchar(32) NOT NULL DEFAULT 'pending'")
                 if 'method' not in columns:
-                    cursor.execute('ALTER TABLE payments_transaction ADD COLUMN method varchar(32) NOT NULL DEFAULT "mpesa"')
+                    cursor.execute("ALTER TABLE payments_transaction ADD COLUMN method varchar(32) NOT NULL DEFAULT 'mpesa'")
                 if 'mpesa_receipt' not in columns:
                     cursor.execute('ALTER TABLE payments_transaction ADD COLUMN mpesa_receipt varchar(64) NULL')
                 if 'raw_response' not in columns:
@@ -678,13 +682,13 @@ def _ensure_required_columns() -> bool:
             if 'payments_order' in table_names:
                 columns = {col.name for col in connection.introspection.get_table_description(cursor, 'payments_order')}
                 if 'phone' not in columns:
-                    cursor.execute('ALTER TABLE payments_order ADD COLUMN phone varchar(32) NOT NULL DEFAULT ""')
+                    cursor.execute("ALTER TABLE payments_order ADD COLUMN phone varchar(32) NOT NULL DEFAULT ''")
                 if 'delivery_address' not in columns:
-                    cursor.execute('ALTER TABLE payments_order ADD COLUMN delivery_address varchar(512) NOT NULL DEFAULT ""')
+                    cursor.execute("ALTER TABLE payments_order ADD COLUMN delivery_address varchar(512) NOT NULL DEFAULT ''")
                 if 'delivery_distance_km' not in columns:
                     cursor.execute('ALTER TABLE payments_order ADD COLUMN delivery_distance_km numeric NULL')
                 if 'delivery_time' not in columns:
-                    cursor.execute('ALTER TABLE payments_order ADD COLUMN delivery_time varchar(128) NOT NULL DEFAULT ""')
+                    cursor.execute("ALTER TABLE payments_order ADD COLUMN delivery_time varchar(128) NOT NULL DEFAULT ''")
                 if 'delivery_cost' not in columns:
                     cursor.execute('ALTER TABLE payments_order ADD COLUMN delivery_cost numeric NOT NULL DEFAULT 0.00')
                 if 'split_count' not in columns:
@@ -694,8 +698,7 @@ def _ensure_required_columns() -> bool:
                 if 'waiter_id' not in columns:
                     cursor.execute('ALTER TABLE payments_order ADD COLUMN waiter_id integer NULL')
                 if 'waiter_name' not in columns:
-                    cursor.execute('ALTER TABLE payments_order ADD COLUMN waiter_name varchar(255) NOT NULL DEFAULT ""')
-
+                    cursor.execute("ALTER TABLE payments_order ADD COLUMN waiter_name varchar(255) NOT NULL DEFAULT ''")
             return True
     except Exception as exc:
         logger.exception('Could not ensure required payments columns: %s', exc)
@@ -703,9 +706,14 @@ def _ensure_required_columns() -> bool:
 
 
 def _payments_schema_ready() -> bool:
+    global _SCHEMA_READY
+    if _SCHEMA_READY:
+        return True
+
     tables_ok = _ensure_required_tables()
     columns_ok = _ensure_required_columns()
-    return tables_ok and columns_ok
+    _SCHEMA_READY = tables_ok and columns_ok
+    return _SCHEMA_READY
 
 
 def _schema_error_response(message='Payments database schema is not available. Please apply database migrations.', status: int = 503):
@@ -742,7 +750,7 @@ def _validate_admin_password(password: str) -> list[str]:
     return errors
 
 
-def _wait_for_payments_schema(max_attempts: int = 5, delay_seconds: float = 1.0) -> bool:
+def _wait_for_payments_schema(max_attempts: int = 2, delay_seconds: float = 0.1) -> bool:
     for attempt in range(1, max_attempts + 1):
         try:
             if _payments_schema_ready():
@@ -1165,6 +1173,14 @@ def _build_mpesa_callback_url(request=None):
             built = request.build_absolute_uri('/api/payments/stk/callback/')
             if built.startswith('https://') and not _is_local_callback_url(built):
                 return built
+
+            # If behind a proxy that terminates TLS, honor forwarded proto headers.
+            forwarded_proto = request.META.get('HTTP_X_FORWARDED_PROTO') or request.META.get('X-Forwarded-Proto')
+            if forwarded_proto and forwarded_proto.lower() == 'https':
+                parsed = urlparse(built)
+                secure_url = urlunparse(parsed._replace(scheme='https'))
+                if secure_url.startswith('https://') and not _is_local_callback_url(secure_url):
+                    return secure_url
         except Exception:
             return ''
     return ''
