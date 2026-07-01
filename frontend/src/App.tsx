@@ -37,6 +37,10 @@ import Following from "./pages/Customer/Following";
 import RecentlyViewed from "./pages/Customer/RecentlyViewed";
 import Settings from "./pages/Customer/Settings";
 import WhyUs from "./pages/Customer/WhyUs";
+import OperationalSpeed from "./pages/Why/OperationalSpeed";
+import QualityStandards from "./pages/Why/QualityStandards";
+import RealTimeTracking from "./pages/Why/RealTimeTracking";
+import CentralizedControl from "./pages/Why/CentralizedControl";
 
 const queryClient = new QueryClient();
 
@@ -51,6 +55,10 @@ const App = () => (
             <Route path="/" element={<ProfessionalCustomerHome />} /> {/* Render the new professional home page */}
             <Route path="/admin/login" element={<AdminLogin />} />
             <Route path="/why-us" element={<WhyUs />} />
+            <Route path="/why/operational-speed" element={<OperationalSpeed />} />
+            <Route path="/why/quality-standards" element={<QualityStandards />} />
+            <Route path="/why/real-time-tracking" element={<RealTimeTracking />} />
+            <Route path="/why/centralized-control" element={<CentralizedControl />} />
             <Route
               path="/admin/*"
               element={
