@@ -25,4 +25,9 @@ jobs:
           DJANGO_SECRET_KEY: ${{ secrets.DJANGO_SECRET_KEY }}
           DJANGO_DEBUG: 'False'
         run: |
+          if [ -z "$DATABASE_URL" ]; then
+            export DATABASE_URL="sqlite:///backend/tastybites/db.sqlite3"
+            export DJANGO_DEBUG='True'
+            echo "No DATABASE_URL secret found — using local sqlite for CI"
+          fi
           python backend/tastybites/manage.py repair_payments_schema
