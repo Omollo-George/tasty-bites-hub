@@ -616,6 +616,10 @@ def _ensure_required_tables() -> bool:
 
 def _ensure_required_columns() -> bool:
     try:
+        if not _ensure_required_tables():
+            logger.warning('Could not ensure required payments tables before repairing columns')
+            return False
+
         with connection.cursor() as cursor:
             table_names = set(connection.introspection.table_names(cursor))
 
@@ -690,7 +694,9 @@ def _ensure_required_columns() -> bool:
 
 
 def _payments_schema_ready() -> bool:
-    return _ensure_required_tables() and _ensure_required_columns()
+    tables_ok = _ensure_required_tables()
+    columns_ok = _ensure_required_columns()
+    return tables_ok and columns_ok
 
 
 def _schema_error_response(message='Payments database schema is not available. Please apply database migrations.', status: int = 503):
@@ -727,7 +733,7 @@ def _validate_admin_password(password: str) -> list[str]:
     return errors
 
 
-def _wait_for_payments_schema(max_attempts: int = 3, delay_seconds: float = 1.0) -> bool:
+def _wait_for_payments_schema(max_attempts: int = 5, delay_seconds: float = 1.0) -> bool:
     for attempt in range(1, max_attempts + 1):
         try:
             if _payments_schema_ready():
