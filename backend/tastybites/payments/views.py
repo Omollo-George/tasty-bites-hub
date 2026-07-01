@@ -1142,19 +1142,28 @@ def _simulate_stk_success(tx, amount, account_ref):
     return payload, 200
 
 
+def _is_local_callback_url(url: str) -> bool:
+    try:
+        from urllib.parse import urlparse
+
+        parsed = urlparse(url)
+        hostname = parsed.hostname or ''
+        return hostname in ('localhost', '127.0.0.1', '::1')
+    except Exception:
+        return False
+
+
 def _build_mpesa_callback_url(request=None):
     callback_url = getattr(settings, 'MPESA_CALLBACK_URL', '').strip()
     if callback_url:
-        # Ignore placeholder callback values that are clearly not a live production URL.
-        if callback_url != 'https://example.ngrok-free.app/api/payments/callback/':
+        # Ignore placeholder callback values and local URLs for live M-Pesa calls.
+        if callback_url != 'https://example.ngrok-free.app/api/payments/callback/' and not _is_local_callback_url(callback_url):
             return callback_url
 
     if request is not None:
         try:
             built = request.build_absolute_uri('/api/payments/stk/callback/')
-            if built.startswith('http://'):
-                return built.replace('http://', 'https://', 1)
-            if built.startswith('https://'):
+            if built.startswith('https://') and not _is_local_callback_url(built):
                 return built
         except Exception:
             return ''
