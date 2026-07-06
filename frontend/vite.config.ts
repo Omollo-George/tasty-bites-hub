@@ -10,7 +10,9 @@ export default defineConfig({
   // Allow overriding the base/public path via the VITE_BASE env var at build time.
   // When deployed behind Django/Whitenoise we serve static files at /static/,
   // so setting VITE_BASE=/static/ makes the built assets reference /static/assets/...
-  base: process.env.VITE_BASE || '/',
+  base: process.env.NODE_ENV === 'production'
+    ? process.env.VITE_BASE || '/static/'
+    : process.env.VITE_BASE || '/',
   root: '.',
   plugins: [react()],
   resolve: {
