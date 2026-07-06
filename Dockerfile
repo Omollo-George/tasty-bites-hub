@@ -8,12 +8,7 @@ ENV NODE_ENV=production
 ENV VITE_API_URL=${VITE_API_URL}
 ENV VITE_BASE=${VITE_BASE}
 WORKDIR /app/frontend
-COPY frontend/package.json frontend/package-lock.json* ./
-COPY frontend/vite.config.ts frontend/index.html frontend/postcss.config.js frontend/tailwind.config.ts ./
-COPY frontend/tsconfig.json frontend/tsconfig.app.json frontend/tsconfig.node.json ./
-COPY frontend/Restaurant3DBackground.jsx ./
-COPY frontend/src ./src
-COPY frontend/public ./public
+COPY frontend .
 RUN npm install --legacy-peer-deps
 # Verify lib files were copied and fail fast if missing
 RUN if [ ! -d /app/frontend/src/lib ]; then echo "ERROR: frontend/src/lib is missing from build context" >&2; exit 1; fi && ls -la /app/frontend/src/lib/
