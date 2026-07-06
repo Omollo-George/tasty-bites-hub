@@ -4,7 +4,6 @@
 FROM node:20-bullseye-slim AS frontend-build
 ARG VITE_API_URL=http://localhost:8000
 ARG VITE_BASE=/static/
-ENV NODE_ENV=production
 ENV VITE_API_URL=${VITE_API_URL}
 ENV VITE_BASE=${VITE_BASE}
 WORKDIR /app/frontend
@@ -14,6 +13,7 @@ RUN npm install --legacy-peer-deps
 RUN if [ ! -d /app/frontend/src/lib ]; then echo "ERROR: frontend/src/lib is missing from build context" >&2; exit 1; fi && ls -la /app/frontend/src/lib/
 # Increase Node heap size for Vite build to avoid OOM in CI
 ENV NODE_OPTIONS=--max_old_space_size=8192
+ENV NODE_ENV=production
 RUN npm run build
 
 ### Stage 2: build the Python runtime and copy static assets
