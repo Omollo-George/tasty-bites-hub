@@ -2,6 +2,7 @@ import React, { useEffect, useState, useMemo } from 'react'; // Removed Fragment
 import { Search, Filter, AlertTriangle, CheckCircle, XCircle, Trash2, Edit2, Plus } from 'lucide-react'; // Removed Fragment import
 import { getApiUrl, apiFetch } from '@/lib/api';
 import { getAdminToken } from '@/lib/admin-session';
+import { getCachedStock, clearStockCache, preloadStockData } from '@/lib/admin-data-cache';
 
 type MenuItemType = {
   id: number;
@@ -57,6 +58,15 @@ const AdminStock: React.FC = () => {
     }
   };
 
+  const enrichStockItems = (items: MenuItemType[]): MenuItemType[] => {
+    return items.map((item: MenuItemType) => ({
+      ...item,
+      sku: `TB-${(item.category || 'GEN').substring(0, 3).toUpperCase()}-${String(item.id || 0).padStart(4, '0')}`,
+      stock_level: item.stock_level ?? 0,
+      min_stock_level: item.min_stock_level ?? 10
+    }));
+  };
+
   const fetchMostConsumed = async () => {
     try {
       try {
@@ -71,8 +81,21 @@ const AdminStock: React.FC = () => {
   };
 
   useEffect(() => {
-    fetchMenuItems();
-    fetchMostConsumed();
+    // Try to use cached data first for instant display
+    const cachedData = getCachedStock()
+    if (cachedData && Array.isArray(cachedData)) {
+      const enrichedItems = enrichStockItems(cachedData)
+      setMenuItems(enrichedItems)
+      setLoading(false)
+      // Refresh in background
+      fetchMenuItems()
+    } else {
+      // No cache, fetch normally
+      fetchMenuItems()
+    }
+    fetchMostConsumed()
+    // Preload for next visit
+    preloadStockData()
   }, []);
 
   const categories = useMemo(() => ['All', ...new Set(menuItems.map(i => i.category))], [menuItems]);
@@ -132,6 +155,7 @@ const AdminStock: React.FC = () => {
       });
 
       if (metaRes.ok && stockRes.ok) {
+        clearStockCache();
         await fetchMenuItems(); // Refresh data
         setEditingItem(null);
       } else {
@@ -148,8 +172,10 @@ const AdminStock: React.FC = () => {
     try {
       try {
         await apiFetch(`/payments/menu-items/${id}/delete/`, { method: 'DELETE', headers: { Authorization: `Bearer ${adminToken}` } })
+        clearStockCache();
         await fetchMenuItems();
       } catch (error) {
+        clearStockCache();
         await fetchMenuItems();
       }
     } catch (error) {
@@ -170,6 +196,7 @@ const AdminStock: React.FC = () => {
           },
           body: JSON.stringify(stockFormData),
         })
+        clearStockCache();
         await fetchMenuItems();
         setIsAddingStock(false);
         setStockFormData({ item_id: '', quantity: 0, cost: 0, created_at: new Date().toISOString().slice(0, 16) });

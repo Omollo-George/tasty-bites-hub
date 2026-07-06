@@ -20,9 +20,34 @@ class PaymentsConfig(AppConfig):
 
         # Skip index worker completely on initial app startup - too many DB dependency issues
         # with migration ordering and Nile DB compatibility
+        def _start_auto_repair():
+            try:
+                # Delay slightly to allow DB connections to settle
+                time.sleep(2)
+                logger.info('Payments auto-repair: starting')
+                from . import views as payments_views
+                try:
+                    payments_views._ensure_required_tables()
+                except Exception:
+                    logger.exception('Payments auto-repair: ensure tables failed')
+                try:
+                    payments_views._ensure_required_columns()
+                except Exception:
+                    logger.exception('Payments auto-repair: ensure columns failed')
+                try:
+                    ready = payments_views._payments_schema_ready()
+                    logger.info('Payments auto-repair: schema_ready=%s', ready)
+                except Exception:
+                    logger.exception('Payments auto-repair: final schema check failed')
+            except Exception:
+                logger.exception('Payments auto-repair thread error')
+
+        # Start auto-repair thread once per process
         if not os.environ.get('_PAYMENTS_APP_INITIALIZED'):
-            logger.info('Payments app initialization - skipping search index worker')
+            logger.info('Payments app initialization - starting auto-repair and skipping search index worker')
             os.environ['_PAYMENTS_APP_INITIALIZED'] = '1'
+            t = threading.Thread(target=_start_auto_repair, name='payments-auto-repair', daemon=True)
+            t.start()
             return
 
         logger.info('Starting search index worker')

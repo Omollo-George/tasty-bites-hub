@@ -14,6 +14,7 @@ import {
 } from 'recharts'
 import { getApiUrl } from '@/lib/api'
 import { getAdminToken } from '@/lib/admin-session'
+import { getCachedReports, clearReportsCache, preloadReportsData } from '@/lib/admin-data-cache'
 
 type ReportData = {
   range_days: number
@@ -23,6 +24,8 @@ type ReportData = {
   hourly_sales: Array<{ hour: number; label: string; orders: number; revenue: number }>
   best_waiter?: { waiter_id?: number | null; waiter_name: string; orders: number }
   least_waiter?: { waiter_id?: number | null; waiter_name: string; orders: number }
+  wastage?: WastageLog[]
+  miscellaneous?: MiscExpenseLog[]
   totals: { revenue: number; cash_revenue: number; mpesa_revenue: number; food_cost: number; wastage: number; miscellaneous: number; profit: number; food_cost_ratio: number }
 }
 
@@ -173,6 +176,8 @@ const Reports: React.FC = () => {
       }
 
       setData(json)
+      setWastageLogs(Array.isArray(json.wastage) ? json.wastage : [])
+      setMiscLogs(Array.isArray(json.miscellaneous) ? json.miscellaneous : [])
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unknown error'
       console.error('Error fetching report:', message)
@@ -217,79 +222,21 @@ const Reports: React.FC = () => {
     }
   }
 
-  const fetchWastage = async () => {
-    const token = getAdminToken()
-    if (!token) {
-      console.warn('Skipping wastage fetch because admin token is missing.')
-      setWastageLogs([])
-      return
-    }
-    const url = withAdminToken(getApiUrl(`/payments/reports/wastage/?${makeReportParams().toString()}`), token)
-    console.log('Fetching wastage logs from:', url)
-    try {
-      const res = await fetch(url, {
-        headers: makeAuthHeaders(token),
-      })
-      console.log('Wastage response status:', res.status)
-      const { bodyText, json } = await parseJsonResponse(res)
-      if (!res.ok) {
-        const message = getApiErrorMessage(res, bodyText, json)
-        console.error('Backend error fetching wastage logs:', message)
-        setWastageLogs([])
-        return
-      }
-      if (json === null) {
-        console.error('Invalid response format from /reports/wastage/', res.status, bodyText)
-        setWastageLogs([])
-        return
-      }
-      console.log('Wastage data received:', json)
-      setWastageLogs(json.wastage || [])
-    } catch (error) {
-      console.error('Error fetching wastage:', error)
-      setWastageLogs([])
-    }
-  }
-
-  const fetchMisc = async () => {
-    const token = getAdminToken()
-    if (!token) {
-      console.warn('Skipping miscellaneous fetch because admin token is missing.')
-      setMiscLogs([])
-      return
-    }
-    const url = withAdminToken(getApiUrl(`/payments/reports/miscellaneous/?${makeReportParams().toString()}`), token)
-    console.log('Fetching miscellaneous logs from:', url)
-    try {
-      const res = await fetch(url, {
-        headers: makeAuthHeaders(token),
-      })
-      console.log('Miscellaneous response status:', res.status)
-      const { bodyText, json } = await parseJsonResponse(res)
-      if (!res.ok) {
-        const message = getApiErrorMessage(res, bodyText, json)
-        console.error('Backend error fetching miscellaneous logs:', message)
-        setMiscLogs([])
-        return
-      }
-      if (json === null) {
-        console.error('Invalid response format from /reports/miscellaneous/', res.status, bodyText)
-        setMiscLogs([])
-        return
-      }
-      console.log('Miscellaneous data received:', json)
-      setMiscLogs(json.miscellaneous || [])
-    } catch (error) {
-      console.error('Error fetching miscellaneous logs:', error)
-      setMiscLogs([])
-    }
-  }
-
   useEffect(() => {
     fetchReport();
-    fetchWastage();
-    fetchMisc();
   }, [selectedPeriodType, selectedDate, customStartDate, customEndDate]);
+
+  // On mount, try to use cached data for instant display
+  useEffect(() => {
+    const cachedData = getCachedReports()
+    if (cachedData) {
+      setData(cachedData)
+      setWastageLogs(Array.isArray(cachedData.wastage) ? cachedData.wastage : [])
+      setMiscLogs(Array.isArray(cachedData.miscellaneous) ? cachedData.miscellaneous : [])
+    }
+    // Preload for next visit
+    preloadReportsData()
+  }, [])
 
   // Subscribe to SSE so reports refresh when orders are paid
   useEffect(() => {
@@ -361,7 +308,7 @@ const Reports: React.FC = () => {
       const json = await res.json()
       if (res.ok) {
         setNewWastage({ item_name: '', quantity: 1, reason: '', cost: 0 })
-        fetchWastage()
+        clearReportsCache()
         fetchReport() // Refresh dashboard totals to include new wastage
       } else {
         console.error(json)
@@ -389,7 +336,7 @@ const Reports: React.FC = () => {
         headers: makeAuthHeaders(token),
       })
       if (res.ok) {
-        fetchWastage()
+        clearReportsCache()
         fetchReport()
       } else {
         const json = await res.json()
@@ -423,7 +370,7 @@ const Reports: React.FC = () => {
         });
         const json = await res.json();
         if (res.ok) {
-            fetchWastage(); // Refresh the wastage logs table
+            clearReportsCache();
             fetchReport(); // Refresh the report summary (profit, total logged cost)
         } else {
             console.error(json);
@@ -459,7 +406,7 @@ const Reports: React.FC = () => {
       const json = await res.json()
       if (res.ok) {
         setNewMisc({ item_name: '', reason: '', cost: 0 })
-        fetchMisc()
+        clearReportsCache()
         fetchReport()
       } else {
         alert(json.error || 'Failed to log expense. Check your connection or session.');
@@ -486,7 +433,7 @@ const Reports: React.FC = () => {
         headers: makeAuthHeaders(token),
       })
       if (res.ok) {
-        fetchMisc()
+        clearReportsCache()
         fetchReport()
       }
     } catch (error) {
@@ -510,7 +457,7 @@ const Reports: React.FC = () => {
         headers: makeAuthHeaders(token),
       })
       if (res.ok) {
-        fetchMisc()
+        clearReportsCache()
         fetchReport()
       }
     } catch (error) {

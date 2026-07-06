@@ -79,7 +79,9 @@
   }
 
   html {
-    font-size: 16px;
+    /* Use a responsive base font-size that keeps desktop at 16px
+       and scales down on smaller viewports to avoid overflow */
+    font-size: clamp(14px, 1.2vw, 16px);
     scroll-behavior: smooth;
     min-height: 100%;
   }
@@ -90,6 +92,8 @@
     min-height: 100%;
     -webkit-text-size-adjust: 100%;
     margin: 0;
+    /* Prevent horizontal scroll from layout overspill */
+    overflow-x: hidden;
   }
 
   * {
@@ -111,6 +115,88 @@
     font-weight: 500;
   }
 }
+
+/* Global responsive helpers and overflow protection */
+@layer utilities {
+  /* Ensure media elements never cause overflow */
+  img, picture, video, iframe {
+    max-width: 100%;
+    height: auto;
+    display: block;
+  }
+
+  /* Touch targets sizing on small screens */
+  button, a.btn, .btn {
+    min-height: 44px;
+    padding-top: .5rem;
+    padding-bottom: .5rem;
+  }
+
+  /* Ensure flex/grid children can shrink instead of overflowing */
+  .flex, .grid {
+    min-width: 0;
+  }
+}
+
+/* Mobile: <480px */
+@media (max-width: 479px) {
+  :root {
+    /* slightly reduce heading sizes on very small screens */
+  }
+
+  html { /* Mobile: <480px */
+    font-size: clamp(13px, 3.6vw, 15px);
+  }
+
+  /* Ensure containers respect the viewport and add safe horizontal padding */
+  .container {
+    max-width: 100%;
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
+
+  /* Avoid fixed-width elements causing horizontal scroll */
+  [class*="w-"] {
+    max-width: 100%;
+  }
+}
+
+/* Small tablet: 480px-767px */
+@media (min-width:480px) and (max-width:767px) {
+  /* Small tablet: 480px-767px */
+  html {
+    font-size: clamp(14px, 2.2vw, 15.5px);
+  }
+
+  .container {
+    max-width: 100%;
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
+}
+
+/* Tablet: 768px-1023px */
+@media (min-width:768px) and (max-width:1023px) {
+  /* Tablet: 768px-1023px */
+  html {
+    font-size: clamp(15px, 1.6vw, 16px);
+  }
+
+  .container {
+    max-width: 100%;
+    padding-left: 1.25rem;
+    padding-right: 1.25rem;
+  }
+}
+
+/* Desktop: 1024px+ - ensure desktop remains identical */
+@media (min-width:1024px) {
+  /* Desktop: 1024px+ */
+  html {
+    font-size: 16px; /* keep desktop visuals identical */
+  }
+}
+
 
 @layer utilities {
   .text-gradient {

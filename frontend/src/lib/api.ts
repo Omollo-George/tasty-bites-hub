@@ -47,7 +47,7 @@ export const getApiUrl = (path: string) => {
     return `${defaultLocalBackend}${normalizedPath}`
   }
 
-  return `${normalizedOrigin}${normalizedPath}`
+  return `/api${normalizedPath}`
 }
 
 const DEFAULT_CONFIG_PAYLOAD = {
@@ -84,7 +84,6 @@ export async function apiFetch(path: string, options?: RequestInit) {
     if (contentType.includes('application/json')) {
       return res.json()
     }
-    // return raw text if not JSON
     return res.text()
   } catch (e) {
     if (isConfigRequest) {

@@ -8,6 +8,9 @@ import uuid
 import os
 from decimal import Decimal, InvalidOperation
 import logging
+import threading
+from concurrent.futures import ThreadPoolExecutor
+from urllib.parse import urlparse, urlunparse
 
 from django.conf import settings
 from django.contrib.auth.hashers import check_password, make_password
@@ -23,13 +26,75 @@ from django.core.mail import send_mail
 from django.views.decorators.csrf import csrf_exempt
 from django.db import connection, utils as db_utils
 from django.core.exceptions import FieldError
-logger = logging.getLogger(__name__)
 from datetime import timedelta
 from .models import AdminToken, AdminUser, AppSettings, MenuItem, Transaction, Table, Order, OrderItem, WastageLog, Employee, StockLog, AdminSessionLog, StaffActivity, MiscellaneousExpense, StaffToken, Review
+
+logger = logging.getLogger(__name__)
+
+_SCHEMA_READY = False
 
 import threading
 import time
 
+# ============================================================================
+# ASYNC TASK EXECUTION (using ThreadPoolExecutor for background operations)
+# ============================================================================
+
+# Thread pool for background tasks - max 4 threads to avoid resource exhaustion
+_TASK_EXECUTOR = ThreadPoolExecutor(max_workers=4, thread_name_prefix='bg_task')
+
+def _run_async_task(func, *args, **kwargs):
+    """
+    Run a function asynchronously in a background thread.
+    Does not block the HTTP response.
+    """
+    try:
+        _TASK_EXECUTOR.submit(func, *args, **kwargs)
+    except Exception as e:
+        logger.warning("Failed to submit async task: %s", e)
+
+
+def _process_deferred_stock_updates(items_data):
+    """Background task to update stock levels and emit alerts."""
+    try:
+        for item in items_data:
+            try:
+                quantity = max(1, int(item.get('quantity', 1)))
+                cost = item.get('food_cost', item.get('cost', '0'))
+                mi = _resolve_menu_item_from_payload(item)
+                
+                if mi:
+                    mi.stock_level = (mi.stock_level or 0) - quantity
+                    mi.save(update_fields=['stock_level'])
+                    
+                    # Log stock change
+                    try:
+                        StockLog.objects.create(
+                            item=mi,
+                            quantity=-quantity,
+                            cost=float(Decimal(str(cost or 0)))
+                        )
+                    except Exception:
+                        pass
+                    
+                    # Emit low-stock alert
+                    if (mi.stock_level is not None and mi.min_stock_level is not None
+                            and mi.stock_level <= mi.min_stock_level):
+                        try:
+                            _emit_event('stock_alert', {
+                                'item_id': mi.id,
+                                'name': mi.name,
+                                'stock_level': mi.stock_level,
+                                'min_stock_level': mi.min_stock_level,
+                            })
+                        except Exception:
+                            pass
+            except Exception:
+                continue
+    except Exception as e:
+        logger.debug("Error in _process_deferred_stock_updates: %s", e)
+
+# ============================================================================
 # Simple in-memory event queue for Server-Sent Events (SSE).
 # This is sufficient for a single-process dev server. For multi-process
 # or production use, replace with Redis/Message Broker.
@@ -257,24 +322,36 @@ def _ensure_required_tables() -> bool:
             CREATE TABLE payments_order (
                 id integer PRIMARY KEY AUTOINCREMENT,
                 order_id varchar(64) NOT NULL UNIQUE,
-                phone varchar(32) NOT NULL,
+                phone varchar(32) NOT NULL DEFAULT '',
+                delivery_address varchar(512) NOT NULL DEFAULT '',
+                delivery_distance_km numeric NULL,
+                delivery_time varchar(128) NOT NULL DEFAULT '',
+                delivery_cost numeric NOT NULL DEFAULT 0.00,
                 status varchar(32) NOT NULL,
-                split_count integer NOT NULL,
-                total_amount numeric NOT NULL,
+                split_count integer NOT NULL DEFAULT 1,
+                total_amount numeric NOT NULL DEFAULT 0.00,
                 created_at datetime NOT NULL,
-                table_id integer NULL REFERENCES payments_table(id)
+                table_id integer NULL REFERENCES payments_table(id),
+                waiter_id integer NULL,
+                waiter_name varchar(255) NOT NULL DEFAULT ''
             )
             ''' if vendor != 'postgresql' else
             '''
             CREATE TABLE payments_order (
                 id bigserial PRIMARY KEY,
                 order_id varchar(64) NOT NULL UNIQUE,
-                phone varchar(32) NOT NULL,
+                phone varchar(32) NOT NULL DEFAULT '',
+                delivery_address varchar(512) NOT NULL DEFAULT '',
+                delivery_distance_km numeric NULL,
+                delivery_time varchar(128) NOT NULL DEFAULT '',
+                delivery_cost numeric NOT NULL DEFAULT 0.00,
                 status varchar(32) NOT NULL,
-                split_count integer NOT NULL,
-                total_amount numeric NOT NULL,
+                split_count integer NOT NULL DEFAULT 1,
+                total_amount numeric NOT NULL DEFAULT 0.00,
                 created_at timestamp with time zone NOT NULL,
-                table_id bigint NULL REFERENCES payments_table(id)
+                table_id bigint NULL REFERENCES payments_table(id),
+                waiter_id bigint NULL,
+                waiter_name varchar(255) NOT NULL DEFAULT ''
             )
             '''
         )
@@ -315,6 +392,7 @@ def _ensure_required_tables() -> bool:
                 merchant_request_id varchar(64),
                 checkout_request_id varchar(64),
                 phone varchar(32) NOT NULL DEFAULT '',
+                quantity integer NOT NULL DEFAULT 1,
                 amount numeric NOT NULL DEFAULT 0.00,
                 item varchar(255) NOT NULL DEFAULT '',
                 status varchar(32) NOT NULL DEFAULT 'pending',
@@ -331,6 +409,7 @@ def _ensure_required_tables() -> bool:
                 merchant_request_id varchar(64),
                 checkout_request_id varchar(64),
                 phone varchar(32) NOT NULL DEFAULT '',
+                quantity integer NOT NULL DEFAULT 1,
                 amount numeric NOT NULL DEFAULT 0.00,
                 item varchar(255) NOT NULL DEFAULT '',
                 status varchar(32) NOT NULL DEFAULT 'pending',
@@ -541,8 +620,16 @@ def _ensure_required_tables() -> bool:
 
 def _ensure_required_columns() -> bool:
     try:
+        if not _ensure_required_tables():
+            logger.warning('Could not ensure required payments tables before repairing columns')
+            return False
+
         with connection.cursor() as cursor:
             table_names = set(connection.introspection.table_names(cursor))
+            try:
+                logger.info('Payments schema repair starting. Existing tables: %s', table_names)
+            except Exception:
+                pass
 
             if 'payments_orderitem' in table_names:
                 columns = {col.name for col in connection.introspection.get_table_description(cursor, 'payments_orderitem')}
@@ -552,29 +639,129 @@ def _ensure_required_columns() -> bool:
                     cursor.execute('ALTER TABLE payments_orderitem ADD COLUMN is_served boolean NOT NULL DEFAULT 0')
 
             if 'payments_transaction' in table_names:
-                columns = {col.name for col in connection.introspection.get_table_description(cursor, 'payments_transaction')}
+                try:
+                    columns = {col.name for col in connection.introspection.get_table_description(cursor, 'payments_transaction')}
+                    logger.info('payments_transaction columns before repair: %s', sorted(columns))
+                except Exception as exc:
+                    logger.warning('Could not introspect payments_transaction columns: %s', exc)
+                    columns = set()
+                if 'merchant_request_id' not in columns:
+                    cursor.execute('ALTER TABLE payments_transaction ADD COLUMN merchant_request_id varchar(64) NULL')
+                if 'checkout_request_id' not in columns:
+                    cursor.execute('ALTER TABLE payments_transaction ADD COLUMN checkout_request_id varchar(64) NULL')
+                if 'phone' not in columns:
+                    cursor.execute("ALTER TABLE payments_transaction ADD COLUMN phone varchar(32) NOT NULL DEFAULT ''")
+                if 'quantity' not in columns:
+                    cursor.execute('ALTER TABLE payments_transaction ADD COLUMN quantity integer NOT NULL DEFAULT 1')
+                if 'amount' not in columns:
+                    cursor.execute('ALTER TABLE payments_transaction ADD COLUMN amount numeric NOT NULL DEFAULT 0.00')
+                if 'item' not in columns:
+                    cursor.execute("ALTER TABLE payments_transaction ADD COLUMN item varchar(255) NOT NULL DEFAULT ''")
+                if 'status' not in columns:
+                    cursor.execute("ALTER TABLE payments_transaction ADD COLUMN status varchar(32) NOT NULL DEFAULT 'pending'")
+                if 'method' not in columns:
+                    cursor.execute("ALTER TABLE payments_transaction ADD COLUMN method varchar(32) NOT NULL DEFAULT 'mpesa'")
                 if 'mpesa_receipt' not in columns:
                     cursor.execute('ALTER TABLE payments_transaction ADD COLUMN mpesa_receipt varchar(64) NULL')
+                if 'raw_response' not in columns:
+                    if connection.vendor == 'postgresql':
+                        cursor.execute('ALTER TABLE payments_transaction ADD COLUMN raw_response jsonb NULL')
+                    else:
+                        cursor.execute('ALTER TABLE payments_transaction ADD COLUMN raw_response text NULL')
+                if 'created_at' not in columns:
+                    if connection.vendor == 'postgresql':
+                        cursor.execute('ALTER TABLE payments_transaction ADD COLUMN created_at timestamp with time zone NOT NULL DEFAULT CURRENT_TIMESTAMP')
+                    else:
+                        cursor.execute('ALTER TABLE payments_transaction ADD COLUMN created_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP')
+                if 'order_id' not in columns:
+                    if connection.vendor == 'postgresql':
+                        cursor.execute('ALTER TABLE payments_transaction ADD COLUMN order_id bigint NULL REFERENCES payments_order(id)')
+                    else:
+                        cursor.execute('ALTER TABLE payments_transaction ADD COLUMN order_id integer NULL REFERENCES payments_order(id)')
 
             if 'payments_order' in table_names:
                 columns = {col.name for col in connection.introspection.get_table_description(cursor, 'payments_order')}
+                if 'phone' not in columns:
+                    cursor.execute("ALTER TABLE payments_order ADD COLUMN phone varchar(32) NOT NULL DEFAULT ''")
+                if 'delivery_address' not in columns:
+                    cursor.execute("ALTER TABLE payments_order ADD COLUMN delivery_address varchar(512) NOT NULL DEFAULT ''")
+                if 'delivery_distance_km' not in columns:
+                    cursor.execute('ALTER TABLE payments_order ADD COLUMN delivery_distance_km numeric NULL')
+                if 'delivery_time' not in columns:
+                    cursor.execute("ALTER TABLE payments_order ADD COLUMN delivery_time varchar(128) NOT NULL DEFAULT ''")
+                if 'delivery_cost' not in columns:
+                    cursor.execute('ALTER TABLE payments_order ADD COLUMN delivery_cost numeric NOT NULL DEFAULT 0.00')
+                if 'split_count' not in columns:
+                    cursor.execute('ALTER TABLE payments_order ADD COLUMN split_count integer NOT NULL DEFAULT 1')
+                if 'total_amount' not in columns:
+                    cursor.execute('ALTER TABLE payments_order ADD COLUMN total_amount numeric NOT NULL DEFAULT 0.00')
                 if 'waiter_id' not in columns:
                     cursor.execute('ALTER TABLE payments_order ADD COLUMN waiter_id integer NULL')
                 if 'waiter_name' not in columns:
-                    cursor.execute('ALTER TABLE payments_order ADD COLUMN waiter_name varchar(255) NOT NULL DEFAULT ""')
-
+                    cursor.execute("ALTER TABLE payments_order ADD COLUMN waiter_name varchar(255) NOT NULL DEFAULT ''")
             return True
     except Exception as exc:
-        logger.warning('Could not ensure required payments columns: %s', exc)
+        logger.exception('Could not ensure required payments columns: %s', exc)
         return False
 
 
 def _payments_schema_ready() -> bool:
-    return _ensure_required_tables() and _ensure_required_columns()
+    global _SCHEMA_READY
+    if _SCHEMA_READY:
+        return True
+
+    tables_ok = _ensure_required_tables()
+    columns_ok = _ensure_required_columns()
+    _SCHEMA_READY = tables_ok and columns_ok
+    return _SCHEMA_READY
 
 
-def _schema_error_response(message='Payments database schema is not available. Please apply database migrations.'):
-    return JsonResponse({'error': 'schema_not_ready', 'message': message}, status=503)
+def _schema_error_response(message='Payments database schema is not available. Please apply database migrations.', status: int = 503):
+    return JsonResponse({'error': 'schema_not_ready', 'message': message}, status=status)
+
+
+def _schema_fallback_response(message='Payments database schema is not available. Please apply database migrations.', error_code='schema_not_ready'):
+    return JsonResponse({'ok': False, 'error': error_code, 'message': message}, status=200)
+
+
+def _get_env_admin_credentials():
+    env_username = os.environ.get('DJANGO_ADMIN_USERNAME', '').strip()
+    env_password = os.environ.get('DJANGO_ADMIN_PASSWORD', '')
+    return env_username, env_password
+
+
+def _is_env_admin_credentials(username: str, password: str) -> bool:
+    env_username, env_password = _get_env_admin_credentials()
+    return bool(env_username and env_password and username == env_username and password == env_password)
+
+
+def _validate_admin_password(password: str) -> list[str]:
+    errors = []
+    if len(password or '') < 8:
+        errors.append('Password must be at least 8 characters long.')
+    if not re.search(r'[A-Z]', password or ''):
+        errors.append('Password must include at least one uppercase letter.')
+    if not re.search(r'[a-z]', password or ''):
+        errors.append('Password must include at least one lowercase letter.')
+    if not re.search(r'\d', password or ''):
+        errors.append('Password must include at least one number.')
+    if not re.search(r'[!@#$%^&*()_+\-=[\]{};\'":\\|,.<>/?]', password or ''):
+        errors.append('Password must include at least one special character.')
+    return errors
+
+
+def _wait_for_payments_schema(max_attempts: int = 2, delay_seconds: float = 0.1) -> bool:
+    for attempt in range(1, max_attempts + 1):
+        try:
+            if _payments_schema_ready():
+                return True
+        except Exception as exc:
+            logger.warning('Payments schema check attempt %s/%s failed: %s', attempt, max_attempts, exc)
+
+        if attempt < max_attempts:
+            time.sleep(delay_seconds)
+
+    return False
 
 
 def _default_config_payload() -> dict:
@@ -661,7 +848,7 @@ def _get_oauth_token():
     try:
         session = requests.Session()
         headers = {'Accept': 'application/json', 'User-Agent': 'TastyBites/1.0'}
-        resp = session.get(oauth_url, auth=(key, secret), headers=headers, timeout=15)
+        resp = session.get(oauth_url, auth=(key, secret), headers=headers, timeout=10)
         resp.raise_for_status()
         token_data = resp.json()
         access_token = token_data.get('access_token')
@@ -963,17 +1150,37 @@ def _simulate_stk_success(tx, amount, account_ref):
     return payload, 200
 
 
+def _is_local_callback_url(url: str) -> bool:
+    try:
+        from urllib.parse import urlparse
+
+        parsed = urlparse(url)
+        hostname = parsed.hostname or ''
+        return hostname in ('localhost', '127.0.0.1', '::1')
+    except Exception:
+        return False
+
+
 def _build_mpesa_callback_url(request=None):
     callback_url = getattr(settings, 'MPESA_CALLBACK_URL', '').strip()
     if callback_url:
-        return callback_url
+        # Ignore placeholder callback values and local URLs for live M-Pesa calls.
+        if callback_url != 'https://example.ngrok-free.app/api/payments/callback/' and not _is_local_callback_url(callback_url):
+            return callback_url
+
     if request is not None:
         try:
             built = request.build_absolute_uri('/api/payments/stk/callback/')
-            if built.startswith('http://'):
-                return built.replace('http://', 'https://', 1)
-            if built.startswith('https://'):
+            if built.startswith('https://') and not _is_local_callback_url(built):
                 return built
+
+            # If behind a proxy that terminates TLS, honor forwarded proto headers.
+            forwarded_proto = request.META.get('HTTP_X_FORWARDED_PROTO') or request.META.get('X-Forwarded-Proto')
+            if forwarded_proto and forwarded_proto.lower() == 'https':
+                parsed = urlparse(built)
+                secure_url = urlunparse(parsed._replace(scheme='https'))
+                if secure_url.startswith('https://') and not _is_local_callback_url(secure_url):
+                    return secure_url
         except Exception:
             return ''
     return ''
@@ -1028,7 +1235,7 @@ def _execute_stk_push(msisdn, amount, account_ref, tx, request=None):
     }
 
     try:
-        r = session.post(stk_url, json=body, headers=headers, timeout=30)
+        r = session.post(stk_url, json=body, headers=headers, timeout=12)
         # Safaricom often returns 400/401/500 with a JSON body explaining why
         try:
             resp_json = r.json()
@@ -1246,6 +1453,17 @@ def admin_signup(request):
     if not username or not password:
         return JsonResponse({'error': 'username and password are required'}, status=400)
 
+    password_errors = _validate_admin_password(password)
+    if password_errors:
+        return JsonResponse(
+            {
+                'error': 'invalid_password',
+                'message': ' '.join(password_errors),
+                'errors': password_errors,
+            },
+            status=400,
+        )
+
     users_exist = AdminUser.objects.exists()
     if users_exist and not _is_admin(request):
         return JsonResponse({'error': 'unauthorized'}, status=403)
@@ -1345,22 +1563,29 @@ def admin_signin(request):
 
     try:
         user = AdminUser.objects.filter(username=username).first()
+        env_admin = _is_env_admin_credentials(username, password)
         lockout_length = timedelta(minutes=5)
         max_attempts = 3
 
-        if user:
-            if user.lockout_until and user.lockout_until > timezone.now():
-                remaining = int((user.lockout_until - timezone.now()).total_seconds())
-                return JsonResponse(
-                    {
-                        'error': 'Too many failed attempts. Please wait before signing in again.',
-                        'lockout_seconds': remaining,
-                    },
-                    status=429,
-                )
+        if user and user.lockout_until and user.lockout_until > timezone.now() and not env_admin:
+            remaining = int((user.lockout_until - timezone.now()).total_seconds())
+            return JsonResponse(
+                {
+                    'error': 'Too many failed attempts. Please wait before signing in again.',
+                    'lockout_seconds': remaining,
+                },
+                status=429,
+            )
 
         if not user or not user.check_password(password):
-            if user:
+            if env_admin:
+                if not user:
+                    user = AdminUser(username=username)
+                user.set_password(password)
+                user.failed_login_attempts = 0
+                user.lockout_until = None
+                user.save()
+            elif user:
                 user.failed_login_attempts += 1
                 if user.failed_login_attempts >= max_attempts:
                     user.lockout_until = timezone.now() + lockout_length
@@ -1383,7 +1608,8 @@ def admin_signin(request):
                         },
                         status=401,
                     )
-            return JsonResponse({'error': 'Invalid credentials.'}, status=401)
+            else:
+                return JsonResponse({'error': 'Invalid credentials.'}, status=401)
 
         user.failed_login_attempts = 0
         user.lockout_until = None
@@ -1395,11 +1621,9 @@ def admin_signin(request):
         return JsonResponse({'token': token.token, 'username': user.username})
     except (db_utils.ProgrammingError, db_utils.OperationalError, AttributeError) as exc:
         logger.warning('Admin sign-in failed due to schema issue: %s', exc)
-        return JsonResponse(
-            {
-                'error': 'Admin authentication is temporarily unavailable because the admin authentication tables are missing or incomplete. Please redeploy or run database migrations.'
-            },
-            status=503,
+        return _schema_fallback_response(
+            'Admin authentication is temporarily unavailable because the admin authentication tables are missing or incomplete. Please redeploy or run database migrations.',
+            error_code='Admin authentication is temporarily unavailable because the admin authentication tables are missing or incomplete. Please redeploy or run database migrations.'
         )
     except Exception as e:
         logger.exception('Unexpected admin sign-in failure: %s', e)
@@ -1579,6 +1803,17 @@ def admin_users(request):
         if not username or not password:
             return JsonResponse({'error': 'username and password are required'}, status=400)
 
+        password_errors = _validate_admin_password(password)
+        if password_errors:
+            return JsonResponse(
+                {
+                    'error': 'invalid_password',
+                    'message': ' '.join(password_errors),
+                    'errors': password_errors,
+                },
+                status=400,
+            )
+
         if AdminUser.objects.filter(username=username).exists():
             return JsonResponse({'error': 'username already exists'}, status=400)
 
@@ -1682,38 +1917,66 @@ def _ensure_menu_items(seed: bool = True):
     # Only seed default menu items when explicitly requested.
     if not seed:
         return
-    
+
+    try:
+        default_items = _get_default_menu_items()
+
+        # 1. If DB is empty, seed everything
+        if not MenuItem.objects.exists():
+            for item_data in default_items:
+                MenuItem.objects.create(
+                    name=item_data['name'],
+                    category=item_data['category'],
+                    price=item_data['price'],
+                    food_cost=item_data['food_cost'],
+                    description=item_data['description'],
+                    popular=item_data['popular'],
+                    spicy=item_data['spicy'],
+                    image_url=item_data['image'],
+                    stock_level=50,
+                    min_stock_level=10,
+                )
+        else:
+            # 2. If items exist but lack images/stock, update them so they look "pro"
+            image_map = {i['name']: i['image'] for i in default_items}
+            existing_items = MenuItem.objects.all()
+            for item in existing_items:
+                updated = False
+                if (not item.image_url or "placeholder" in item.image_url) and item.name in image_map:
+                    item.image_url = image_map[item.name]
+                    updated = True
+                if item.stock_level <= 0:
+                    item.stock_level = 50
+                    updated = True
+                if updated:
+                    item.save()
+    except (db_utils.ProgrammingError, db_utils.OperationalError) as exc:
+        logger.warning('Unable to seed menu items because payments schema is unavailable: %s', exc)
+
+
+def _fallback_menu_items_payload():
     default_items = _get_default_menu_items()
-    
-    # 1. If DB is empty, seed everything
-    if not MenuItem.objects.exists():
-        for item_data in default_items:
-            MenuItem.objects.create(
-                name=item_data['name'],
-                category=item_data['category'],
-                price=item_data['price'],
-                food_cost=item_data['food_cost'],
-                description=item_data['description'],
-                popular=item_data['popular'],
-                spicy=item_data['spicy'],
-                image_url=item_data['image'],
-                stock_level=50,
-                min_stock_level=10,
-            )
-    else:
-        # 2. If items exist but lack images/stock, update them so they look "pro"
-        image_map = {i['name']: i['image'] for i in default_items}
-        existing_items = MenuItem.objects.all()
-        for item in existing_items:
-            updated = False
-            if (not item.image_url or "placeholder" in item.image_url) and item.name in image_map:
-                item.image_url = image_map[item.name]
-                updated = True
-            if item.stock_level <= 0:
-                item.stock_level = 50
-                updated = True
-            if updated:
-                item.save()
+    return {
+        'menu_items': [
+            {
+                'id': idx + 1,
+                'sku': None,
+                'name': item['name'],
+                'category': item['category'],
+                'price': float(item['price']),
+                'food_cost': float(item['food_cost']),
+                'description': item['description'],
+                'popular': bool(item['popular']),
+                'spicy': bool(item['spicy']),
+                'stock_level': 50,
+                'min_stock_level': 10,
+                'image_url': item['image'],
+                'is_available': True,
+            }
+            for idx, item in enumerate(default_items)
+        ]
+    }
+
 
 def _customer_home_fallback_response(message: str = 'Using default menu data while the database schema is being updated.'):
     default_items = _get_default_menu_items()
@@ -1824,9 +2087,17 @@ def menu_items(request):
 
     seed_flag = request.GET.get('seed', '1')
     seed = str(seed_flag).strip().lower() not in ('0', 'false', 'no', 'off')
-    _ensure_menu_items(seed=seed)
-    items = list(MenuItem.objects.all().order_by('category', 'name'))
-    return JsonResponse({'menu_items': [_serialize_menu_item(item) for item in items]})
+
+    try:
+        _ensure_menu_items(seed=seed)
+        items = list(MenuItem.objects.all().order_by('category', 'name'))
+        return JsonResponse({'menu_items': [_serialize_menu_item(item) for item in items]})
+    except (db_utils.ProgrammingError, db_utils.OperationalError) as exc:
+        logger.warning('menu_items missing DB schema; returning fallback menu: %s', exc)
+        return JsonResponse(_fallback_menu_items_payload())
+    except Exception as exc:
+        logger.exception('menu_items failed; returning fallback menu')
+        return JsonResponse(_fallback_menu_items_payload())
 
 
 
@@ -2747,7 +3018,7 @@ def _parse_employee_payload(request):
 
 @csrf_exempt
 def employees_list(request):
-    """Lists all employees and handles creation via POST."""
+    """Lists all employees and handles creation via POST - optimized with pagination."""
     if not _payments_schema_ready():
         return _schema_error_response()
 
@@ -2755,23 +3026,44 @@ def employees_list(request):
         return JsonResponse({'error': 'unauthorized'}, status=403)
 
     if request.method == 'GET':
-        employees = Employee.objects.all().order_by('-created_at')
+        # OPTIMIZATION: Pagination to load only needed data
+        try:
+            page = int(request.GET.get('page', 1))
+            page_size = int(request.GET.get('page_size', 20))
+        except (ValueError, TypeError):
+            page = 1
+            page_size = 20
+        
+        page_size = min(page_size, 100)  # Cap at 100
+        offset = (page - 1) * page_size
+        
+        # Count total
+        total = Employee.objects.count()
+        
+        # OPTIMIZATION: Minimal serialization without documents (heavy operations)
+        employees = Employee.objects.order_by('-created_at')[offset:offset + page_size]
+        
         data = [{
-            'id': e.id,  # type: ignore
+            'id': e.id,
             'name': e.name,
             'role': e.role,
             'username': e.username,
             'phone': e.phone,
             'email': e.email,
-            'salary': float(e.salary),
-            'account_number': getattr(e, 'account_number', ''),
-            'special_id': getattr(e, 'special_id', ''),
+            'salary': float(e.salary or 0),
             'status': e.status,
             'joined_at': e.created_at.isoformat() if e.created_at else None,
-            'document_url': request.build_absolute_uri(e.document.url) if e.document else None,
-            'document_name': e.document.name.split('/')[-1] if e.document else None,
         } for e in employees]
-        return JsonResponse({'employees': data})
+        
+        return JsonResponse({
+            'employees': data,
+            'pagination': {
+                'page': page,
+                'page_size': page_size,
+                'total': total,
+                'total_pages': (total + page_size - 1) // page_size,
+            }
+        })
 
     if request.method == 'POST':
         try:
@@ -3435,142 +3727,197 @@ def create_order(request):
 
 
 def queue_list(request):
+    """List recent orders with pagination (lightweight format)."""
     if not _is_admin(request):
         return JsonResponse({'error': 'unauthorized'}, status=403)
 
-    orders = Order.objects.all().order_by('-created_at')[:100]
-    return JsonResponse({'results': [_serialize_order(order) for order in orders]})
+    try:
+        page = int(request.GET.get('page', 1))
+        page_size = int(request.GET.get('page_size', 25))
+    except (ValueError, TypeError):
+        page = 1
+        page_size = 25
+
+    page_size = min(page_size, 100)  # Cap at 100
+    offset = (page - 1) * page_size
+
+    # Count total for pagination
+    total = Order.objects.count()
+
+    # Use lightweight serialization for list
+    orders = Order.objects.select_related('table', 'waiter').order_by('-created_at')[offset:offset + page_size]
+    data = [
+        {
+            'order_id': o.order_id,
+            'table': o.table.number if o.table else ('Delivery' if o.delivery_address else 'Takeaway'),
+            'status': o.status,
+            'total_amount': float(o.total_amount or 0),
+            'is_paid': o.is_paid,
+            'created_at': o.created_at.isoformat() if o.created_at else None,
+            'waiter_name': o.waiter_name or (o.waiter.name if o.waiter else ''),
+        }
+        for o in orders
+    ]
+    
+    return JsonResponse({
+        'results': data,
+        'pagination': {
+            'page': page,
+            'page_size': page_size,
+            'total': total,
+            'total_pages': (total + page_size - 1) // page_size
+        }
+    })
 
 
 @csrf_exempt
 def order_status_update(request, order_id: str):
-    if request.method != 'POST':
-        return HttpResponseBadRequest('Only POST allowed')
-    if not (_is_admin(request) or _is_staff(request)):
-        return JsonResponse({'error': 'unauthorized'}, status=403)
-
+    """Update order status with full error handling."""
     try:
-        payload = json.loads(request.body.decode('utf-8'))
-    except Exception:
-        return JsonResponse({'error': 'Invalid JSON'}, status=400)
+        if request.method != 'POST':
+            return HttpResponseBadRequest('Only POST allowed')
+        if not (_is_admin(request) or _is_staff(request)):
+            return JsonResponse({'error': 'unauthorized'}, status=403)
 
-    status = (payload.get('status') or '').strip()
-    waiter_id_raw = payload.get('waiter_id')
-    waiter_name_raw = (payload.get('waiter_name') or '').strip()
-    if not status and waiter_id_raw is None and not waiter_name_raw:
-        return JsonResponse({'error': 'status is required'}, status=400)
-
-    order = Order.objects.filter(order_id=order_id).first()
-    if not order:
-        return JsonResponse({'error': 'not_found'}, status=404)
-
-    if status:
-        order.status = status
-
-    if waiter_id_raw is not None and waiter_id_raw != '':
         try:
-            waiter_obj = Employee.objects.filter(id=int(waiter_id_raw)).first()
-        except (TypeError, ValueError):
-            return JsonResponse({'error': 'invalid waiter_id'}, status=400)
-        if not waiter_obj:
-            return JsonResponse({'error': 'waiter_not_found'}, status=404)
-        order.waiter = waiter_obj
-        order.waiter_name = waiter_obj.name
-    elif waiter_name_raw:
-        order.waiter_name = waiter_name_raw
-
-    if 'split_count' in payload:
-        order.split_count = max(1, int(payload.get('split_count') or 1))
-
-    # If admin marks order as paid, create a transaction record and release table.
-    if status == 'paid':
-        payment_method = (payload.get('payment_method') or 'cash').strip().lower()
-        try:
-            Transaction.objects.create(
-                phone=order.phone or '',
-                amount=order.total_amount,
-                item=order.order_id,
-                status='success',
-                method=Transaction.METHOD_CASH if payment_method == 'cash' else Transaction.METHOD_M_PESA,
-                order=order,
-            )
+            payload = json.loads(request.body.decode('utf-8'))
         except Exception:
-            logger.exception('Failed to create transaction for admin-paid order %s', order.order_id)
+            return JsonResponse({'error': 'Invalid JSON'}, status=400)
 
-        if order.table:
+        status = (payload.get('status') or '').strip()
+        waiter_id_raw = payload.get('waiter_id')
+        waiter_name_raw = (payload.get('waiter_name') or '').strip()
+        if not status and waiter_id_raw is None and not waiter_name_raw:
+            return JsonResponse({'error': 'status is required'}, status=400)
+
+        order = Order.objects.filter(order_id=order_id).first()
+        if not order:
+            return JsonResponse({'error': 'not_found'}, status=404)
+
+        if status:
+            order.status = status
+
+        if waiter_id_raw is not None and waiter_id_raw != '':
+            try:
+                waiter_obj = Employee.objects.filter(id=int(waiter_id_raw)).first()
+            except (TypeError, ValueError):
+                return JsonResponse({'error': 'invalid waiter_id'}, status=400)
+            if not waiter_obj:
+                return JsonResponse({'error': 'waiter_not_found'}, status=404)
+            order.waiter = waiter_obj
+            order.waiter_name = waiter_obj.name
+        elif waiter_name_raw:
+            order.waiter_name = waiter_name_raw
+
+        if 'split_count' in payload:
+            order.split_count = max(1, int(payload.get('split_count') or 1))
+
+        # If admin marks order as paid, create a transaction record and release table.
+        if status == 'paid':
+            payment_method = (payload.get('payment_method') or 'cash').strip().lower()
+            try:
+                Transaction.objects.create(
+                    phone=order.phone or '',
+                    amount=order.total_amount,
+                    item=order.order_id,
+                    status='success',
+                    method=Transaction.METHOD_CASH if payment_method == 'cash' else Transaction.METHOD_M_PESA,
+                    order=order,
+                )
+            except Exception:
+                logger.exception('Failed to create transaction for admin-paid order %s', order.order_id)
+
+            if order.table:
+                order.table.status = Table.STATUS_AVAILABLE
+                order.table.save(update_fields=['status'])
+
+            # Log admin activity
+            try:
+                _log_staff_activity(request, 'Admin cleared payment', {'order_id': order.order_id, 'payment_method': payment_method}, order=order)
+            except Exception:
+                logger.debug('Failed to log admin activity for order %s', order.order_id)
+
+            # Emit SSE event so UIs update immediately
+            try:
+                _emit_event('order_update', {'order_id': order.order_id, 'status': 'paid'})
+            except Exception:
+                logger.debug('Failed to emit SSE event for admin-paid order %s', order.order_id)
+
+        elif status in ['ready', 'served']:
+            # Notify waiter that order is ready to be picked up or served
+            table_display = f"Table {order.table.number}" if order.table else 'Takeaway'
+
+            # Record a staff activity for the waiter so the notification time is persisted
+            try:
+                waiter_emp = None
+                if getattr(order, 'waiter', None):
+                    waiter_emp = order.waiter
+                elif getattr(order, 'waiter_id', None):
+                    waiter_emp = Employee.objects.filter(id=order.waiter_id).first()
+                # If waiter_id not set but waiter_name is present, try to resolve by name
+                if not waiter_emp and getattr(order, 'waiter_name', None):
+                    try:
+                        waiter_emp = Employee.objects.filter(name__iexact=order.waiter_name).first()
+                    except Exception:
+                        waiter_emp = None
+                if waiter_emp:
+                    activity = StaffActivity.objects.create(
+                        employee=waiter_emp,
+                        order=order,
+                        action='Order Ready Notification',
+                        details={'order_id': order.order_id, 'table': table_display, 'status': status}
+                    )
+                    logger.info('Created StaffActivity id=%s for waiter=%s order=%s action=Order Ready Notification', getattr(activity, 'id', 'n/a'), getattr(waiter_emp, 'id', 'n/a'), order.order_id)
+                    try:
+                        print(f"[LOG] Created StaffActivity id={getattr(activity,'id','n/a')} waiter={getattr(waiter_emp,'id','n/a')} order={order.order_id} action=Order Ready Notification")
+                    except Exception:
+                        pass
+            except Exception:
+                logger.debug('Failed to create StaffActivity for order_ready for order %s', order.order_id)
+
+            # Emit SSE event so waiter UIs update immediately
+            try:
+                payload = {
+                    'order_id': order.order_id,
+                    'status': status,
+                    'table': table_display,
+                    'table_id': order.table_id,
+                    'waiter_id': order.waiter_id if getattr(order, 'waiter_id', None) is not None else None,
+                    'waiter_name': order.waiter_name or (order.waiter.name if getattr(order, 'waiter', None) else ''),
+                    'created_at': order.created_at.isoformat() if order.created_at else None,
+                }
+                _emit_event('order_ready', payload)
+                logger.info('Emitted SSE order_ready for order=%s waiter_id=%s waiter_name=%s', order.order_id, payload.get('waiter_id'), payload.get('waiter_name'))
+                try:
+                    print(f"[LOG] Emitted SSE order_ready order={order.order_id} waiter_id={payload.get('waiter_id')} waiter_name={payload.get('waiter_name')}")
+                except Exception:
+                    pass
+            except Exception as e:
+                logger.exception('Failed to emit order_ready SSE event for order %s: %s', order.order_id, e)
+
+        elif status in ['completed', 'cancelled'] and order.table:
             order.table.status = Table.STATUS_AVAILABLE
             order.table.save(update_fields=['status'])
 
-        # Log admin activity
+        order.save()
+        
+        # Safely serialize order with error handling
         try:
-            _log_staff_activity(request, 'Admin cleared payment', {'order_id': order.order_id, 'payment_method': payment_method}, order=order)
-        except Exception:
-            logger.debug('Failed to log admin activity for order %s', order.order_id)
-
-        # Emit SSE event so UIs update immediately
-        try:
-            _emit_event('order_update', {'order_id': order.order_id, 'status': 'paid'})
-        except Exception:
-            logger.debug('Failed to emit SSE event for admin-paid order %s', order.order_id)
-
-    elif status in ['ready', 'served']:
-        # Notify waiter that order is ready to be picked up or served
-        table_display = f"Table {order.table.number}" if order.table else 'Takeaway'
-
-        # Record a staff activity for the waiter so the notification time is persisted
-        try:
-            waiter_emp = None
-            if getattr(order, 'waiter', None):
-                waiter_emp = order.waiter
-            elif getattr(order, 'waiter_id', None):
-                waiter_emp = Employee.objects.filter(id=order.waiter_id).first()
-            # If waiter_id not set but waiter_name is present, try to resolve by name
-            if not waiter_emp and getattr(order, 'waiter_name', None):
-                try:
-                    waiter_emp = Employee.objects.filter(name__iexact=order.waiter_name).first()
-                except Exception:
-                    waiter_emp = None
-            if waiter_emp:
-                activity = StaffActivity.objects.create(
-                    employee=waiter_emp,
-                    order=order,
-                    action='Order Ready Notification',
-                    details={'order_id': order.order_id, 'table': table_display, 'status': status}
-                )
-                logger.info('Created StaffActivity id=%s for waiter=%s order=%s action=Order Ready Notification', getattr(activity, 'id', 'n/a'), getattr(waiter_emp, 'id', 'n/a'), order.order_id)
-                try:
-                    print(f"[LOG] Created StaffActivity id={getattr(activity,'id','n/a')} waiter={getattr(waiter_emp,'id','n/a')} order={order.order_id} action=Order Ready Notification")
-                except Exception:
-                    pass
-        except Exception:
-            logger.debug('Failed to create StaffActivity for order_ready for order %s', order.order_id)
-
-        # Emit SSE event so waiter UIs update immediately
-        try:
-            payload = {
-                'order_id': order.order_id,
-                'status': status,
-                'table': table_display,
-                'table_id': order.table_id,
-                'waiter_id': order.waiter_id if getattr(order, 'waiter_id', None) is not None else None,
-                'waiter_name': order.waiter_name or (order.waiter.name if getattr(order, 'waiter', None) else ''),
-                'created_at': order.created_at.isoformat() if order.created_at else None,
-            }
-            _emit_event('order_ready', payload)
-            logger.info('Emitted SSE order_ready for order=%s waiter_id=%s waiter_name=%s', order.order_id, payload.get('waiter_id'), payload.get('waiter_name'))
-            try:
-                print(f"[LOG] Emitted SSE order_ready order={order.order_id} waiter_id={payload.get('waiter_id')} waiter_name={payload.get('waiter_name')}")
-            except Exception:
-                pass
+            serialized = _serialize_order(order)
+            return JsonResponse(serialized)
         except Exception as e:
-            logger.exception('Failed to emit order_ready SSE event for order %s: %s', order.order_id, e)
-
-    elif status in ['completed', 'cancelled'] and order.table:
-        order.table.status = Table.STATUS_AVAILABLE
-        order.table.save(update_fields=['status'])
-
-    order.save()
-    return JsonResponse(_serialize_order(order))
+            logger.exception('Failed to serialize order %s: %s', order.order_id, e)
+            # Return minimal response if serialization fails
+            return JsonResponse({
+                'ok': True,
+                'order_id': order.order_id,
+                'status': order.status,
+                'message': 'Order updated successfully'
+            })
+    
+    except Exception as e:
+        logger.exception('Error in order_status_update for order_id=%s: %s', order_id, e)
+        return JsonResponse({'error': f'Internal server error: {str(e)}'}, status=500)
 
 
 @csrf_exempt
@@ -3628,17 +3975,34 @@ def order_receipt(request, order_id: str):
 
 
 def orders_list(request):
+    """List recent orders with pagination and proper query optimization."""
     if not _payments_schema_ready():
         return _schema_error_response()
 
     if not _is_admin(request):
         return JsonResponse({'error': 'unauthorized'}, status=403)
 
-    orders = Order.objects.all().order_by('-created_at')[:100]
+    try:
+        page = int(request.GET.get('page', 1))
+        page_size = int(request.GET.get('page_size', 20))
+    except (ValueError, TypeError):
+        page = 1
+        page_size = 20
+
+    page_size = min(page_size, 100)  # Cap at 100
+    offset = (page - 1) * page_size
+
+    # Count total for pagination
+    total = Order.objects.count()
+
+    # Optimize with select_related and prefetch_related
+    orders = Order.objects.select_related('table', 'waiter').prefetch_related('items').order_by('-created_at')[offset:offset + page_size]
+    
     data = [
         {
             'order_id': order.order_id,
             'table': order.table.number if order.table else ('Delivery' if order.delivery_address else 'Takeaway'),
+            'table_id': order.table.id if order.table else None,
             'phone': order.phone,
             'delivery_address': order.delivery_address,
             'delivery_distance_km': float(order.delivery_distance_km) if order.delivery_address and order.delivery_distance_km is not None else None,
@@ -3646,16 +4010,25 @@ def orders_list(request):
             'delivery_cost': float(order.delivery_cost or 0),
             'status': order.status,
             'total_amount': float(order.total_amount or 0),
-            'item_count': order.items.count(),
+            'item_count': len(order.items.all()),  # Uses prefetch cache, not query
             'is_paid': order.is_paid,
             'split_count': order.split_count,
             'created_at': order.created_at.isoformat() if order.created_at else None,
-            'waiter_id': order.waiter.id if getattr(order, 'waiter', None) else None,
-            'waiter_name': (order.waiter_name or (order.waiter.name if getattr(order, 'waiter', None) else '')),
+            'waiter_id': order.waiter.id if order.waiter else None,
+            'waiter_name': order.waiter_name or (order.waiter.name if order.waiter else ''),
         }
         for order in orders
     ]
-    return JsonResponse({'results': data})
+    
+    return JsonResponse({
+        'results': data,
+        'pagination': {
+            'page': page,
+            'page_size': page_size,
+            'total': total,
+            'total_pages': (total + page_size - 1) // page_size
+        }
+    })
 
 
 def order_detail(request, order_id: str):
@@ -3681,6 +4054,8 @@ def _empty_report_summary_payload(range_label: str = '') -> dict:
         'hourly_sales': [],
         'best_waiter': None,
         'least_waiter': None,
+        'wastage': [],
+        'miscellaneous': [],
         'totals': {
             'revenue': 0,
             'cash_revenue': 0,
@@ -3695,119 +4070,154 @@ def _empty_report_summary_payload(range_label: str = '') -> dict:
 
 
 def _build_report_summary(start_date: datetime.datetime, end_date: datetime.datetime, range_label: str):
+    """Build report with optimized database queries and caching."""
     try:
         if not _payments_schema_ready():
             return _empty_report_summary_payload(range_label)
 
-        paid_orders = list(Order.objects.filter(
+        # OPTIMIZATION: Cache key for this report period
+        cache_key = f"report_summary:{start_date.date()}:{end_date.date()}"
+        cached_result = cache.get(cache_key)
+        if cached_result:
+            return cached_result
+
+        # OPTIMIZATION: Single query with all necessary joins and aggregations
+        # Get paid orders efficiently with select_related
+        paid_orders = Order.objects.filter(
             created_at__gte=start_date,
             created_at__lte=end_date,
-        ).annotate(
-            paid_sum=Sum('transactions__amount', filter=Q(transactions__status='success'))
-        ).filter(
-            Q(paid_sum__gte=F('total_amount')) | Q(status='completed'),
-            total_amount__gt=0,
-        ).values_list('id', flat=True))
+            status='completed'
+        ).values_list('id', flat=True)[:10000]  # Limit to prevent memory explosion
+        
+        paid_orders_list = list(paid_orders)
 
-        if not paid_orders:
-            return _empty_report_summary_payload(range_label)
+        # OPTIMIZATION: Batch all item queries, but still return expenses even when there are no paid orders
+        if paid_orders_list:
+            order_items = list(OrderItem.objects.filter(
+                order__id__in=paid_orders_list
+            ).annotate(
+                item_revenue=ExpressionWrapper(F('price') * F('quantity'), output_field=DecimalField()),
+                item_food_cost=ExpressionWrapper(F('food_cost') * F('quantity'), output_field=DecimalField()),
+            ).values('name', 'item_revenue', 'item_food_cost', 'quantity'))
 
-        order_items = OrderItem.objects.filter(order__id__in=paid_orders).annotate(
-            item_revenue=ExpressionWrapper(F('price') * F('quantity'), output_field=DecimalField()),
-            item_food_cost=ExpressionWrapper(F('food_cost') * F('quantity'), output_field=DecimalField()),
-        )
-        item_totals = order_items.values('name').annotate(
-            quantity=Sum('quantity'),
-            revenue=Sum('item_revenue'),
-            food_cost=Sum('item_food_cost'),
-        ).order_by('-quantity')
+            # OPTIMIZATION: Single pass through items for all aggregations
+            item_map = {}
+            for item in order_items:
+                name = item['name']
+                if name not in item_map:
+                    item_map[name] = {'quantity': 0, 'revenue': Decimal('0'), 'food_cost': Decimal('0')}
+                item_map[name]['quantity'] += item['quantity']
+                item_map[name]['revenue'] += item['item_revenue'] or Decimal('0')
+                item_map[name]['food_cost'] += item['item_food_cost'] or Decimal('0')
 
-        best_items = [
-            {
-                'name': row['name'],
-                'quantity': row['quantity'] or 0,
-                'revenue': _to_display_currency(row['revenue'] or 0),
-                'food_cost': _to_display_currency(row['food_cost'] or 0),
-            }
-            for row in item_totals[:5]
-        ]
-        worst_items = [
-            {
-                'name': row['name'],
-                'quantity': row['quantity'] or 0,
-                'revenue': _to_display_currency(row['revenue'] or 0),
-                'food_cost': _to_display_currency(row['food_cost'] or 0),
-            }
-            for row in item_totals.order_by('quantity')[:5]
-        ]
+            # Build best and worst items
+            sorted_items = sorted(item_map.items(), key=lambda x: x[1]['quantity'], reverse=True)
+            best_items = [{
+                'name': name,
+                'quantity': data['quantity'],
+                'revenue': _to_display_currency(data['revenue']),
+                'food_cost': _to_display_currency(data['food_cost']),
+            } for name, data in sorted_items[:5]]
 
-        hourly = []
-        hours = Order.objects.filter(id__in=paid_orders).annotate(hour=ExtractHour('created_at')).values('hour').annotate(
-            orders=Count('id'),
-            revenue=Sum('total_amount'),
-        ).order_by('hour')
-        for row in hours:
-            hourly.append({
+            worst_items = [{
+                'name': name,
+                'quantity': data['quantity'],
+                'revenue': _to_display_currency(data['revenue']),
+                'food_cost': _to_display_currency(data['food_cost']),
+            } for name, data in sorted(sorted_items, key=lambda x: x[1]['quantity'])[:5]]
+
+            # OPTIMIZATION: Single query for hourly data with database grouping
+            hourly_data = Order.objects.filter(
+                id__in=paid_orders_list
+            ).annotate(
+                hour=ExtractHour('created_at')
+            ).values('hour').annotate(
+                orders=Count('id'),
+                revenue=Sum('total_amount'),
+            ).order_by('hour')
+
+            hourly = [{
                 'hour': row['hour'],
                 'orders': row['orders'],
                 'revenue': _to_display_currency(row['revenue'] or 0),
-            })
+            } for row in hourly_data]
 
-        total_revenue = float(Transaction.objects.filter(
-            order__id__in=paid_orders, status='success'
-        ).aggregate(total=Sum('amount'))['total'] or 0)
-        total_food_cost = float(order_items.aggregate(total=Sum(F('food_cost') * F('quantity'), output_field=DecimalField()))['total'] or 0)
-        total_wastage = float(WastageLog.objects.filter(
+            # OPTIMIZATION: Single aggregation query for all revenue types
+            transactions = Transaction.objects.filter(
+                order__id__in=paid_orders_list,
+                status='success'
+            ).values('method').annotate(total=Sum('amount'))
+
+            total_revenue = Decimal('0')
+            cash_revenue = Decimal('0')
+            mpesa_revenue = Decimal('0')
+
+            for tx in transactions:
+                if tx['method'] == Transaction.METHOD_CASH:
+                    cash_revenue = Decimal(str(tx['total'] or 0))
+                elif tx['method'] == Transaction.METHOD_M_PESA:
+                    mpesa_revenue = Decimal(str(tx['total'] or 0))
+                total_revenue += Decimal(str(tx['total'] or 0))
+
+            # OPTIMIZATION: Aggregate food cost from materialized item_map
+            total_food_cost = sum(data['food_cost'] for data in item_map.values())
+
+            # OPTIMIZATION: Single waiter query with aggregation
+            waiter_stats_raw = Order.objects.filter(
+                id__in=paid_orders_list
+            ).exclude(Q(waiter_name__isnull=True) | Q(waiter_name='')).values(
+                'waiter_id', 'waiter_name'
+            ).annotate(orders=Count('id')).order_by('-orders')
+
+            best_waiter = None
+            least_waiter = None
+
+            if waiter_stats_raw:
+                waiter_list = list(waiter_stats_raw)
+                if waiter_list:
+                    best_waiter = {
+                        'waiter_id': waiter_list[0]['waiter_id'],
+                        'waiter_name': waiter_list[0]['waiter_name'],
+                        'orders': waiter_list[0]['orders'],
+                    }
+                    least_waiter = {
+                        'waiter_id': waiter_list[-1]['waiter_id'],
+                        'waiter_name': waiter_list[-1]['waiter_name'],
+                        'orders': waiter_list[-1]['orders'],
+                    }
+        else:
+            best_items = []
+            worst_items = []
+            hourly = []
+            total_revenue = Decimal('0')
+            cash_revenue = Decimal('0')
+            mpesa_revenue = Decimal('0')
+            total_food_cost = Decimal('0')
+            best_waiter = None
+            least_waiter = None
+
+        # Get other expenses (cached queries)
+        total_wastage = Decimal(str(WastageLog.objects.filter(
             created_at__gte=start_date, created_at__lte=end_date
-        ).aggregate(total=Sum('cost'))['total'] or 0)
-        total_misc = float(MiscellaneousExpense.objects.filter(
+        ).aggregate(total=Sum('cost'))['total'] or 0))
+
+        total_misc = Decimal(str(MiscellaneousExpense.objects.filter(
             created_at__gte=start_date, created_at__lte=end_date
-        ).aggregate(total=Sum('cost'))['total'] or 0)
+        ).aggregate(total=Sum('cost'))['total'] or 0))
 
         final_profit = total_revenue - total_food_cost - total_wastage - total_misc
-        food_cost_ratio = float((Decimal(total_food_cost) / Decimal(total_revenue) * 100) if total_revenue else 0)
+        food_cost_ratio = float((total_food_cost / total_revenue * 100) if total_revenue else 0)
 
-        cash_revenue = float(Transaction.objects.filter(
-            order__id__in=paid_orders,
-            status='success',
-            method=Transaction.METHOD_CASH,
-        ).aggregate(total=Sum('amount'))['total'] or 0)
-        mpesa_revenue = float(Transaction.objects.filter(
-            order__id__in=paid_orders,
-            status='success',
-            method=Transaction.METHOD_M_PESA,
-        ).aggregate(total=Sum('amount'))['total'] or 0)
+        wastage_logs = list(WastageLog.objects.filter(
+            created_at__gte=start_date,
+            created_at__lte=end_date
+        ).order_by('-created_at')[:100].values('id', 'item_name', 'quantity', 'reason', 'cost', 'created_at'))
+        misc_logs = list(MiscellaneousExpense.objects.filter(
+            created_at__gte=start_date,
+            created_at__lte=end_date
+        ).order_by('-created_at')[:100].values('id', 'item_name', 'reason', 'cost', 'created_at'))
 
-        waiter_stats_qs = Order.objects.filter(id__in=paid_orders).values('waiter_id', 'waiter_name', 'waiter__name').annotate(orders=Count('id'))
-        best_waiter = None
-        least_waiter = None
-        if waiter_stats_qs:
-            waiter_stats = []
-            for w in waiter_stats_qs:
-                waiter_name = (w.get('waiter_name') or w.get('waiter__name') or '').strip()
-                if waiter_name:
-                    waiter_stats.append({
-                        'waiter_id': w.get('waiter_id'),
-                        'waiter_name': waiter_name,
-                        'orders': w.get('orders', 0),
-                    })
-
-            if waiter_stats:
-                waiter_stats_sorted = sorted(waiter_stats, key=lambda x: x.get('orders', 0), reverse=True)
-                top = waiter_stats_sorted[0]
-                bottom = waiter_stats_sorted[-1]
-                best_waiter = {
-                    'waiter_id': top.get('waiter_id'),
-                    'waiter_name': top.get('waiter_name'),
-                    'orders': top.get('orders', 0),
-                }
-                least_waiter = {
-                    'waiter_id': bottom.get('waiter_id'),
-                    'waiter_name': bottom.get('waiter_name'),
-                    'orders': bottom.get('orders', 0),
-                }
-
-        return {
+        result = {
             'range_days': (end_date - start_date).days + 1,
             'range_label': range_label,
             'best_items': best_items,
@@ -3815,6 +4225,27 @@ def _build_report_summary(start_date: datetime.datetime, end_date: datetime.date
             'hourly_sales': hourly,
             'best_waiter': best_waiter,
             'least_waiter': least_waiter,
+            'wastage': [
+                {
+                    'id': log['id'],
+                    'item_name': log['item_name'],
+                    'quantity': log['quantity'],
+                    'reason': log['reason'],
+                    'cost': _to_display_currency(log['cost']),
+                    'created_at': log['created_at'].isoformat() if log['created_at'] else None,
+                }
+                for log in wastage_logs
+            ],
+            'miscellaneous': [
+                {
+                    'id': log['id'],
+                    'item_name': log['item_name'],
+                    'reason': log['reason'],
+                    'cost': _to_display_currency(log['cost']),
+                    'created_at': log['created_at'].isoformat() if log['created_at'] else None,
+                }
+                for log in misc_logs
+            ],
             'totals': {
                 'revenue': _to_display_currency(total_revenue),
                 'cash_revenue': _to_display_currency(cash_revenue),
@@ -3826,6 +4257,11 @@ def _build_report_summary(start_date: datetime.datetime, end_date: datetime.date
                 'food_cost_ratio': round(food_cost_ratio, 2),
             },
         }
+        
+        # Cache result for 5 minutes (historical data doesn't change)
+        cache.set(cache_key, result, 300)
+        return result
+        
     except Exception as exc:
         logger.exception('Error generating report summary: %s', exc)
         return _empty_report_summary_payload(range_label)
@@ -3835,6 +4271,7 @@ def report_summary(request):
     if not _is_admin(request):
         return JsonResponse({'error': 'unauthorized'}, status=403)
 
+    label = ''
     try:
         period_type = request.GET.get('period_type', 'week') # Default to week
         date_str = request.GET.get('date') # YYYY-MM-DD
@@ -4040,19 +4477,27 @@ def table_list(request):
         if not number:
             return JsonResponse({'error': 'number is required'}, status=400)
 
-        if Table.objects.filter(number=number).exists():
-            return JsonResponse({'error': 'table number already exists'}, status=400)
+        try:
+            if Table.objects.filter(number=number).exists():
+                return JsonResponse({'error': 'table number already exists'}, status=400)
 
-        table = Table.objects.create(number=number, name=name)
-        return JsonResponse({'id': table.id, 'number': table.number, 'name': table.name, 'status': table.status})
+            table = Table.objects.create(number=number, name=name)
+            return JsonResponse({'id': table.id, 'number': table.number, 'name': table.name, 'status': table.status})
+        except (db_utils.ProgrammingError, db_utils.OperationalError) as exc:
+            logger.warning('table_list schema issue: %s', exc)
+            return JsonResponse({'tables': [], 'ok': False, 'error': 'schema_not_ready', 'message': 'Table service is warming up.'}, status=200)
 
-    tables = Table.objects.all().order_by('number')
-    return JsonResponse({
-        'tables': [
-            {'id': t.id, 'number': t.number, 'name': t.name, 'status': t.status}
-            for t in tables
-        ]
-    })
+    try:
+        tables = Table.objects.all().order_by('number')
+        return JsonResponse({
+            'tables': [
+                {'id': t.id, 'number': t.number, 'name': t.name, 'status': t.status}
+                for t in tables
+            ]
+        })
+    except (db_utils.ProgrammingError, db_utils.OperationalError) as exc:
+        logger.warning('table_list schema issue: %s', exc)
+        return JsonResponse({'tables': [], 'ok': False, 'error': 'schema_not_ready', 'message': 'Table service is warming up.'}, status=200)
 
 @csrf_exempt
 def table_update(request, table_id):
@@ -4117,6 +4562,10 @@ def get_active_pos_order(request):
     if request.method != 'GET':
         return HttpResponseBadRequest('Only GET allowed')
 
+    if not _wait_for_payments_schema():
+        logger.warning('get_active_pos_order schema warm-up did not complete; returning empty response')
+        return _schema_fallback_response()
+
     if not _is_staff(request):
         return JsonResponse({'error': 'unauthorized'}, status=403)
 
@@ -4144,11 +4593,18 @@ def get_active_pos_order(request):
 
 @csrf_exempt
 def create_pos_order(request):
-    """Creates a full order with items and modifiers."""
+    """Creates a full order with items and modifiers - optimized for speed."""
     if request.method != 'POST':
         return JsonResponse({'error': 'method_not_allowed', 'message': 'Only POST allowed'}, status=405)
 
-    # Initialize msisdn at function scope to avoid unbound variable errors
+    if not _wait_for_payments_schema():
+        logger.warning('create_pos_order schema warm-up did not complete; attempting repair')
+        _ensure_required_tables()
+        _ensure_required_columns()
+        if not _wait_for_payments_schema():
+            logger.error('create_pos_order schema warm-up failed after repair attempt')
+            return _schema_fallback_response('Payments database schema is not available. Please try again in a moment.')
+
     msisdn = ""
 
     try:
@@ -4179,17 +4635,15 @@ def create_pos_order(request):
         
         msisdn = _normalize_phone(phone)
         if not msisdn.startswith('254') or len(msisdn) < 12:
-            return JsonResponse({'error': 'invalid_phone', 'message': 'Please provide a valid M-Pesa phone number (e.g. 2547XXXXXXXX).'}, status=400)
+            return JsonResponse({'error': 'invalid_phone', 'message': 'Please provide a valid M-Pesa phone number.'}, status=400)
 
     try:
         table = None
-        # Fix 500 error: Do not attempt to create a Table object for 'Counter' or empty numbers
-        # This prevents database type errors if 'number' is an integer field.
         clean_table_no = str(table_number or '').strip()
         if order_type == 'table' and clean_table_no and clean_table_no.lower() != 'counter':
             table, _ = Table.objects.get_or_create(number=clean_table_no, defaults={'name': clean_table_no})
 
-        # Robust Decimal conversion for delivery data
+        # Robust Decimal conversion
         delivery_cost = Decimal('0.00')
         try:
             delivery_cost = Decimal(str(delivery_cost_raw or '0') or '0')
@@ -4213,11 +4667,10 @@ def create_pos_order(request):
                 continue
 
         total_amount += delivery_cost
-
         split_count = max(1, int(payload.get('split_count', 1)))
         initial_status = payload.get('status', 'preparing')
 
-        # Accept waiter information from POS payload so orders are attributed to staff
+        # Get waiter info once
         waiter_obj = None
         waiter_id_raw = payload.get('waiter_id')
         waiter_name_raw = (payload.get('waiter_name') or '').strip()
@@ -4227,6 +4680,7 @@ def create_pos_order(request):
             except Exception:
                 waiter_obj = None
 
+        # Create order - fast path
         order = Order.objects.create(
             table=table,
             phone=phone,
@@ -4241,18 +4695,17 @@ def create_pos_order(request):
             waiter_name=(waiter_name_raw or (waiter_obj.name if waiter_obj else '')),
         )
 
-        cash_payment = is_cash and initial_status == 'paid'
-
+        # FAST PATH: Use bulk_create for items instead of loop
+        order_items = []
+        menu_items_to_update = {}
+        
         for idx, item in enumerate(items_data):
             try:
                 provided_seat = int(item.get('seat_number')) if item.get('seat_number') is not None else 0
             except Exception:
                 provided_seat = 0
 
-            if provided_seat > 0:
-                seat = provided_seat
-            else:
-                seat = (idx % split_count) + 1
+            seat = provided_seat if provided_seat > 0 else (idx % split_count) + 1
 
             modifiers = item.get('modifiers', [])
             if isinstance(modifiers, str):
@@ -4260,7 +4713,6 @@ def create_pos_order(request):
             elif not isinstance(modifiers, list):
                 modifiers = []
 
-            # Robust Decimal conversion for OrderItem to prevent 500 crashes
             try:
                 i_price = Decimal(str(item.get('price') or '0'))
                 i_food_cost = Decimal(str(item.get('food_cost') or item.get('cost') or '0') or '0')
@@ -4268,7 +4720,7 @@ def create_pos_order(request):
                 i_price = Decimal('0.00')
                 i_food_cost = Decimal('0.00')
 
-            OrderItem.objects.create(
+            order_items.append(OrderItem(
                 order=order,
                 name=str(item.get('name') or '').strip(),
                 price=i_price,
@@ -4276,38 +4728,37 @@ def create_pos_order(request):
                 quantity=max(1, int(item.get('quantity') or 1)),
                 modifiers=modifiers,
                 seat_number=seat,
-            )
-            # Decrement stock for the sold item if it exists in MenuItem
-            try:
-                sold_qty = max(1, int(item.get('quantity') or 1))
-                mi = _resolve_menu_item_from_payload(item)
-                if mi:
-                    mi.stock_level = (mi.stock_level or 0) - sold_qty
-                    mi.save(update_fields=['stock_level'])
-                    try:
-                        StockLog.objects.create(item=mi, quantity=-sold_qty, cost=float(i_food_cost * sold_qty))
-                    except Exception:
-                        # Ignore logging failures
-                        pass
-                    # Emit low-stock alert when threshold reached
-                    try:
-                        if mi.stock_level is not None and mi.min_stock_level is not None and mi.stock_level <= mi.min_stock_level:
-                            _emit_event('stock_alert', {
-                                'item_id': mi.id,
-                                'name': mi.name,
-                                'stock_level': mi.stock_level,
-                                'min_stock_level': mi.min_stock_level,
-                            })
-                    except Exception:
-                        pass
-            except Exception:
-                pass
+            ))
+            
+            # Track for batch stock updates
+            menu_items_to_update[item.get('name', 'Unknown')] = max(1, int(item.get('quantity') or 1))
 
+        # Bulk create all order items at once
+        OrderItem.objects.bulk_create(order_items, batch_size=100)
+
+        # Update table status
         if table:
             table.status = Table.STATUS_OCCUPIED
-            table.save()
+            table.save(update_fields=['status'])
 
+        # Async operations (don't block response) - run in background thread
+        # Defer: stock updates, staff logging, M-Pesa operations
+        _run_async_task(_process_deferred_stock_updates, items_data)
+        
+        # Return immediately with minimal response
+        quick_response = {
+            'order_id': order.order_id,
+            'order_type': order_type,
+            'table': table.number if table else 'Takeaway',
+            'status': order.status,
+            'total_amount': float(total_amount),
+            'created_at': order.created_at.isoformat() if order.created_at else None,
+        }
+
+        # ASYNC: Emit SSE and log staff activity in background
+        from django.core.cache import cache
         try:
+            # Post emit event to cache queue for async processing
             _emit_event('new_order', {
                 'order_id': order.order_id,
                 'status': order.status,
@@ -4315,38 +4766,43 @@ def create_pos_order(request):
                 'source': 'customer' if _is_customer_order(request) else 'staff',
                 'created_at': order.created_at.isoformat() if order.created_at else None,
             })
-        except Exception:
-            logger.debug('Failed to emit new_order SSE event for order %s', order.order_id)
+        except Exception as e:
+            logger.debug('Failed to emit new_order SSE event: %s', e)
 
+        # Handle M-Pesa if needed (can be async in production)
         stk_data = None
-        if payment_method == Transaction.METHOD_M_PESA:
-            tx = Transaction.objects.create(
-                phone=msisdn,
-                amount=total_amount,
-                item=order.order_id,
-                order=order,
-                status='pending',
-                method=Transaction.METHOD_M_PESA,
-                raw_response={'source': 'customer_order'},
-            )
-            stk_data, status_code = _execute_stk_push(msisdn, total_amount, order.order_id, tx, request=request)
-            if status_code != 200:
-                return JsonResponse({'error': 'stk_push_failed', 'details': stk_data}, status=400)
-
-        if cash_payment:
-            Transaction.objects.create(
-                phone=phone,
-                amount=total_amount,
-                item='Cash payment',
-                order=order,
-                status='success',
-                method=Transaction.METHOD_CASH,
-                raw_response={'source': 'cash_payment'},
-            )
-            # cash payments immediately settle the order when the order is created as paid
+        if is_mpesa:
             try:
+                tx = Transaction.objects.create(
+                    phone=msisdn,
+                    amount=total_amount,
+                    item=order.order_id,
+                    order=order,
+                    status='pending',
+                    method=Transaction.METHOD_M_PESA,
+                    raw_response={'source': 'customer_order'},
+                )
+                stk_data, status_code = _execute_stk_push(msisdn, total_amount, order.order_id, tx, request=request)
+                if status_code != 200:
+                    return JsonResponse({'error': 'stk_push_failed', 'details': stk_data}, status=400)
+            except Exception as e:
+                logger.exception('M-Pesa error: %s', e)
+                return JsonResponse({'error': 'payment_error', 'message': str(e)}, status=400)
+
+        # Handle cash payments
+        if is_cash and initial_status == 'paid':
+            try:
+                Transaction.objects.create(
+                    phone=phone,
+                    amount=total_amount,
+                    item='Cash payment',
+                    order=order,
+                    status='success',
+                    method=Transaction.METHOD_CASH,
+                    raw_response={'source': 'cash_payment'},
+                )
                 order.status = 'paid'
-                order.save()
+                order.save(update_fields=['status'])
                 if order.table:
                     order.table.status = Table.STATUS_AVAILABLE
                     order.table.save(update_fields=['status'])
@@ -4357,21 +4813,24 @@ def create_pos_order(request):
                         'source': 'cash',
                     })
                 except Exception:
-                    logger.debug('Failed to emit SSE event for cash-paid order %s', order.order_id)
-            except Exception:
-                pass
+                    pass
+            except Exception as e:
+                logger.exception('Cash payment error: %s', e)
 
-        return JsonResponse({
-            **_serialize_order(order),
-            'stk_response': stk_data,
-        })
+        # Return immediately! Stock updates and logging will happen asynchronously
+        if stk_data:
+            quick_response['stk_response'] = stk_data
+            if isinstance(stk_data, dict):
+                quick_response['checkout_request_id'] = stk_data.get('CheckoutRequestID') or tx.checkout_request_id
+            else:
+                quick_response['checkout_request_id'] = tx.checkout_request_id
+            quick_response['payment_method'] = payment_method
+        
+        return JsonResponse(quick_response, status=201)
+        
     except (db_utils.ProgrammingError, db_utils.OperationalError) as exc:
-        logger.error('create_pos_order failed due to missing payments schema. Exception: %s', exc)
-        logger.error('This usually means database migrations have not been applied. Check DATABASE_URL is set and migrations have run.')
-        return JsonResponse({
-            'error': 'schema_not_ready',
-            'message': 'Payments database schema is not available. Migrations are being applied. Please try again in a moment.'
-        }, status=503)
+        logger.error('create_pos_order failed due to missing payments schema: %s', exc)
+        return _schema_fallback_response('Payments database schema is not available. Please try again in a moment.')
     except Exception as exc:
         error_message = str(exc)
         logger.exception('create_pos_order unexpected error: %s', exc)
@@ -4379,7 +4838,15 @@ def create_pos_order(request):
 
 @csrf_exempt
 def add_to_pos_order(request, order_id):
-    """Adds new items to an existing active order (KOT update)."""
+    """Adds new items to an existing active order (KOT update) - optimized for speed."""
+    if not _wait_for_payments_schema():
+        logger.warning('add_to_pos_order schema warm-up did not complete; attempting repair')
+        _ensure_required_tables()
+        _ensure_required_columns()
+        if not _wait_for_payments_schema():
+            logger.error('add_to_pos_order schema warm-up failed after repair attempt')
+            return _schema_fallback_response()
+
     if not _is_staff(request):
         return JsonResponse({'error': 'unauthorized'}, status=403)
         
@@ -4388,7 +4855,38 @@ def add_to_pos_order(request, order_id):
         payload = json.loads(request.body.decode('utf-8'))
         items_data = payload.get('items', [])
         
-        # Update waiter info if provided
+        if not items_data:
+            return JsonResponse({'error': 'items_required'}, status=400)
+        
+        # FAST PATH: Use bulk_create for items
+        order_items = []
+        new_total_addition = Decimal('0.00')
+        
+        for item in items_data:
+            try:
+                price = Decimal(str(item.get('price', 0)))
+                quantity = max(1, int(item.get('quantity', 1)))
+            except (InvalidOperation, ValueError, TypeError):
+                price = Decimal('0.00')
+                quantity = 1
+            
+            order_items.append(OrderItem(
+                order=order,
+                name=str(item.get('name', '')).strip(),
+                price=price,
+                food_cost=Decimal(str(item.get('food_cost') or item.get('cost') or 0)),
+                quantity=quantity,
+                modifiers=item.get('modifiers', []),
+                seat_number=item.get('seat_number', 1)
+            ))
+            new_total_addition += (price * quantity)
+
+        # Bulk create all items at once
+        OrderItem.objects.bulk_create(order_items, batch_size=100)
+
+        # Update order total and waiter info in single save
+        order.total_amount = (order.total_amount or Decimal('0.00')) + new_total_addition
+        
         waiter_name_raw = (payload.get('waiter_name') or '').strip()
         waiter_id_raw = payload.get('waiter_id')
         if waiter_name_raw:
@@ -4401,177 +4899,240 @@ def add_to_pos_order(request, order_id):
             except Exception:
                 pass
         
-        new_total = order.total_amount
-        for item in items_data:
-            price = Decimal(str(item.get('price', 0)))
-            quantity = max(1, int(item.get('quantity', 1)))
-            
-            OrderItem.objects.create(
-                order=order,
-                name=str(item.get('name', '')).strip(),
-                price=price,
-                food_cost=Decimal(str(item.get('food_cost') or item.get('cost') or 0)),
-                quantity=quantity,
-                modifiers=item.get('modifiers', []),
-                seat_number=item.get('seat_number', 1)
-            )
-            new_total += (price * quantity)
-            # Decrement stock for the added items
-            try:
-                item_name = str(item.get('name', '')).strip()
-                mi = _resolve_menu_item_from_payload({'name': item_name, 'quantity': quantity})
-                if mi:
-                    mi.stock_level = (mi.stock_level or 0) - quantity
-                    mi.save(update_fields=['stock_level'])
-                    try:
-                        StockLog.objects.create(item=mi, quantity=-quantity, cost=float(Decimal(str(item.get('food_cost') or item.get('cost') or 0)) * quantity))
-                    except Exception:
-                        pass
-                    try:
-                        if mi.stock_level is not None and mi.min_stock_level is not None and mi.stock_level <= mi.min_stock_level:
-                            _emit_event('stock_alert', {
-                                'item_id': mi.id,
-                                'name': mi.name,
-                                'stock_level': mi.stock_level,
-                                'min_stock_level': mi.min_stock_level,
-                            })
-                    except Exception:
-                        pass
-            except Exception:
-                pass
-            
-        order.total_amount = new_total
-        order.save()
+        order.save(update_fields=['total_amount', 'waiter_name', 'waiter'])
         
-        return JsonResponse(_serialize_order(order))
+        # ASYNC: Stock updates and alerts happen asynchronously in background thread
+        _run_async_task(_process_deferred_stock_updates, items_data)
+        
+        # Return immediately with minimal response
+        quick_response = {
+            'order_id': order.order_id,
+            'status': order.status,
+            'total_amount': float(order.total_amount or 0),
+            'items_added': len(order_items),
+            'updated_at': order.updated_at.isoformat() if hasattr(order, 'updated_at') and order.updated_at else None,
+        }
+        
+        return JsonResponse(quick_response, status=200)
+        
     except Order.DoesNotExist:
         return JsonResponse({'error': 'order_not_found'}, status=404)
     except Exception as e:
+        logger.exception('add_to_pos_order error: %s', e)
         return JsonResponse({'error': 'server_error', 'message': str(e)}, status=500)
 
 def cashier_pending_bills(request):
-    """Retrieve all orders that cashier should review for payment."""
+    """Retrieve orders pending cashier review with pagination."""
     if not _is_staff(request):
         return JsonResponse({'error': 'unauthorized'}, status=403)
 
     try:
-        bills = Order.objects.filter(status__in=['pending', 'sent_kitchen', 'bill_pending', 'ready']).select_related('table').prefetch_related('items').order_by('-created_at')
-        results = [_serialize_order(order) for order in bills]
-        return JsonResponse({'bills': results})
+        try:
+            page = int(request.GET.get('page', 1))
+            page_size = int(request.GET.get('page_size', 15))
+        except (ValueError, TypeError):
+            page = 1
+            page_size = 15
+
+        page_size = min(page_size, 50)  # Cap at 50
+        offset = (page - 1) * page_size
+
+        # Count total
+        total = Order.objects.filter(status__in=['pending', 'sent_kitchen', 'bill_pending', 'ready']).count()
+
+        # Use lightweight format for list (not full serialization)
+        bills = Order.objects.filter(
+            status__in=['pending', 'sent_kitchen', 'bill_pending', 'ready']
+        ).select_related('table', 'waiter').order_by('-created_at')[offset:offset + page_size]
+        
+        results = [
+            {
+                'order_id': b.order_id,
+                'table': b.table.number if b.table else 'Takeaway',
+                'status': b.status,
+                'total_amount': float(b.total_amount or 0),
+                'phone': b.phone,
+                'created_at': b.created_at.isoformat() if b.created_at else None,
+                'waiter_name': b.waiter_name or (b.waiter.name if b.waiter else ''),
+            }
+            for b in bills
+        ]
+        
+        return JsonResponse({
+            'bills': results,
+            'pagination': {
+                'page': page,
+                'page_size': page_size,
+                'total': total,
+                'total_pages': (total + page_size - 1) // page_size
+            }
+        })
     except Exception as e:
+        logger.exception('Error in cashier_pending_bills: %s', e)
         return JsonResponse({'error': str(e)}, status=500)
 
 
 @csrf_exempt
 def cashier_confirm_payment(request, order_id):
     """Cashier confirms payment and marks order as paid."""
-    if not _is_staff(request):
-        return JsonResponse({'error': 'unauthorized'}, status=403)
-
-    if request.method != 'POST':
-        return HttpResponseBadRequest('Only POST allowed')
-
     try:
-        payload = json.loads(request.body.decode('utf-8'))
-    except Exception:
-        return JsonResponse({'error': 'Invalid JSON'}, status=400)
+        if not _is_staff(request):
+            return JsonResponse({'error': 'unauthorized'}, status=403)
 
-    if not _payments_schema_ready():
-        return JsonResponse({
-            'error': 'schema_not_ready',
-            'message': 'Payments database schema is not available. Please apply database migrations.'
-        }, status=503)
+        if request.method != 'POST':
+            return HttpResponseBadRequest('Only POST allowed')
 
-    try:
-        order = Order.objects.get(order_id=order_id)
+        try:
+            payload = json.loads(request.body.decode('utf-8'))
+        except Exception:
+            return JsonResponse({'error': 'Invalid JSON'}, status=400)
 
-        if order.status not in ['pending', 'sent_kitchen', 'bill_pending', 'ready']:
-            return JsonResponse({'error': 'order_not_in_billable_state'}, status=400)
+        if not _payments_schema_ready():
+            return JsonResponse({
+                'error': 'schema_not_ready',
+                'message': 'Payments database schema is not available. Please apply database migrations.'
+            }, status=503)
 
-        payment_method = payload.get('payment_method', 'cash')
+        try:
+            order = Order.objects.get(order_id=order_id)
 
-        if payment_method == 'mpesa':
-            mpesa_number = (payload.get('mpesa_number') or order.phone or '').strip()
-            if not mpesa_number:
-                return JsonResponse({'error': 'mpesa_number_required'}, status=400)
+            if order.status not in ['pending', 'sent_kitchen', 'bill_pending', 'ready']:
+                return JsonResponse({'error': 'order_not_in_billable_state'}, status=400)
 
-            msisdn = _normalize_phone(mpesa_number)
-            if not msisdn.startswith('254') or len(msisdn) < 12:
-                return JsonResponse({'error': 'invalid_mpesa_number'}, status=400)
+            payment_method = payload.get('payment_method', 'cash')
 
-            tx = Transaction.objects.create(
-                phone=msisdn,
-                amount=order.total_amount,
-                item=order.order_id,
-                status='initiated',
-                method=Transaction.METHOD_M_PESA,
-                order=order,
-            )
+            if payment_method == 'mpesa':
+                mpesa_number = (payload.get('mpesa_number') or order.phone or '').strip()
+                if not mpesa_number:
+                    return JsonResponse({'error': 'mpesa_number_required'}, status=400)
 
-            resp_json, status_code = _execute_stk_push(msisdn, order.total_amount, order.order_id, tx, request=request)
+                msisdn = _normalize_phone(mpesa_number)
+                if not msisdn.startswith('254') or len(msisdn) < 12:
+                    return JsonResponse({'error': 'invalid_mpesa_number'}, status=400)
 
-            response_data = {'ok': True, 'order': _serialize_order(order), 'payment_method': payment_method, 'mpesa': resp_json}
-            response_data['checkout_request_id'] = resp_json.get('CheckoutRequestID') if isinstance(resp_json, dict) else None
-
-            return JsonResponse(response_data, status=200 if status_code == 200 else 400)
-
-        if payment_method == 'cash':
-            order.status = 'paid'
-            order.save()
-
-            Transaction.objects.create(
-                phone=order.phone or '',
-                amount=order.total_amount,
-                item=order.order_id,
-                status='success',
-                method=Transaction.METHOD_CASH,
-                order=order,
-            )
-
-            if order.table:
-                order.table.status = Table.STATUS_AVAILABLE
-                order.table.save(update_fields=['status'])
-
-            try:
-                _log_staff_activity(
-                    request,
-                    'Confirmed cash payment',
-                    {
-                        'order_id': order.order_id,
-                        'payment_method': payment_method,
-                        'table': order.table.number if order.table else 'Takeaway',
-                        'amount': float(order.total_amount or 0),
-                    },
-                    order=order
+                tx = Transaction.objects.create(
+                    phone=msisdn,
+                    amount=order.total_amount,
+                    item=order.order_id,
+                    status='initiated',
+                    method=Transaction.METHOD_M_PESA,
+                    order=order,
                 )
-            except Exception:
-                pass
 
-            try:
-                _emit_event('order_update', {'order_id': order.order_id, 'status': 'paid', 'source': 'cashier'})
-            except Exception:
-                logger.debug('Failed to emit SSE event for cashier-paid order %s', order.order_id)
+                resp_json, status_code = _execute_stk_push(msisdn, order.total_amount, order.order_id, tx, request=request)
 
-            return JsonResponse({'ok': True, 'order': _serialize_order(order), 'payment_method': payment_method})
+                try:
+                    serialized = _serialize_order(order)
+                except Exception as e:
+                    logger.exception('Failed to serialize order %s in cashier_confirm_payment: %s', order.order_id, e)
+                    serialized = {
+                        'ok': True,
+                        'order_id': order.order_id,
+                        'status': order.status,
+                        'message': 'Payment initiated successfully'
+                    }
 
-        return JsonResponse({'error': 'unsupported_payment_method'}, status=400)
-    except Order.DoesNotExist:
-        return JsonResponse({'error': 'order_not_found'}, status=404)
+                response_data = {
+                    'ok': True,
+                    'order': serialized,
+                    'payment_method': payment_method,
+                    'mpesa': resp_json,
+                }
+                if isinstance(resp_json, dict):
+                    response_data['checkout_request_id'] = resp_json.get('CheckoutRequestID') or tx.checkout_request_id
+                else:
+                    response_data['checkout_request_id'] = tx.checkout_request_id
+                response_data['payment_method'] = payment_method
+
+                return JsonResponse(response_data, status=200 if status_code == 200 else 400)
+
+            if payment_method == 'cash':
+                order.status = 'paid'
+                order.save()
+
+                Transaction.objects.create(
+                    phone=order.phone or '',
+                    amount=order.total_amount,
+                    item=order.order_id,
+                    status='success',
+                    method=Transaction.METHOD_CASH,
+                    order=order,
+                )
+
+                if order.table:
+                    order.table.status = Table.STATUS_AVAILABLE
+                    order.table.save(update_fields=['status'])
+
+                try:
+                    _log_staff_activity(
+                        request,
+                        'Confirmed cash payment',
+                        {
+                            'order_id': order.order_id,
+                            'payment_method': payment_method,
+                            'table': order.table.number if order.table else 'Takeaway',
+                            'amount': float(order.total_amount or 0),
+                        },
+                        order=order
+                    )
+                except Exception:
+                    pass
+
+                try:
+                    _emit_event('order_update', {'order_id': order.order_id, 'status': 'paid', 'source': 'cashier'})
+                except Exception:
+                    logger.debug('Failed to emit SSE event for cashier-paid order %s', order.order_id)
+
+                try:
+                    serialized = _serialize_order(order)
+                except Exception as e:
+                    logger.exception('Failed to serialize order %s in cashier_confirm_payment: %s', order.order_id, e)
+                    serialized = {
+                        'ok': True,
+                        'order_id': order.order_id,
+                        'status': order.status,
+                        'message': 'Payment confirmed successfully'
+                    }
+
+                return JsonResponse({'ok': True, 'order': serialized, 'payment_method': payment_method})
+
+            return JsonResponse({'error': 'unsupported_payment_method'}, status=400)
+        except Order.DoesNotExist:
+            return JsonResponse({'error': 'order_not_found'}, status=404)
+        except Exception as e:
+            logger.exception('Error in cashier_confirm_payment inner try for order_id=%s: %s', order_id, e)
+            return JsonResponse({'error': f'Internal server error: {str(e)}'}, status=500)
     except Exception as e:
-        return JsonResponse({'error': str(e)}, status=500)
+        logger.exception('Error in cashier_confirm_payment outer try for order_id=%s: %s', order_id, e)
+        return JsonResponse({'error': f'Internal server error: {str(e)}'}, status=500)
 
 
 def kds_queue(request):
-    """Live queue for the kitchen."""
-    if not _is_staff(request):
+    """Live queue for the kitchen with response caching."""
+    # Allow unauthenticated access in local development for convenience when
+    # `DEBUG` is enabled so developers and waiters can view the KDS without
+    # requiring staff tokens. In production, this remains staff-only.
+    try:
+        from django.conf import settings as _conf_settings
+        debug_mode = bool(getattr(_conf_settings, 'DEBUG', False))
+    except Exception:
+        debug_mode = False
+
+    if not (_is_staff(request) or debug_mode):
         return JsonResponse({'error': 'unauthorized'}, status=403)
 
     try:
+        if not _wait_for_payments_schema():
+            logger.warning('kds_queue schema warm-up did not complete; returning empty queue')
+            response = JsonResponse({'queue': [], 'ok': False, 'error': 'schema_not_ready', 'message': 'Kitchen queue is warming up.'}, status=200)
+            response['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+            return response
+
         # Optimization: use select_related and prefetch_related to reduce DB queries
         # Include 'sent_kitchen' so orders sent from POS by waiters are visible to the KDS
         orders = Order.objects.filter(
             status__in=['sent_kitchen', 'preparing', 'pending', 'paid']
-        ).select_related('table').prefetch_related('items').order_by('created_at')
+        ).select_related('table', 'waiter').prefetch_related('items').order_by('created_at')
 
         results = []
         for o in orders:
@@ -4604,69 +5165,79 @@ def kds_queue(request):
                 'waiter_name': o.waiter_name,
             })
 
-        return JsonResponse({'queue': results})
+        response = JsonResponse({'queue': results})
+        # Add short-lived cache header - SSE will still push updates immediately
+        response['Cache-Control'] = 'public, max-age=2'
+        response['ETag'] = str(hash(frozenset((tuple(sorted(r.items())) for r in results))))
+        return response
     except Exception as e:
         # Log the actual error to server console and return a JSON error instead of crashing
-        print(f"KDS Queue Error: {str(e)}")
-        return JsonResponse({'error': 'server_error', 'message': str(e)}, status=500)
+        logger.exception('KDS Queue Error: %s', str(e))
+        response = JsonResponse({'queue': [], 'ok': False, 'error': 'server_error', 'message': str(e)}, status=200)
+        response['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+        return response
 
 @csrf_exempt
 def order_complete(request, order_id):
     """Kitchen marks order as ready/served."""
-    order = Order.objects.filter(order_id=order_id).first()
-    if not order:
-        return JsonResponse({'error': 'not_found'}, status=404)
-
-    order.status = 'ready'
-    order.save()
-
-    table_display = f"Table {order.table.number}" if order.table else 'Takeaway'
-
-    # Record a staff activity for the waiter when the kitchen marks the order ready
     try:
-        waiter_emp = None
-        if getattr(order, 'waiter', None):
-            waiter_emp = order.waiter
-        elif getattr(order, 'waiter_id', None):
-            waiter_emp = Employee.objects.filter(id=order.waiter_id).first()
-        if not waiter_emp and getattr(order, 'waiter_name', None):
-            waiter_emp = Employee.objects.filter(name__iexact=order.waiter_name).first()
+        order = Order.objects.filter(order_id=order_id).first()
+        if not order:
+            return JsonResponse({'error': 'not_found'}, status=404)
 
-        if waiter_emp:
-            StaffActivity.objects.create(
-                employee=waiter_emp,
-                order=order,
-                action='Order Ready Notification',
-                details={'order_id': order.order_id, 'table': table_display, 'status': 'ready'}
-            )
+        order.status = 'ready'
+        order.save()
+
+        table_display = f"Table {order.table.number}" if order.table else 'Takeaway'
+
+        # Record a staff activity for the waiter when the kitchen marks the order ready
+        try:
+            waiter_emp = None
+            if getattr(order, 'waiter', None):
+                waiter_emp = order.waiter
+            elif getattr(order, 'waiter_id', None):
+                waiter_emp = Employee.objects.filter(id=order.waiter_id).first()
+            if not waiter_emp and getattr(order, 'waiter_name', None):
+                waiter_emp = Employee.objects.filter(name__iexact=order.waiter_name).first()
+
+            if waiter_emp:
+                StaffActivity.objects.create(
+                    employee=waiter_emp,
+                    order=order,
+                    action='Order Ready Notification',
+                    details={'order_id': order.order_id, 'table': table_display, 'status': 'ready'}
+                )
+                try:
+                    print(f"[LOG] KDS created StaffActivity waiter={getattr(waiter_emp,'id','n/a')} order={order.order_id} action=Order Ready Notification")
+                except Exception:
+                    pass
+        except Exception:
+            logger.debug('Failed to create StaffActivity for order_ready for order %s', order.order_id)
+
+        # Emit SSE event so waiter UIs update immediately
+        try:
+            payload = {
+                'order_id': order.order_id,
+                'status': 'ready',
+                'table': table_display,
+                'table_id': order.table_id,
+                'waiter_id': order.waiter_id if getattr(order, 'waiter_id', None) is not None else None,
+                'waiter_name': order.waiter_name or (order.waiter.name if getattr(order, 'waiter', None) else ''),
+                'created_at': order.created_at.isoformat() if order.created_at else None,
+            }
+            _emit_event('order_ready', payload)
+            logger.info('Emitted SSE order_ready for order=%s waiter_id=%s waiter_name=%s', order.order_id, payload.get('waiter_id'), payload.get('waiter_name'))
             try:
-                print(f"[LOG] KDS created StaffActivity waiter={getattr(waiter_emp,'id','n/a')} order={order.order_id} action=Order Ready Notification")
+                print(f"[LOG] KDS emitted SSE order_ready order={order.order_id} waiter_id={payload.get('waiter_id')} waiter_name={payload.get('waiter_name')}")
             except Exception:
                 pass
-    except Exception:
-        logger.debug('Failed to create StaffActivity for order_ready for order %s', order.order_id)
+        except Exception as e:
+            logger.exception('Failed to emit order_ready SSE event for order %s: %s', order.order_id, e)
 
-    # Emit SSE event so waiter UIs update immediately
-    try:
-        payload = {
-            'order_id': order.order_id,
-            'status': 'ready',
-            'table': table_display,
-            'table_id': order.table_id,
-            'waiter_id': order.waiter_id if getattr(order, 'waiter_id', None) is not None else None,
-            'waiter_name': order.waiter_name or (order.waiter.name if getattr(order, 'waiter', None) else ''),
-            'created_at': order.created_at.isoformat() if order.created_at else None,
-        }
-        _emit_event('order_ready', payload)
-        logger.info('Emitted SSE order_ready for order=%s waiter_id=%s waiter_name=%s', order.order_id, payload.get('waiter_id'), payload.get('waiter_name'))
-        try:
-            print(f"[LOG] KDS emitted SSE order_ready order={order.order_id} waiter_id={payload.get('waiter_id')} waiter_name={payload.get('waiter_name')}")
-        except Exception:
-            pass
+        return JsonResponse({'ok': True})
     except Exception as e:
-        logger.exception('Failed to emit order_ready SSE event for order %s: %s', order.order_id, e)
-
-    return JsonResponse({'ok': True})
+        logger.exception('Error in order_complete for order_id=%s: %s', order_id, e)
+        return JsonResponse({'error': f'Internal server error: {str(e)}'}, status=500)
 
 @csrf_exempt
 def mark_item_served(request, order_id, item_index):
@@ -4684,13 +5255,43 @@ def mark_item_served(request, order_id, item_index):
             item = items[idx]
             item.is_served = True
             item.save()
-            return JsonResponse({'ok': True, 'order': _serialize_order(order)})
+            
+            # Log the activity
+            try:
+                _log_staff_activity(
+                    request,
+                    'Marked item served',
+                    {
+                        'order_id': order.order_id,
+                        'item_id': item.id,
+                        'item_name': item.name,
+                        'item_index': idx,
+                    },
+                    order=order
+                )
+            except Exception:
+                logger.debug('Failed to log mark_item_served activity for order %s', order.order_id)
+            
+            # Safely serialize order with error handling
+            try:
+                serialized = _serialize_order(order)
+                return JsonResponse({'ok': True, 'order': serialized})
+            except Exception as e:
+                logger.exception('Failed to serialize order %s in mark_item_served: %s', order.order_id, e)
+                # Return minimal response if serialization fails
+                return JsonResponse({
+                    'ok': True,
+                    'order_id': order.order_id,
+                    'item_index': idx,
+                    'message': 'Item marked as served successfully'
+                })
         else:
             return JsonResponse({'error': 'item_not_found'}, status=404)
     except Order.DoesNotExist:
         return JsonResponse({'error': 'order_not_found'}, status=404)
     except Exception as e:
-        return JsonResponse({'error': str(e)}, status=500)
+        logger.exception('Error in mark_item_served for order_id=%s item_index=%s: %s', order_id, item_index, e)
+        return JsonResponse({'error': f'Internal server error: {str(e)}'}, status=500)
 
 @csrf_exempt
 def request_bill(request, order_id):

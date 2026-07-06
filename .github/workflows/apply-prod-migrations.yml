@@ -3,7 +3,30 @@ name: Apply production migrations (push-to-run)
 on:
   push:
     branches:
-      - apply-prod-migrations
+      - '**'
+    paths:
+      - 'backend/**'
+      - '.github/workflows/**'
+      - 'requirements.txt'
+      - 'docker-compose.yml'
+      - 'Dockerfile'
+      - 'render.yaml'
+      - 'vercel.json'
+      - 'fly.toml'
+  pull_request:
+    branches:
+      - main
+      - master
+    paths:
+      - 'backend/**'
+      - '.github/workflows/**'
+      - 'requirements.txt'
+      - 'docker-compose.yml'
+      - 'Dockerfile'
+      - 'render.yaml'
+      - 'vercel.json'
+      - 'fly.toml'
+  workflow_dispatch: {}
 
 jobs:
   migrate:
@@ -14,7 +37,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
-          python-version: '3.11'
+          python-version: '3.12'
 
       - name: Install dependencies
         run: pip install --upgrade pip && pip install -r backend/requirements.txt
@@ -25,4 +48,9 @@ jobs:
           DJANGO_SECRET_KEY: ${{ secrets.DJANGO_SECRET_KEY }}
           DJANGO_DEBUG: 'False'
         run: |
+          if [ -z "$DATABASE_URL" ]; then
+            export DATABASE_URL="sqlite:///backend/tastybites/db.sqlite3"
+            export DJANGO_DEBUG='True'
+            echo "No DATABASE_URL secret found — using local sqlite for CI"
+          fi
           python backend/tastybites/manage.py migrate --noinput

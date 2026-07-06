@@ -9,6 +9,28 @@ from django.core.management import call_command
 app = None
 handler = None
 
+def _bootstrap_admin_user():
+    username = os.environ.get('DJANGO_ADMIN_USERNAME', '').strip()
+    password = os.environ.get('DJANGO_ADMIN_PASSWORD', '')
+    if not username or not password:
+        return
+
+    try:
+        from payments.models import AdminUser
+        user = AdminUser.objects.filter(username=username).first()
+        if user:
+            user.set_password(password)
+            user.save()
+            print('[Django Setup] Reset admin user password for:', username)
+        else:
+            user = AdminUser(username=username)
+            user.set_password(password)
+            user.save()
+            print('[Django Setup] Created production admin user:', username)
+    except Exception as exc:
+        print('[Django Setup] Failed to bootstrap admin user:', exc)
+        traceback.print_exc()
+
 try:
     # Path to the directory containing manage.py
     # Since this file is in 'api/', we go up one level to root, then into 'tastybites'
@@ -44,6 +66,12 @@ try:
         print('[Django Setup] Repaired payments database schema if needed')
     except Exception as exc:
         print('[Django Setup] Schema repair failed (continuing):', exc)
+        traceback.print_exc()
+
+    try:
+        _bootstrap_admin_user()
+    except Exception as exc:
+        print('[Django Setup] Admin bootstrap failed (continuing):', exc)
         traceback.print_exc()
 
     # Import the WSGI application even if migrations had issues.

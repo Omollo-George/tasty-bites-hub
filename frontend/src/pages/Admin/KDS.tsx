@@ -39,6 +39,10 @@ const AdminKDS: React.FC = () => {
   const authToken = getAuthToken(); // Get the appropriate token
   
   const canAccess = isAdmin || ['chef', 'manager'].includes(staffRole || '');
+  
+  // Debounce timer for SSE-triggered fetches
+  const sseDebounceRef = React.useRef<NodeJS.Timeout | null>(null);
+  const lastFetchRef = React.useRef<number>(0);
 
   const fetchQueue = async (initial = false) => {
     if (initial) {
@@ -51,13 +55,24 @@ const AdminKDS: React.FC = () => {
           'Content-Type': 'application/json'
         }
       });
+      
+      // Check content type first
+      const contentType = res.headers.get("content-type") || '';
+      if (!contentType.includes("application/json")) {
+        throw new Error(`Server Error (${res.status}): Invalid response format. Expected JSON.`);
+      }
+      
       if (!res.ok) {
-        if (!res.headers.get("content-type")?.includes("application/json")) throw new Error(`Server Error (${res.status}): Invalid response format.`);
-        const errorData = await res.json();
-        throw new Error(errorData.error || 'Failed to fetch KDS queue');
+        try {
+          const errorData = await res.json();
+          throw new Error(errorData.error || `Server Error (${res.status}): Failed to fetch KDS queue`);
+        } catch (e: any) {
+          throw new Error(`Server Error (${res.status}): ${e.message || 'Failed to fetch KDS queue'}`);
+        }
       }
       const data = await res.json();
       setQueue(data.queue || []);
+      lastFetchRef.current = Date.now();
     } catch (error) {
       console.error("Error fetching KDS queue:", error);
       toast({
@@ -70,16 +85,36 @@ const AdminKDS: React.FC = () => {
     }
   };
 
+  // Debounced fetch for SSE events to prevent hammering the server
+  const debouncedFetchQueue = React.useCallback(() => {
+    // Clear existing timer
+    if (sseDebounceRef.current) {
+      clearTimeout(sseDebounceRef.current);
+    }
+    
+    // Don't fetch more than once per 2 seconds
+    const timeSinceLastFetch = Date.now() - lastFetchRef.current;
+    if (timeSinceLastFetch < 2000) {
+      sseDebounceRef.current = setTimeout(() => {
+        fetchQueue();
+      }, 2000 - timeSinceLastFetch);
+    } else {
+      fetchQueue();
+    }
+  }, []);
+
   useEffect(() => {
     fetchQueue(true);
-    const interval = setInterval(fetchQueue, 5000); // Refresh every 5 seconds
+    // Reduce polling from 5s to 15s since we have SSE for real-time updates
+    const interval = setInterval(fetchQueue, 15000);
 
     const eventSource = new EventSource('/payments/stream/');
     eventSource.onmessage = (event) => {
       try {
         const payload = JSON.parse(event.data);
-        if (payload?.type && ['order_update', 'new_order', 'order_ready'].includes(payload.type)) {
-          fetchQueue();
+        if (payload?.type && ['order_update', 'new_order', 'order_ready', 'order_complete'].includes(payload.type)) {
+          // Use debounced fetch to avoid excessive requests
+          debouncedFetchQueue();
         }
       } catch (err) {
         // ignore parse errors
@@ -91,9 +126,12 @@ const AdminKDS: React.FC = () => {
 
     return () => {
       clearInterval(interval);
+      if (sseDebounceRef.current) {
+        clearTimeout(sseDebounceRef.current);
+      }
       eventSource.close();
     };
-  }, [authToken]);
+  }, [authToken, debouncedFetchQueue]);
 
   if (!canAccess && !loading) {
     toast({ title: "Access Denied", description: "You don't have permission to view the Kitchen Display System.", variant: "destructive" });
@@ -110,11 +148,22 @@ const AdminKDS: React.FC = () => {
         },
         body: JSON.stringify({ status: newStatus })
       });
-      if (!res.ok) {
-        if (!res.headers.get("content-type")?.includes("application/json")) throw new Error(`Server Error (${res.status}): Invalid response format.`);
-        const errorData = await res.json();
-        throw new Error(errorData.error || 'Failed to update order status');
+      
+      // Check content type first
+      const contentType = res.headers.get("content-type") || '';
+      if (!contentType.includes("application/json")) {
+        throw new Error(`Server Error (${res.status}): Invalid response format. Expected JSON.`);
       }
+      
+      if (!res.ok) {
+        try {
+          const errorData = await res.json();
+          throw new Error(errorData.error || `Server Error (${res.status}): Failed to update order status`);
+        } catch (e: any) {
+          throw new Error(`Server Error (${res.status}): ${e.message || 'Failed to update order status'}`);
+        }
+      }
+      
       toast({
         title: "Order Updated",
         description: `Order ${orderId} status changed to ${newStatus}.`,

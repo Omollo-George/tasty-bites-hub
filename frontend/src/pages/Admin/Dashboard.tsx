@@ -5,13 +5,13 @@ import AdminHeader from '@/components/AdminHeader'
 
 const Dashboard: React.FC = () => {
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col md:flex-row overflow-x-hidden">
+    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col lg:flex-row overflow-x-hidden">
       <AdminSidebar />
-      <div className="flex-1 flex flex-col">
-        <div className="pt-8 px-4 sm:px-6 md:px-10 max-w-7xl w-full mx-auto">
+      <div className="flex-1 flex flex-col min-w-0">
+        <div className="w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-4 sm:pt-6 lg:pt-8">
           <AdminHeader />
         </div>
-        <div className="flex-1 p-4 sm:p-6 md:p-10 max-w-7xl w-full mx-auto">
+        <div className="flex-1 w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-6 sm:pb-8 lg:pb-10">
           <Outlet />
         </div>
       </div>

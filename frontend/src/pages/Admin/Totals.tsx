@@ -33,7 +33,7 @@ const Totals: React.FC = () => {
   const revenue = paidOrders.reduce((s, o) => s + ((o.total_amount || 0)), 0) * rate
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-6 mb-8">
       <div className="bg-slate-800 p-6 rounded-xl shadow-card border border-slate-700">
         <p className="text-sm text-slate-400">Total Orders</p>
         <h3 className="text-3xl font-display text-slate-100">{totalOrders}</h3>

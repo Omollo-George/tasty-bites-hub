@@ -1,0 +1,23 @@
+[build]
+  # Build in the frontend directory using the Vite build script
+  base = "frontend"
+  command = "npm run build"
+  publish = "dist"
+
+[context.production.environment]
+  # Set these in Netlify UI instead of committing secrets here.
+  # VITE_API_URL should point to your deployed backend (e.g. https://api.example.com)
+  # VITE_SUPABASE_URL should point to your Supabase project URL.
+  # VITE_SUPABASE_KEY should be your Supabase publishable key.
+  # VITE_BASE can be used to change the built base path if needed.
+  # VITE_API_URL = "https://your-backend.example.com"
+  # VITE_SUPABASE_URL = "https://rtlrypyuthywjdhvsuud.supabase.co"
+  # VITE_SUPABASE_KEY = "sb_publishable_33DXdyWWsJJSuNx1h6ReUg_V7wxWyv_"
+
+[[redirects]]
+  # Optional: proxy /api requests to your backend when serving from Netlify
+  # Disable or remove if you prefer the frontend to call your backend directly.
+  from = "/api/*"
+  to = ":splat"
+  status = 200
+  force = true

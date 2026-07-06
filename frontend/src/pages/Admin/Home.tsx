@@ -70,12 +70,12 @@ const AdminHome: React.FC = () => {
 
   return (
     <>
-      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between mb-8">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between mb-8">
         <div>
           <p className="text-sm text-slate-400">Overview</p>
-          <h2 className="font-display text-3xl text-slate-100">Admin Dashboard</h2>
+          <h2 className="font-display text-2xl sm:text-3xl text-slate-100">Admin Dashboard</h2>
         </div>
-        <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
+        <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap w-full lg:w-auto">
           <button
             onClick={downloadBackup}
             className="w-full sm:w-auto rounded-xl border border-blue-900/50 bg-slate-900 px-4 py-2.5 text-sm font-semibold text-blue-400 transition-all hover:bg-blue-950/30 shadow-lg shadow-blue-900/10 flex items-center justify-center gap-2"

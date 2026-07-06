@@ -31,7 +31,31 @@ const AdminSettings: React.FC = () => {
   const [sessionClearPassword, setSessionClearPassword] = useState('')
   const [sessionClearMessage, setSessionClearMessage] = useState('')
   const [sessionClearLoading, setSessionClearLoading] = useState(false)
+  const passwordRequirements = [
+    {
+      label: 'At least 8 characters',
+      validate: (value: string) => value.length >= 8,
+    },
+    {
+      label: 'One uppercase letter',
+      validate: (value: string) => /[A-Z]/.test(value),
+    },
+    {
+      label: 'One lowercase letter',
+      validate: (value: string) => /[a-z]/.test(value),
+    },
+    {
+      label: 'One number',
+      validate: (value: string) => /[0-9]/.test(value),
+    },
+    {
+      label: 'One special character (!@#$%^&*)',
+      validate: (value: string) => /[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]/.test(value),
+    },
+  ]
   const navigate = useNavigate()
+  const passwordIssues = passwordRequirements.filter((requirement) => !requirement.validate(newPassword))
+  const isPasswordValid = newPassword.length > 0 && passwordIssues.length === 0
 
   useEffect(() => {
     const token = getAdminToken()
@@ -101,6 +125,12 @@ const AdminSettings: React.FC = () => {
 
     setUserMessage('')
     setSaving(true)
+
+    if (!newPassword.trim() || !isPasswordValid) {
+      setUserMessage('Password must be at least 8 characters and include uppercase, lowercase, number, and special character.')
+      setSaving(false)
+      return
+    }
 
     try {
       try {
@@ -275,10 +305,24 @@ const AdminSettings: React.FC = () => {
               placeholder="••••••••"
             />
           </label>
+          <div className="space-y-2 text-sm text-slate-400">
+            {passwordRequirements.map((requirement) => {
+              const valid = requirement.validate(newPassword)
+              return (
+                <div
+                  key={requirement.label}
+                  className={`flex items-center gap-2 ${valid ? 'text-emerald-400' : 'text-slate-500'}`}
+                >
+                  <span>{valid ? '✔' : '•'}</span>
+                  <span>{requirement.label}</span>
+                </div>
+              )
+            })}
+          </div>
           <button
             type="button"
             onClick={addUser}
-            disabled={saving || !newUsername || !newPassword}
+            disabled={saving || !newUsername.trim() || !newPassword || !isPasswordValid}
             className="inline-flex items-center justify-center rounded-full bg-orange-500 px-5 py-3 text-white font-semibold hover:bg-orange-600 disabled:opacity-50"
           >
             {saving ? 'Processing…' : 'Create Admin User'}

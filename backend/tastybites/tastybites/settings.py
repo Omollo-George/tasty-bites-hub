@@ -210,7 +210,7 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/6.0/howto/static-files/
 
-STATIC_URL = 'static/'
+STATIC_URL = '/static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 MEDIA_URL = '/media/'
@@ -224,8 +224,28 @@ else:
     if not os.access(str(MEDIA_ROOT), os.W_OK):
         MEDIA_ROOT = Path(os.environ.get('TMPDIR', os.environ.get('TMP', '/tmp'))) / 'media'
         MEDIA_ROOT.mkdir(parents=True, exist_ok=True)
+
+# Optional S3-compatible storage (Supabase Storage or any S3 endpoint)
+# To enable, set `AWS_STORAGE_BUCKET_NAME` and the relevant AWS_* env vars on your host.
+if os.environ.get('AWS_STORAGE_BUCKET_NAME'):
+    # Use django-storages S3 backend
+    DEFAULT_FILE_STORAGE = 'storages.backends.s3boto3.S3Boto3Storage'
+    AWS_S3_ENDPOINT_URL = os.environ.get('AWS_S3_ENDPOINT_URL') or os.environ.get('SUPABASE_S3_ENDPOINT') or os.environ.get('SUPABASE_URL')
+    AWS_ACCESS_KEY_ID = os.environ.get('AWS_ACCESS_KEY_ID') or os.environ.get('SUPABASE_KEY') or os.environ.get('SUPABASE_ANON_KEY')
+    AWS_SECRET_ACCESS_KEY = os.environ.get('AWS_SECRET_ACCESS_KEY') or os.environ.get('SUPABASE_SECRET')
+    AWS_STORAGE_BUCKET_NAME = os.environ.get('AWS_STORAGE_BUCKET_NAME')
+    AWS_S3_REGION_NAME = os.environ.get('AWS_S3_REGION_NAME') or None
+    AWS_S3_SIGNATURE_VERSION = os.environ.get('AWS_S3_SIGNATURE_VERSION', 's3v4')
+    AWS_S3_CUSTOM_DOMAIN = os.environ.get('AWS_S3_CUSTOM_DOMAIN') or None
+    # If a custom domain isn't provided, attempt to build a media URL using the endpoint
+    if AWS_S3_CUSTOM_DOMAIN:
+        MEDIA_URL = f'https://{AWS_S3_CUSTOM_DOMAIN}/'
+    elif AWS_S3_ENDPOINT_URL and AWS_STORAGE_BUCKET_NAME:
+        MEDIA_URL = f'{AWS_S3_ENDPOINT_URL.rstrip("/")}/{AWS_STORAGE_BUCKET_NAME}/'
+    else:
+        MEDIA_URL = os.environ.get('MEDIA_URL', '/media/')
 # M-Pesa Daraja API Config
-MPESA_ENVIRONMENT = 'sandbox'
+MPESA_ENVIRONMENT = os.environ.get('MPESA_ENVIRONMENT', 'sandbox')
 
 MPESA_CONSUMER_KEY = os.environ.get('MPESA_CONSUMER_KEY', 'kwCn9sG1ySJ6NWcHduKaXOAnNu6DkbwI9v096WTmsHG8XMVq')
 MPESA_CONSUMER_SECRET = os.environ.get('MPESA_CONSUMER_SECRET', '6PcwyDSoN8R4V4VxVUAP9uGCGYi9Cm67xDRUtiUCA0RzXvXIE8FtCEc1zYPOnZXu')
@@ -267,8 +287,8 @@ MPESA_CALLBACK_URL = os.environ.get(
     'MPESA_CALLBACK_URL',
     # IMPORTANT: Safaricom requires a public HTTPS callback.
     # For local/dev without ngrok/webhook, set MPESA_CALLBACK_URL to a reachable HTTPS URL.
-    # Leaving it blank will cause stk_push to fail with invalid_callback.
-    'https://example.ngrok-free.app/api/payments/callback/'
+    # Leaving it blank will allow the request-based callback URL builder to construct the correct hosted URL.
+    ''
 )
 
 
