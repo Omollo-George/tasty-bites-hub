@@ -3,7 +3,8 @@
 # Use a Debian-based Node image to avoid native/binary issues that occur on Alpine
 FROM node:20-bullseye-slim AS frontend-build
 ARG VITE_API_URL=http://localhost:8000
-ARG VITE_BASE=/
+ARG VITE_BASE=/static/
+ENV NODE_ENV=production
 ENV VITE_API_URL=${VITE_API_URL}
 ENV VITE_BASE=${VITE_BASE}
 WORKDIR /app/frontend
@@ -48,7 +49,7 @@ RUN python manage.py migrate --run-syncdb --noinput || true
 COPY --from=frontend-build /app/frontend/dist ./staticfiles
 
 # Collect static so Whitenoise can serve it
-RUN python manage.py collectstatic --noinput || true
+RUN python manage.py collectstatic --noinput
 
 ENV PORT=8000
 EXPOSE 8000
