@@ -37,7 +37,9 @@ COPY backend/tastybites .
 # Copy diagnostic scripts so they're available in the container
 COPY scripts ./scripts
 
-# Run migrations during build (will use SQLite during build, actual DB on deployment)
+# Run migrations during build with build-only debug mode.
+# This avoids requiring DATABASE_URL when collectstatic is executed inside the image build.
+ENV DJANGO_DEBUG=True
 RUN python manage.py migrate --run-syncdb --noinput || true
 
 # Copy built frontend files into Django staticfiles directory
@@ -45,6 +47,9 @@ COPY --from=frontend-build /app/frontend/dist ./staticfiles
 
 # Collect static so Whitenoise can serve it
 RUN python manage.py collectstatic --noinput
+
+# Restore production default for the final image
+ENV DJANGO_DEBUG=False
 
 ENV PORT=8000
 EXPOSE 8000
