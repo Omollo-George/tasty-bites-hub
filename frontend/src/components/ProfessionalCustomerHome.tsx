@@ -9,9 +9,8 @@ import CartModal from './CartModal';
 import { formatCurrency } from './utils'; 
 import Receipt from './Receipt';
 import heroImage from "@/assets/hero-food.jpg";
-import About from './About';
-import Contact from './Contact';
 import Footer from './Footer';
+import ContactDrawer from './ContactDrawer';
 
 interface RawMenuItem { // Fixed: Renamed from MenuItem to RawMenuItem
   id: number;
@@ -396,7 +395,7 @@ const ProfessionalCustomerHome = () => {
             name: item.name,
             price: item.price,
             quantity: 1,
-            image_url: item.image_url,
+            image_url: item.image_url || item.image || '',
             is_available: item.is_available,
           },
         ];
@@ -558,6 +557,7 @@ const ProfessionalCustomerHome = () => {
               }
 
               const trackingId = Math.floor(10000 + Math.random() * 90000).toString();
+              window.localStorage.setItem('tastyBites.lastOrderId', trackingId);
               
               const orderDetails: OrderReceipt = {
                 order_id: trackingId,
@@ -652,6 +652,9 @@ const ProfessionalCustomerHome = () => {
 
   return (
     <div className="min-h-screen bg-[#0a0a0b] text-white selection:bg-orange-500/30">
+      {/* Contact Drawer */}
+      <ContactDrawer />
+
       {/* Global Page Background Image */}
       <div className="fixed inset-0 z-0 pointer-events-none overflow-hidden">
         <img src={heroImage} alt="" className="w-full h-full object-cover opacity-[0.03] scale-110 blur-[2px]" />
@@ -696,7 +699,7 @@ const ProfessionalCustomerHome = () => {
           >
             TASTY BITES<span className="text-orange-500 text-sm not-italic ml-1">PRO</span>
           </h2>
-          <div className="hidden md:flex items-center gap-8 text-sm font-medium text-gray-400">
+          <div className="hidden md:flex items-center gap-4 text-sm font-medium text-gray-400">
             <button 
               onClick={() => data && scrollToCategory(data.categories[0])}
               className="hover:text-white transition-colors"
@@ -704,14 +707,6 @@ const ProfessionalCustomerHome = () => {
               Menu
             </button>
             <button onClick={handleRewardsClick} className="hover:text-white transition-colors">Rewards</button>
-            <a href="#about" className="hover:text-white transition-colors">
-              About
-            </a>
-            <a href="#contact" className="hover:text-white transition-colors">
-              Contact
-            </a>
-            <Link to="/track" className="hover:text-white transition-colors">My Orders</Link>
-            <Link to="/account" className="hover:text-white transition-colors">Account</Link>
           </div>
           <button onClick={() => setShowCartModal(true)} className="p-3 rounded-full bg-white/5 border border-white/10 backdrop-blur-md hover:bg-orange-500 transition-all group relative">
             <ShoppingCart size={20} className="group-hover:scale-110 transition-transform" />
@@ -926,8 +921,6 @@ const ProfessionalCustomerHome = () => {
       </main>
 
       <div className={`transition-opacity duration-500 ${showCartModal || lastOrder ? 'opacity-20 pointer-events-none' : 'opacity-100'}`}>
-        <About />
-        <Contact />
         <Footer />
       </div>
     </div>

@@ -1,10 +1,11 @@
 import React, { useState } from 'react'
 import Totals from './Totals'
 import { getApiUrl } from '@/lib/api'
-import { Download } from 'lucide-react'
+import { Download, ChevronDown } from 'lucide-react'
 
 const AdminHome: React.FC = () => {
   const [loading, setLoading] = useState(false)
+  const [isOpen, setIsOpen] = useState(true)
 
   const downloadBackup = async () => {
     try {
@@ -93,7 +94,24 @@ const AdminHome: React.FC = () => {
         </div>
       </div>
 
-      <Totals />
+      <div className="overflow-hidden rounded-3xl border border-slate-800 bg-slate-900 shadow-xl shadow-slate-950/40">
+        <button
+          type="button"
+          onClick={() => setIsOpen(!isOpen)}
+          className="w-full flex items-center justify-between gap-4 px-6 py-5 text-left text-slate-100 hover:bg-slate-800"
+        >
+          <div>
+            <p className="text-sm uppercase tracking-[0.3em] text-slate-500">Admin Snapshot</p>
+            <h3 className="text-xl font-semibold text-white">Dashboard Metrics</h3>
+          </div>
+          <ChevronDown className={`h-5 w-5 text-slate-400 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
+        </button>
+        {isOpen && (
+          <div className="px-6 pb-6 pt-0">
+            <Totals />
+          </div>
+        )}
+      </div>
     </>
   )
 }

@@ -67,6 +67,7 @@ urlpatterns = [
     path('cashier/pending-bills/', views.cashier_pending_bills, name='cashier_pending_bills'),
     path('cashier/confirm-payment/<str:order_id>/', views.cashier_confirm_payment, name='cashier_confirm_payment'),
     path('kds/queue/', views.kds_queue, name='kds_queue'),
+    path('kds/claim/<str:order_id>/', views.claim_order, name='claim_order'),
     path('kds/complete/<str:order_id>/', views.order_complete, name='order_complete'),
     path('pos/split-payment/', views.initiate_split_payment, name='initiate_split_payment'),
     path('pos/receipt/<str:order_id>/', views.get_receipt_data, name='get_receipt_data'),

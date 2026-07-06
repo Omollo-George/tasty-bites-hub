@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;500;600;700&family=Playfair+Display:wght@700;900&family=Poppins:wght@300;400;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;500;600;700&family=Playfair+Display:wght@700;900&family=Poppins:wght@300;400;600&family=Bakery&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -88,7 +88,7 @@
 
   body {
     @apply bg-background text-foreground;
-    font-family: 'Inter', sans-serif;
+    font-family: 'Bakery', 'Inter', sans-serif;
     min-height: 100%;
     -webkit-text-size-adjust: 100%;
     margin: 0;
@@ -100,19 +100,23 @@
     @apply border-border;
   }
 
-  h1, h2, h3 {
-    font-family: 'Bebas Neue', sans-serif;
+  h1, h2, h3, h4, h5, h6, strong, b {
+    font-family: 'Bakery', serif;
     letter-spacing: 0.02em;
   }
 
   /* Hero font utilities */
   .font-hero {
-    font-family: 'Playfair Display', serif;
+    font-family: 'Bakery', serif;
   }
 
   .font-hero-sub {
-    font-family: 'Poppins', sans-serif;
+    font-family: 'Bakery', 'Poppins', sans-serif;
     font-weight: 500;
+  }
+
+  .font-bakery {
+    font-family: 'Bakery', serif;
   }
 }
 
@@ -214,4 +218,30 @@
   .shadow-card {
     box-shadow: var(--shadow-card);
   }
+}
+
+/* Custom scrollbar styling for better UX */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(71, 85, 105, 0.3);
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(249, 115, 22, 0.6);
+  border-radius: 4px;
+  transition: background 0.3s ease;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(249, 115, 22, 0.9);
+}
+
+/* Firefox scrollbar */
+* {
+  scrollbar-color: rgba(249, 115, 22, 0.6) rgba(71, 85, 105, 0.3);
+  scrollbar-width: thin;
 }

@@ -347,18 +347,18 @@ const OrdersTable: React.FC = () => {
       {/* Orders Table */}
       {loading ? <p className="text-slate-400">Loading...</p> : (
       <div className="overflow-x-auto rounded-3xl border border-slate-700 bg-slate-900/10">
-        <table className="min-w-[820px] w-full text-left">
+        <table className="w-full table-auto text-left">
 
           <thead>
             <tr className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
-              <th className="py-2" style={{width: '28%'}}>Order</th>
-            <th style={{width: '20%'}}>Items</th>
-            <th style={{width: '8%'}}>Qty</th>
-            <th style={{width: '14%'}}>Amount</th>
-            <th style={{width: '15%'}}>Phone</th>
-              <th style={{width: '12%'}}>Waiter</th>
-              <th style={{width: '15%'}}>Status</th>
-          </tr>
+              <th className="py-2 w-[28%] min-w-[120px]">Order</th>
+              <th className="w-[20%] min-w-[110px]">Items</th>
+              <th className="w-[8%] min-w-[64px]">Qty</th>
+              <th className="w-[14%] min-w-[110px]">Amount</th>
+              <th className="w-[15%] min-w-[120px]">Phone</th>
+              <th className="w-[12%] min-w-[120px]">Waiter</th>
+              <th className="w-[15%] min-w-[120px]">Status</th>
+            </tr>
         </thead>
         <tbody>
           {orders.map((s) => (

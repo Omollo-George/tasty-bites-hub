@@ -512,7 +512,7 @@ const AdminEmployees: React.FC = () => {
 
       <div className="bg-slate-700 rounded-2xl shadow-sm overflow-hidden border border-slate-600/60">
         <div className="overflow-x-auto">
-          <table className="min-w-[900px] w-full text-left border-collapse text-sm">
+          <table className="w-full table-auto text-left border-collapse text-sm">
             <thead className="bg-slate-800">
               <tr className="text-xs font-bold uppercase tracking-wider text-slate-400 border-b border-slate-700">
                 <th className="px-3 py-3 w-10">

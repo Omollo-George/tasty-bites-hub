@@ -117,7 +117,7 @@ const AdminStock: React.FC = () => {
     total: menuItems.length,
     lowStock: menuItems.filter(i => i.stock_level > 0 && i.stock_level < i.min_stock_level).length,
     outOfStock: menuItems.filter(i => i.stock_level === 0).length,
-    totalValue: menuItems.reduce((acc, i) => acc + (i.price * i.stock_level), 0)
+    totalValue: menuItems.reduce((acc, i) => acc + (i.food_cost * i.stock_level), 0)
   }), [menuItems]);
 
   const handleSaveStock = async () => {
@@ -235,38 +235,42 @@ const AdminStock: React.FC = () => {
       {/* Most Consumed Stock */}
       <section className="bg-slate-900 border border-slate-800 p-6 rounded-2xl shadow-sm">
         <h3 className="font-semibold text-xl text-slate-100 mb-4">Most Consumed Stock (Sold)</h3>
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-4">
-          {mostConsumed.length === 0 ? (
-            <p className="text-slate-400 text-sm">No sales data yet.</p>
-          ) : (
-            mostConsumed.map((item, idx) => (
-              <div key={idx} className="bg-slate-800 p-4 rounded-xl border border-slate-700">
-                <p className="text-xs text-slate-400 font-bold uppercase truncate">{item.name}</p>
-                <p className="text-2xl font-display text-orange-500">{item.total_quantity}</p>
-              </div>
-            ))
-          )}
+        <div className="pb-2">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {mostConsumed.length === 0 ? (
+              <p className="text-slate-400 text-sm">No sales data yet.</p>
+            ) : (
+              mostConsumed.map((item, idx) => (
+                <div key={idx} className="bg-slate-800 p-4 rounded-xl border border-slate-700 min-w-0">
+                  <p className="text-xs text-slate-400 font-bold uppercase truncate whitespace-nowrap">{item.name}</p>
+                  <p className="text-2xl font-display text-orange-500">{item.total_quantity}</p>
+                </div>
+              ))
+            )}
+          </div>
         </div>
       </section>
 
       {/* Stats Overview */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {[
-          { label: 'Total Items', value: stats.total, icon: CheckCircle, color: 'text-blue-400', bg: 'bg-blue-500/10' },
-          { label: 'Low Stock', value: stats.lowStock, icon: AlertTriangle, color: 'text-amber-400', bg: 'bg-amber-500/10' },
-          { label: 'Out of Stock', value: stats.outOfStock, icon: XCircle, color: 'text-red-400', bg: 'bg-red-500/10' },
-          { label: 'Inventory Value', value: `KES ${stats.totalValue.toLocaleString()}`, icon: Filter, color: 'text-emerald-400', bg: 'bg-emerald-500/10' },
-        ].map((stat, idx) => (
-          <div key={idx} className="bg-slate-900 border border-slate-800 p-5 rounded-2xl flex items-center gap-4">
-            <div className={`p-3 rounded-xl ${stat.bg} ${stat.color}`}>
-              <stat.icon size={24} />
+      <div className="pb-2">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          {[
+            { label: 'Total Items', value: stats.total, icon: CheckCircle, color: 'text-blue-400', bg: 'bg-blue-500/10' },
+            { label: 'Low Stock', value: stats.lowStock, icon: AlertTriangle, color: 'text-amber-400', bg: 'bg-amber-500/10' },
+            { label: 'Out of Stock', value: stats.outOfStock, icon: XCircle, color: 'text-red-400', bg: 'bg-red-500/10' },
+            { label: 'Inventory Value', value: `KES ${stats.totalValue.toLocaleString()}`, icon: Filter, color: 'text-emerald-400', bg: 'bg-emerald-500/10' },
+          ].map((stat, idx) => (
+            <div key={idx} className="bg-slate-900 border border-slate-800 p-5 rounded-2xl flex flex-col sm:flex-row sm:items-center gap-4">
+              <div className={`p-3 rounded-xl ${stat.bg} ${stat.color}`}>
+                <stat.icon size={24} />
+              </div>
+              <div>
+                <p className="text-sm text-slate-400 font-medium">{stat.label}</p>
+                <p className="text-xl font-bold text-slate-100">{stat.value}</p>
+              </div>
             </div>
-            <div>
-              <p className="text-sm text-slate-400 font-medium">{stat.label}</p>
-              <p className="text-xl font-bold text-slate-100">{stat.value}</p>
-            </div>
-          </div>
-        ))}
+          ))}
+        </div>
       </div>
 
       {/* Filters Bar */}
@@ -304,7 +308,7 @@ const AdminStock: React.FC = () => {
 
       <div className="bg-slate-900 rounded-2xl shadow-sm overflow-hidden border border-slate-800">
         <div className="overflow-x-auto">
-          <table className="min-w-[780px] w-full text-left border-collapse">
+          <table className="w-full table-auto text-left border-collapse min-w-0">
             <thead className="bg-slate-950">
               <tr className="text-[11px] font-bold uppercase tracking-wider text-slate-400 border-b border-slate-800">
                 <th className="px-6 py-4">Item Details</th>
@@ -329,9 +333,9 @@ const AdminStock: React.FC = () => {
                   <tr key={item.id} className="hover:bg-slate-800/50 transition-colors group">
                     <td className="px-6 py-4">
                       <div>
-                        <p className="font-semibold text-slate-100">{item.name}</p>
-                        <p className="text-[10px] font-mono text-slate-500 tracking-tight">{item.sku}</p>
-                        <p className="text-xs text-slate-500 mt-0.5">{item.category}</p>
+                        <p className="font-semibold text-slate-100 truncate whitespace-nowrap">{item.name}</p>
+                        <p className="text-[10px] font-mono text-slate-500 tracking-tight truncate whitespace-nowrap">{item.sku}</p>
+                        <p className="text-xs text-slate-500 mt-0.5 truncate whitespace-nowrap">{item.category}</p>
                       </div>
                     </td>
                     <td className="px-6 py-4 text-center">
@@ -381,6 +385,7 @@ const AdminStock: React.FC = () => {
           </tbody>
         </table>
       </div>
+      </div> {/* Closes table wrapper */}
       </div> {/* Closes space-y-6 content div */}
 
       {/* Add Stock Modal */}
@@ -401,7 +406,7 @@ const AdminStock: React.FC = () => {
                   {menuItems.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
                 </select>
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="grid grid-cols-[repeat(auto-fit,minmax(240px,1fr))] gap-4">
                 <div>
                   <label className="block text-sm font-medium text-slate-400 mb-1">Quantity</label>
                   <input
@@ -450,7 +455,7 @@ const AdminStock: React.FC = () => {
           <div className="bg-slate-900 p-8 rounded-2xl shadow-lg border border-slate-800 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
           <h3 className="font-display text-2xl text-slate-100 mb-4">Edit Item Details</h3>
           <div className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-[repeat(auto-fit,minmax(240px,1fr))] gap-4">
               <div>
                 <label className="block text-sm font-medium text-slate-400 mb-1">Item Name</label>
                 <input
@@ -470,7 +475,7 @@ const AdminStock: React.FC = () => {
                 />
               </div>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-[repeat(auto-fit,minmax(240px,1fr))] gap-4">
               <label className="block text-sm font-medium text-slate-400 mb-1">Current Stock Level</label>
               <input
                 type="number"
@@ -490,7 +495,7 @@ const AdminStock: React.FC = () => {
                 className="w-full rounded-xl border border-slate-700 bg-slate-800 px-4 py-2.5 text-sm text-slate-100 outline-none focus:ring-2 focus:ring-orange-500/20"
               />
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-[repeat(auto-fit,minmax(240px,1fr))] gap-4">
               <div>
                 <label className="block text-sm font-medium text-slate-400 mb-1">Price (KES)</label>
                 <input
@@ -545,10 +550,10 @@ const AdminStock: React.FC = () => {
             </div>
           </div>
         </div>
-        </div>
+      </div>
       )}
-    </div>
-    </React.Fragment>
+
+  </React.Fragment>
   );
 };
 

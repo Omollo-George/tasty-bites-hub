@@ -16,26 +16,29 @@ import { getApiUrl } from '@/lib/api'
 import { getAdminToken } from '@/lib/admin-session'
 import { getCachedReports, clearReportsCache, preloadReportsData } from '@/lib/admin-data-cache'
 
+type ItemReport = {
+  name: string
+  quantity: number
+  revenue: number
+  food_cost: number
+  stock_cost: number
+  profit: number
+  stock_profit: number
+  food_cost_ratio: number
+  stock_cost_ratio: number
+}
+
 type ReportData = {
   range_days: number
   range_label: string
-  best_items: Array<{ name: string; quantity: number; revenue: number; food_cost: number }>
-  worst_items: Array<{ name: string; quantity: number; revenue: number; food_cost: number }>
+  best_items: ItemReport[]
+  worst_items: ItemReport[]
   hourly_sales: Array<{ hour: number; label: string; orders: number; revenue: number }>
   best_waiter?: { waiter_id?: number | null; waiter_name: string; orders: number }
   least_waiter?: { waiter_id?: number | null; waiter_name: string; orders: number }
   wastage?: WastageLog[]
   miscellaneous?: MiscExpenseLog[]
-  totals: { revenue: number; cash_revenue: number; mpesa_revenue: number; food_cost: number; wastage: number; miscellaneous: number; profit: number; food_cost_ratio: number }
-}
-
-type WastageLog = {
-  id: number
-  item_name: string
-  quantity: number
-  reason: string
-  cost: number
-  created_at: string
+  totals: { revenue: number; cash_revenue: number; mpesa_revenue: number; food_cost: number; sold_stock_cost: number; stock_inventory_cost: number; wastage: number; miscellaneous: number; profit: number; food_cost_ratio: number }
 }
 
 type MiscExpenseLog = {
@@ -47,9 +50,9 @@ type MiscExpenseLog = {
 }
 
 const ReportCard = ({ label, value, valueClassName }: { label: string; value: string; valueClassName?: string }) => (
-  <div className="bg-slate-800 p-5 rounded-xl shadow-card border border-slate-700 min-h-[140px] flex flex-col justify-between overflow-hidden">
-    <p className="text-sm text-slate-400 break-words">{label}</p>
-    <h3 className={`text-2xl sm:text-3xl font-display font-semibold leading-tight break-words whitespace-normal ${valueClassName || 'text-slate-100'}`}>{value}</h3>
+  <div className="bg-slate-800 p-4 rounded-xl shadow-card border border-slate-700 min-h-[120px] flex flex-col justify-between overflow-hidden min-w-0 w-full">
+    <p className="text-xs sm:text-sm text-slate-400 truncate whitespace-nowrap">{label}</p>
+    <h3 className={`text-lg sm:text-xl lg:text-2xl font-display font-semibold leading-snug truncate whitespace-nowrap ${valueClassName || 'text-slate-100'}`}>{value}</h3>
   </div>
 )
 
@@ -498,7 +501,7 @@ const Reports: React.FC = () => {
         </div>
 
         <div className="grid gap-3">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-slate-900 p-5 rounded-xl border border-slate-700">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 bg-slate-900 p-5 rounded-xl border border-slate-700">
             <div>
               <label className="text-sm text-slate-400">Period Type</label>
               <select
@@ -549,7 +552,7 @@ const Reports: React.FC = () => {
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <button
               type="button"
               onClick={fetchReport}
@@ -573,20 +576,23 @@ const Reports: React.FC = () => {
         Report for: <span className="font-semibold text-slate-100">{data?.range_label || 'Loading...'}</span>
       </p>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-6">
-        <ReportCard label="Revenue" value={data ? new Intl.NumberFormat('en-KE', { style: 'currency', currency: 'KES' }).format(data.totals.revenue) : 'Loading...'} />
-        <ReportCard label="Cash Revenue" value={data ? new Intl.NumberFormat('en-KE', { style: 'currency', currency: 'KES' }).format(data.totals.cash_revenue) : 'Loading...'} />
-        <ReportCard label="M-Pesa Revenue" value={data ? new Intl.NumberFormat('en-KE', { style: 'currency', currency: 'KES' }).format(data.totals.mpesa_revenue) : 'Loading...'} />
-        <ReportCard label="Food Cost" value={data ? new Intl.NumberFormat('en-KE', { style: 'currency', currency: 'KES' }).format(data.totals.food_cost) : 'Loading...'} />
-        <ReportCard label="Misc Expenses" value={data ? new Intl.NumberFormat('en-KE', { style: 'currency', currency: 'KES' }).format(data.totals.miscellaneous) : 'Loading...'} />
-        <ReportCard 
-          label="Profit" 
-          value={data ? new Intl.NumberFormat('en-KE', { style: 'currency', currency: 'KES' }).format(data.totals.profit) : 'Loading...'} 
-          valueClassName={data ? (data.totals.profit >= 0 ? 'text-green-400' : 'text-red-400') : ''}
-        />
+      <div className="pb-2">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          <ReportCard label="Revenue" value={data ? new Intl.NumberFormat('en-KE', { style: 'currency', currency: 'KES' }).format(data.totals.revenue) : 'Loading...'} />
+          <ReportCard label="Cash Revenue" value={data ? new Intl.NumberFormat('en-KE', { style: 'currency', currency: 'KES' }).format(data.totals.cash_revenue) : 'Loading...'} />
+          <ReportCard label="M-Pesa Revenue" value={data ? new Intl.NumberFormat('en-KE', { style: 'currency', currency: 'KES' }).format(data.totals.mpesa_revenue) : 'Loading...'} />
+          <ReportCard label="Food Cost" value={data ? new Intl.NumberFormat('en-KE', { style: 'currency', currency: 'KES' }).format(data.totals.food_cost) : 'Loading...'} />
+          <ReportCard label="Inventory Value" value={data ? new Intl.NumberFormat('en-KE', { style: 'currency', currency: 'KES' }).format(data.totals.stock_inventory_cost) : 'Loading...'} />
+          <ReportCard label="Misc Expenses" value={data ? new Intl.NumberFormat('en-KE', { style: 'currency', currency: 'KES' }).format(data.totals.miscellaneous) : 'Loading...'} />
+          <ReportCard 
+            label="Profit" 
+            value={data ? new Intl.NumberFormat('en-KE', { style: 'currency', currency: 'KES' }).format(data.totals.profit) : 'Loading...'} 
+            valueClassName={data ? (data.totals.profit >= 0 ? 'text-green-400' : 'text-red-400') : ''}
+          />
+        </div>
       </div>
       {data?.best_waiter || data?.least_waiter ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
           {data?.best_waiter ? (
             <div className="bg-slate-800 p-5 rounded-xl shadow-card border border-slate-700">
               <p className="text-sm text-slate-400">Top Waiter</p>
@@ -645,8 +651,13 @@ const Reports: React.FC = () => {
               <p className="text-lg font-semibold text-slate-100">{data ? new Intl.NumberFormat('en-KE', { style: 'currency', currency: 'KES' }).format(data.totals.revenue) : '-'}</p>
             </div>
             <div className="rounded-xl border border-slate-700 p-4">
-              <p className="text-sm text-slate-400">Food Cost</p>
-              <p className="text-lg font-semibold text-slate-100">{data ? new Intl.NumberFormat('en-KE', { style: 'currency', currency: 'KES' }).format(data.totals.food_cost) : '-'}</p>
+              <p className="text-sm text-slate-400">Food Cost (Used in Orders)</p>
+              <p className="text-lg font-semibold text-orange-400">{data ? new Intl.NumberFormat('en-KE', { style: 'currency', currency: 'KES' }).format(data.totals.food_cost) : '-'}</p>
+              <p className="text-xs text-slate-500 mt-1">Cost Ratio: {data?.totals.food_cost_ratio}%</p>
+            </div>
+            <div className="rounded-xl border border-slate-700 p-4">
+              <p className="text-sm text-slate-400">Stock Cost (Menu Inventory)</p>
+              <p className="text-lg font-semibold text-cyan-400">{data ? new Intl.NumberFormat('en-KE', { style: 'currency', currency: 'KES' }).format(data.totals.sold_stock_cost) : '-'}</p>
             </div>
             <div className="rounded-xl border border-slate-700 p-4">
               <p className="text-sm text-slate-400">Total Logged Cost</p>
@@ -675,7 +686,19 @@ const Reports: React.FC = () => {
             {(data?.best_items || []).map((item) => (
               <div key={item.name} className="rounded-xl border border-slate-700 p-4">
                 <p className="font-semibold text-slate-100">{item.name}</p>
-                <p className="text-sm text-slate-400">Qty: {item.quantity} • Revenue: {new Intl.NumberFormat('en-KE', { style: 'currency', currency: 'KES' }).format(item.revenue)}</p>
+                <p className="text-sm text-slate-400">Qty: {item.quantity}</p>
+                <p className="text-sm text-slate-400">Revenue: {new Intl.NumberFormat('en-KE', { style: 'currency', currency: 'KES' }).format(item.revenue)}</p>
+                <div className="mt-2 grid gap-2">
+                  <p className="text-sm text-slate-300">
+                    <span className="text-slate-400">Food Cost:</span> {new Intl.NumberFormat('en-KE', { style: 'currency', currency: 'KES' }).format(item.food_cost)} 
+                    <span className="ml-2 text-orange-400">({item.food_cost_ratio}%)</span>
+                  </p>
+                  <p className="text-sm text-slate-300">
+                    <span className="text-slate-400">Stock Cost:</span> {new Intl.NumberFormat('en-KE', { style: 'currency', currency: 'KES' }).format(item.stock_cost)} 
+                    <span className="ml-2 text-cyan-400">({item.stock_cost_ratio}%)</span>
+                  </p>
+                </div>
+                <p className="text-sm text-green-400 mt-2">Profit: {new Intl.NumberFormat('en-KE', { style: 'currency', currency: 'KES' }).format(item.profit)}</p>
               </div>
             ))}
           </div>
@@ -687,7 +710,19 @@ const Reports: React.FC = () => {
             {(data?.worst_items || []).map((item) => (
               <div key={item.name} className="rounded-xl border border-slate-700 p-4">
                 <p className="font-semibold text-slate-100">{item.name}</p>
-                <p className="text-sm text-slate-400">Qty: {item.quantity} • Revenue: {new Intl.NumberFormat('en-KE', { style: 'currency', currency: 'KES' }).format(item.revenue)}</p>
+                <p className="text-sm text-slate-400">Qty: {item.quantity}</p>
+                <p className="text-sm text-slate-400">Revenue: {new Intl.NumberFormat('en-KE', { style: 'currency', currency: 'KES' }).format(item.revenue)}</p>
+                <div className="mt-2 grid gap-2">
+                  <p className="text-sm text-slate-300">
+                    <span className="text-slate-400">Food Cost:</span> {new Intl.NumberFormat('en-KE', { style: 'currency', currency: 'KES' }).format(item.food_cost)} 
+                    <span className="ml-2 text-orange-400">({item.food_cost_ratio}%)</span>
+                  </p>
+                  <p className="text-sm text-slate-300">
+                    <span className="text-slate-400">Stock Cost:</span> {new Intl.NumberFormat('en-KE', { style: 'currency', currency: 'KES' }).format(item.stock_cost)} 
+                    <span className="ml-2 text-cyan-400">({item.stock_cost_ratio}%)</span>
+                  </p>
+                </div>
+                <p className="text-sm text-green-400 mt-2">Profit: {new Intl.NumberFormat('en-KE', { style: 'currency', currency: 'KES' }).format(item.profit)}</p>
               </div>
             ))}
           </div>

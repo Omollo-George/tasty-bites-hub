@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Link, Navigate } from 'react-router-dom';
 import AdminHeader from '@/components/AdminHeader';
 import { getAdminToken, isAdminSessionValid } from '@/lib/admin-session';
-import { getStaffRole } from '@/lib/staff-session';
+import { getStaffId, getStaffName, getStaffRole } from '@/lib/staff-session';
 import { getApiUrl } from '@/lib/api';
 import { getAuthToken, getAuthHeaders } from '@/lib/auth';
 import { useToast } from '@/hooks/use-toast';
@@ -27,6 +27,9 @@ interface Order {
   split_count: number;
   waiter_name?: string;
   waiter_id?: string | number;
+  claimed_by_id?: string | number | null;
+  claimed_by_name?: string;
+  claimed_at?: string | null;
 }
 
 const AdminKDS: React.FC = () => {
@@ -38,6 +41,8 @@ const AdminKDS: React.FC = () => {
   const staffRole = getStaffRole()?.toLowerCase();
   const authToken = getAuthToken(); // Get the appropriate token
   
+  const staffName = getStaffName() || '';
+  const staffId = getStaffId();
   const canAccess = isAdmin || ['chef', 'manager'].includes(staffRole || '');
   
   // Debounce timer for SSE-triggered fetches
@@ -112,7 +117,7 @@ const AdminKDS: React.FC = () => {
     eventSource.onmessage = (event) => {
       try {
         const payload = JSON.parse(event.data);
-        if (payload?.type && ['order_update', 'new_order', 'order_ready', 'order_complete'].includes(payload.type)) {
+        if (payload?.type && ['order_update', 'new_order', 'order_ready', 'order_complete', 'order_claimed'].includes(payload.type)) {
           // Use debounced fetch to avoid excessive requests
           debouncedFetchQueue();
         }
@@ -137,6 +142,35 @@ const AdminKDS: React.FC = () => {
     toast({ title: "Access Denied", description: "You don't have permission to view the Kitchen Display System.", variant: "destructive" });
     return <Navigate to="/staff" replace />;
   }
+
+  const claimOrder = async (orderId: string) => {
+    try {
+      const res = await fetch(getApiUrl(`/payments/kds/claim/${encodeURIComponent(orderId)}/`), {
+        method: 'POST',
+        headers: {
+          ...getAuthHeaders(),
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error ? `${data.error}: ${data.claimed_by_name || ''}` : 'Failed to claim order');
+      }
+      toast({
+        title: 'Order Claimed',
+        description: `You have claimed order ${orderId}.`,
+      });
+      fetchQueue();
+    } catch (error) {
+      console.error('Error claiming order:', error);
+      toast({
+        title: 'Claim Failed',
+        description: error instanceof Error ? error.message : 'Could not claim this order.',
+        variant: 'destructive',
+      });
+    }
+  };
 
   const updateOrderStatus = async (orderId: string, newStatus: string) => {
     try {
@@ -191,7 +225,7 @@ const AdminKDS: React.FC = () => {
           <h1 className="font-display text-3xl text-slate-100">Kitchen Display System</h1>
         </div>
       </div>
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
         {queue.length === 0 ? (
           <div className="lg:col-span-3 text-center text-slate-500 py-12">
             <p className="text-xl">No active orders in the queue.</p>
@@ -217,6 +251,12 @@ const AdminKDS: React.FC = () => {
                     Waiter: {order.waiter_name || 'Unknown'}{order.waiter_id ? ` (ID: ${order.waiter_id})` : ''}
                   </p>
                 )}
+                {order.claimed_by_name && (
+                  <p className="text-sm text-slate-300 mb-4">
+                    Claimed by: <span className="font-semibold text-orange-300">{order.claimed_by_name}</span>
+                    {String(order.claimed_by_id) === staffId ? ' (you)' : ''}
+                  </p>
+                )}
                 <ul className="space-y-2 mb-6">
                   {order.items.map((item, idx) => (
                     <li key={idx} className="flex justify-between items-center text-slate-200">
@@ -231,10 +271,24 @@ const AdminKDS: React.FC = () => {
                   ))}
                 </ul>
               </div>
-              <div className="mt-4">
+              <div className="mt-4 space-y-3">
+                {!order.claimed_by_id && (
+                  <button
+                    onClick={() => claimOrder(order.order_id)}
+                    className="w-full bg-slate-700 text-slate-100 px-6 py-3 rounded-full font-semibold hover:bg-slate-600 transition-colors"
+                  >
+                    Claim Order
+                  </button>
+                )}
+                {order.claimed_by_id && String(order.claimed_by_id) !== staffId && (
+                  <div className="rounded-xl border border-amber-500/20 bg-amber-500/10 p-3 text-amber-100 text-sm">
+                    This order is already claimed by another chef.
+                  </div>
+                )}
                 <button
                   onClick={() => updateOrderStatus(order.order_id, 'ready')}
-                  className="w-full bg-[#d69e2e] text-[#1a365d] px-6 py-3 rounded-full font-semibold hover:bg-[#d69e2e]/80 transition-colors"
+                  disabled={Boolean(order.claimed_by_id && String(order.claimed_by_id) !== staffId)}
+                  className="w-full bg-[#d69e2e] text-[#1a365d] px-6 py-3 rounded-full font-semibold hover:bg-[#d69e2e]/80 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Mark Ready
                 </button>

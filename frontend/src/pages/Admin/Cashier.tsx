@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { getStaffName } from '@/lib/staff-session';
+import { getStaffName, clearStaffSession } from '@/lib/staff-session';
 import { getApiUrl } from '@/lib/api';
 import { getAuthHeaders } from '@/lib/auth';
 import { normalizePhoneNumber, isValidMpesaPhone } from '@/lib/utils';
@@ -27,6 +27,8 @@ interface PendingBill {
   phone?: string;
   items: OrderItem[];
   total_amount: number;
+  amount_paid?: number;
+  outstanding_amount?: number;
   status: string;
   waiter_name: string;
   waiter_id?: string | number;
@@ -51,7 +53,6 @@ export default function Cashier() {
   const staffName = getStaffName();
 
   const [bills, setBills] = useState<PendingBill[]>([]);
-  const totalOutstanding = bills.reduce((s, b) => s + Number(b.total_amount || 0), 0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedBill, setSelectedBill] = useState<PendingBill | null>(null);
@@ -122,7 +123,8 @@ export default function Cashier() {
       }
 
       const data = await response.json();
-      setBills(data.bills || []);
+      const pendingBills = data.bills || [];
+      setBills(pendingBills);
       setError(null);
     } catch (err: any) {
       setError(err.message || 'Failed to fetch pending bills')
@@ -249,10 +251,8 @@ export default function Cashier() {
                   console.error('Failed to fetch order after MPESA success:', err);
                 }
 
-                // Optimistically remove cleared bill locally then refresh
-                setBills(prev => prev.filter(b => b.order_id !== order.order_id));
                 setSelectedBill(null);
-                fetchPendingBills();
+                await fetchPendingBills();
                 setProcessingPayment(false);
                 return;
               }
@@ -312,10 +312,8 @@ export default function Cashier() {
       });
 
       setShowReceipt(true);
-      // Optimistically remove cleared bill from local list and refresh
-      setBills(prev => prev.filter(b => b.order_id !== order.order_id));
       setSelectedBill(null);
-      setTimeout(() => fetchPendingBills(), 1000);
+      await fetchPendingBills();
     } catch (err: any) {
       const errorMsg = err.message || 'An error occurred while processing payment';
       if (method === 'mpesa') {
@@ -417,10 +415,13 @@ export default function Cashier() {
             </p>
           </div>
           <Button
-            onClick={() => navigate('/staff')}
+            onClick={() => {
+              clearStaffSession();
+              navigate('/staff/login');
+            }}
             className="bg-orange-500 text-slate-950 hover:bg-orange-400 shadow-lg shadow-orange-500/20"
           >
-            Back to Dashboard
+            Log out
           </Button>
         </div>
 
@@ -445,10 +446,6 @@ export default function Cashier() {
             <div className="text-sm text-slate-500">
               Updated every few seconds for real-time cashier processing.
             </div>
-            <div className="text-right">
-              <p className="text-xs text-slate-400">Total Outstanding</p>
-              <p className="text-2xl font-semibold text-amber-400">KES {totalOutstanding.toFixed(2)}</p>
-            </div>
           </div>
 
           {loading ? (
@@ -460,8 +457,11 @@ export default function Cashier() {
               No pending bills at this time.
             </div>
           ) : (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-              {bills.map((bill) => (
+            <div className="grid grid-cols-1 gap-5 lg:grid-cols-2 xl:grid-cols-3">
+              {bills.map((bill) => {
+                const safeItems = Array.isArray(bill.items) ? bill.items : [];
+                const orderTypeLabel = bill.order_type === 'table' ? 'Dine-in' : (bill.order_type === 'delivery' ? 'Delivery' : 'Takeaway');
+                return (
                 <div key={bill.order_id} className="rounded-3xl border border-slate-800 bg-slate-950 p-6 shadow-xl shadow-slate-950/20 hover:border-slate-700 transition-all">
                   <div className="flex items-start justify-between gap-4">
                     <div>
@@ -471,20 +471,22 @@ export default function Cashier() {
                     <span className={`rounded-full px-3 py-1 text-xs font-semibold ${
                       bill.order_type === 'table' ? 'bg-sky-500/10 text-sky-300' : 'bg-orange-500/10 text-orange-300'
                     }`}>
-                      {bill.order_type === 'table' ? 'Dine-in' : 'Takeaway'}
+                      {orderTypeLabel}
                     </span>
                   </div>
                   <div className="mt-5 space-y-4">
                     <div className="rounded-3xl border border-slate-800 bg-slate-900 p-4">
                       <div className="flex items-center justify-between text-slate-400 text-sm mb-3">
                         <span>Items</span>
-                        <span>{bill.items.length} total</span>
+                        <span>{safeItems.length} total</span>
                       </div>
                       <div className="space-y-2">
-                        {bill.items.map((item, idx) => (
+                        {safeItems.length === 0 ? (
+                          <p className="text-sm text-slate-500">No item details available yet.</p>
+                        ) : safeItems.map((item, idx) => (
                           <div key={idx} className="flex justify-between text-slate-200 text-sm">
-                            <span>{(item.item_name || item.name)} x{item.quantity}</span>
-                            <span>KES {(item.subtotal || ((item.unit_price || item.price) * item.quantity)).toFixed(2)}</span>
+                            <span>{(item.item_name || item.name || 'Item')} x{item.quantity || 1}</span>
+                            <span>KES {((item.subtotal ?? ((item.unit_price || item.price || 0) * (item.quantity || 1))) || 0).toFixed(2)}</span>
                           </div>
                         ))}
                       </div>
@@ -508,7 +510,8 @@ export default function Cashier() {
                     </div>
                   </div>
                 </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </section>

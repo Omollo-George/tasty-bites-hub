@@ -9,8 +9,8 @@ from django.utils import timezone
 from decimal import Decimal
 from datetime import timedelta
 
-from .views import admin_signin, _payments_schema_ready, order_detail, order_status_update, report_summary, create_pos_order, menu_items
-from .models import AdminToken, AdminUser, Employee, MiscellaneousExpense, Order, OrderItem, StaffToken, Transaction, WastageLog
+from .views import admin_signin, _build_mpesa_callback_url, _payments_schema_ready, order_detail, order_status_update, report_summary, create_pos_order, menu_items, cashier_pending_bills, claim_order
+from .models import AdminToken, AdminUser, Employee, MiscellaneousExpense, Order, OrderItem, StaffActivity, StaffToken, Transaction, WastageLog
 
 
 class SchemaCleanupMixin:
@@ -22,6 +22,14 @@ class SchemaCleanupMixin:
 class AdminSigninSchemaTests(SchemaCleanupMixin, TestCase):
     def setUp(self):
         self.factory = RequestFactory()
+
+    def test_builds_mpesa_callback_url_for_api_endpoint(self):
+        request = self.factory.get('/checkout', secure=True)
+        request.META['HTTP_HOST'] = 'example.com'
+
+        callback_url = _build_mpesa_callback_url(request)
+
+        self.assertEqual(callback_url, 'https://example.com/api/payments/callback/')
 
     def test_create_pos_order_retries_when_schema_check_is_transient(self):
         employee = Employee.objects.create(name='Waiter Mike', role='Waiter', status='on_shift')
@@ -279,6 +287,53 @@ class AdminSigninSchemaTests(SchemaCleanupMixin, TestCase):
         self.assertEqual(payload['order_id'], order.order_id)
         self.assertTrue(Transaction.objects.filter(order=order, status='success').exists())
 
+    def test_cashier_pending_bills_reports_outstanding_amount_from_transactions(self):
+        employee = Employee.objects.create(name='Cashier Jane', role='Cashier', status='active')
+        staff_token = StaffToken.objects.create(employee=employee, expires_at=timezone.now() + timedelta(hours=8))
+        order = Order.objects.create(order_id='cashier-bill-2', total_amount=Decimal('300.00'), status='pending')
+        OrderItem.objects.create(order=order, name='Burger', price=Decimal('150.00'), food_cost=Decimal('80.00'), quantity=2)
+        Transaction.objects.create(
+            order=order,
+            phone='254700000000',
+            amount=Decimal('120.00'),
+            item=order.order_id,
+            status='success',
+            method=Transaction.METHOD_CASH,
+        )
+
+        request = self.factory.get('/api/payments/cashier/pending-bills/')
+        request.headers = {'Authorization': f'Bearer {staff_token.token}', 'X-STAFF-TOKEN': staff_token.token}
+
+        response = cashier_pending_bills(request)
+
+        self.assertEqual(response.status_code, 200)
+        payload = json.loads(response.content.decode('utf-8'))
+        self.assertGreaterEqual(len(payload['bills']), 1)
+        bill = payload['bills'][0]
+        self.assertEqual(bill['order_id'], order.order_id)
+        self.assertEqual(bill['outstanding_amount'], 180.0)
+        self.assertEqual(bill['amount_paid'], 120.0)
+
+    def test_cashier_pending_bills_returns_items_and_order_type(self):
+        employee = Employee.objects.create(name='Cashier Jane', role='Cashier', status='active')
+        staff_token = StaffToken.objects.create(employee=employee, expires_at=timezone.now() + timedelta(hours=8))
+        order = Order.objects.create(order_id='cashier-bill-1', total_amount=Decimal('300.00'), status='pending')
+        OrderItem.objects.create(order=order, name='Burger', price=Decimal('150.00'), food_cost=Decimal('80.00'), quantity=2)
+
+        request = self.factory.get('/api/payments/cashier/pending-bills/')
+        request.headers = {'Authorization': f'Bearer {staff_token.token}', 'X-STAFF-TOKEN': staff_token.token}
+
+        response = cashier_pending_bills(request)
+
+        self.assertEqual(response.status_code, 200)
+        payload = json.loads(response.content.decode('utf-8'))
+        self.assertGreaterEqual(len(payload['bills']), 1)
+        bill = payload['bills'][0]
+        self.assertEqual(bill['order_id'], order.order_id)
+        self.assertEqual(bill['order_type'], 'takeaway')
+        self.assertGreaterEqual(len(bill['items']), 1)
+        self.assertEqual(bill['items'][0]['name'], 'Burger')
+
     def test_staff_can_access_order_detail(self):
         employee = Employee.objects.create(name='Waiter Jane', role='Waiter', status='on_shift')
         staff_token = StaffToken.objects.create(employee=employee, expires_at=timezone.now() + timedelta(hours=8))
@@ -324,3 +379,79 @@ class AdminSigninSchemaTests(SchemaCleanupMixin, TestCase):
         self.assertEqual(payload['table'], '7')
         self.assertEqual(len(payload['items']), 1)
         self.assertEqual(payload['items'][0]['name'], 'Fries')
+
+    def test_create_pos_order_normalizes_staff_kitchen_orders_for_kds(self):
+        employee = Employee.objects.create(name='Waiter Sam', role='Waiter', status='on_shift')
+        staff_token = StaffToken.objects.create(employee=employee, expires_at=timezone.now() + timedelta(hours=8))
+
+        request = self.factory.post(
+            '/api/payments/pos/create-order/',
+            data=json.dumps({
+                'order_type': 'table',
+                'table_number': '8',
+                'status': 'preparing',
+                'payment_method': 'unpaid',
+                'waiter_id': employee.id,
+                'waiter_name': employee.name,
+                'items': [
+                    {'name': 'Burger', 'price': 300, 'quantity': 1, 'modifiers': [], 'seat_number': 1}
+                ],
+            }),
+            content_type='application/json',
+        )
+        request.headers = {'Authorization': f'Bearer {staff_token.token}', 'X-STAFF-TOKEN': staff_token.token}
+
+        response = create_pos_order(request)
+        self.assertEqual(response.status_code, 200)
+
+        payload = json.loads(response.content.decode('utf-8'))
+        self.assertEqual(payload['status'], 'sent_kitchen')
+        self.assertEqual(payload['waiter_name'], employee.name)
+
+    def test_claim_order_marks_order_as_claimed(self):
+        employee = Employee.objects.create(name='Chef Claim', role='Chef', status='on_shift')
+        staff_token = StaffToken.objects.create(employee=employee, expires_at=timezone.now() + timedelta(hours=8))
+        order = Order.objects.create(order_id='claim-order-1', status='sent_kitchen', total_amount=Decimal('100.00'))
+        OrderItem.objects.create(order=order, name='Tea', price=Decimal('100.00'), food_cost=Decimal('0.00'), quantity=1)
+
+        request = self.factory.post(f'/api/payments/kds/claim/{order.order_id}/')
+        request.headers = {'Authorization': f'Bearer {staff_token.token}', 'X-STAFF-TOKEN': staff_token.token}
+
+        response = claim_order(request, order.order_id)
+
+        self.assertEqual(response.status_code, 200)
+        payload = json.loads(response.content.decode('utf-8'))
+        self.assertTrue(payload['ok'])
+        self.assertEqual(payload['claimed_by_name'], employee.name)
+
+        order.refresh_from_db()
+        self.assertEqual(order.claimed_by, employee)
+        self.assertEqual(order.claimed_by_name, employee.name)
+
+    def test_create_pos_order_creates_staff_notification_activities_for_cashier_and_chef(self):
+        cashier = Employee.objects.create(name='Cashier Jane', role='Cashier', status='active')
+        chef = Employee.objects.create(name='Chef Mike', role='Chef', status='active')
+
+        request = self.factory.post(
+            '/api/payments/pos/create-order/',
+            data=json.dumps({
+                'order_type': 'table',
+                'table_number': '12',
+                'status': 'sent_kitchen',
+                'payment_method': 'unpaid',
+                'items': [
+                    {'name': 'Fries', 'price': 250, 'quantity': 1, 'modifiers': [], 'seat_number': 1}
+                ],
+            }),
+            content_type='application/json',
+        )
+
+        response = create_pos_order(request)
+        self.assertEqual(response.status_code, 200)
+
+        payload = json.loads(response.content.decode('utf-8'))
+        self.assertTrue(StaffActivity.objects.filter(order__order_id=payload['order_id'], employee=cashier).exists())
+        self.assertTrue(StaffActivity.objects.filter(order__order_id=payload['order_id'], employee=chef).exists())
+        activities = StaffActivity.objects.filter(order__order_id=payload['order_id']).values_list('action', flat=True)
+        self.assertTrue(any('cashier' in action.lower() for action in activities))
+        self.assertTrue(any('chef' in action.lower() or 'kitchen' in action.lower() for action in activities))

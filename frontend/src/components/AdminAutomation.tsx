@@ -222,6 +222,39 @@ const AdminAutomation: React.FC = () => {
               </button>
             </div>
           </div>
+          {insights?.automation_report ? (
+            <div className="rounded-2xl border border-slate-700 bg-slate-950/80 p-5 mb-6">
+              <div className="flex items-center justify-between gap-3 mb-4">
+                <div>
+                  <h4 className="text-sm font-semibold">AI Automation Report</h4>
+                  <p className="text-xs text-slate-400">Live metrics from the last 7 days</p>
+                </div>
+                <span className="rounded-full bg-emerald-500/10 px-3 py-1 text-[11px] text-emerald-300">Live Data</span>
+              </div>
+              <p className="text-sm text-slate-200 mb-4">{insights.automation_report.summary}</p>
+              <div className="grid gap-3 sm:grid-cols-3 mb-4">
+                {insights.automation_report.key_metrics?.map((metric: any, index: number) => (
+                  <div key={index} className="rounded-2xl bg-slate-900/70 p-3 text-xs">
+                    <p className="text-slate-400">{metric.label}</p>
+                    <p className="mt-2 font-semibold text-slate-100">{metric.value}</p>
+                  </div>
+                ))}
+              </div>
+              {insights.automation_report.top_items?.length > 0 ? (
+                <div className="text-xs text-slate-300">
+                  <div className="font-semibold text-slate-100 mb-2">Top Items</div>
+                  <ul className="space-y-2">
+                    {insights.automation_report.top_items.slice(0, 3).map((item: any, index: number) => (
+                      <li key={index} className="flex items-center justify-between rounded-2xl bg-slate-900/60 px-3 py-2">
+                        <span>{item.name}</span>
+                        <span className="text-slate-300">{item.quantity} sold</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
           <div className="rounded-2xl border border-slate-700 bg-slate-950/80 p-5 min-h-[160px] max-h-[400px] overflow-y-auto">
             <p className="text-xs uppercase text-slate-500 mb-3">Live Conversation</p>
             <div className="space-y-3 text-sm">

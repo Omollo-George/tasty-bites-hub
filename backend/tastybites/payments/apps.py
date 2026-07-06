@@ -4,19 +4,31 @@ import threading
 import time
 import logging
 import os
+import sys
 
 
 class PaymentsConfig(AppConfig):
     default_auto_field = 'django.db.models.BigAutoField'
     name = 'payments'
 
+    def _should_skip_auto_repair(self):
+        management_commands = {
+            'migrate', 'makemigrations', 'test', 'shell', 'check', 'collectstatic',
+            'createsuperuser', 'flush', 'loaddata', 'showmigrations', 'dbshell'
+        }
+        command = (sys.argv[1] if len(sys.argv) > 1 else '').strip().lower()
+        return command in management_commands or os.environ.get('PAYMENTS_SKIP_AUTO_REPAIR') == '1'
+
     def ready(self):
+        logger = logging.getLogger(__name__)
+
         # Only run the worker in the actual server process, not in the autoreloader parent.
         autoreload_active = os.environ.get('RUN_MAIN') == 'true' or os.environ.get('WERKZEUG_RUN_MAIN') == 'true'
+        if self._should_skip_auto_repair():
+            logger.info('Payments auto-repair skipped for management command: %s', sys.argv[1:])
+            return
         if settings.DEBUG and not autoreload_active:
             return
-
-        logger = logging.getLogger(__name__)
 
         # Skip index worker completely on initial app startup - too many DB dependency issues
         # with migration ordering and Nile DB compatibility

@@ -1,6 +1,6 @@
-import React from 'react'
+import React, { useState } from 'react'
 import { NavLink, Link } from 'react-router-dom'
-import { Home, ShoppingBag, BarChart3, Menu as MenuIcon, Settings, Users, Package, Zap } from 'lucide-react'
+import { Home, ShoppingBag, BarChart3, Menu as MenuIcon, Settings, Users, Package, Zap, ChevronLeft, ChevronRight } from 'lucide-react'
 import { getAdminToken } from '@/lib/admin-session'
 import { preloadAdminRoute } from '@/lib/admin-route-prefetch'
 import { preloadEmployeesData, preloadReportsData, preloadStockData } from '@/lib/admin-data-cache'
@@ -18,6 +18,7 @@ const navItems = [
 ]
 
 const AdminSidebar: React.FC = () => {
+  const [collapsed, setCollapsed] = useState(false)
   const token = getAdminToken()
 
   const handleNavItemHover = (path: string) => {
@@ -33,17 +34,27 @@ const AdminSidebar: React.FC = () => {
   }
 
   return (
-    <aside className="w-full border-b border-slate-700 bg-slate-900/95 text-slate-300 p-4 backdrop-blur md:w-72 md:border-b-0 md:border-r md:min-h-screen md:sticky md:top-0 md:flex-shrink-0 md:overflow-y-auto">
+    <aside className={`w-full border-b border-slate-700 bg-slate-900/95 text-slate-300 p-4 backdrop-blur md:border-b-0 md:border-r md:min-h-screen md:sticky md:top-0 md:flex-shrink-0 md:overflow-y-auto ${collapsed ? 'md:w-20' : 'md:w-72'}`}>
       <div className="mb-4 flex items-center justify-between gap-4 md:mb-10 md:flex-col md:items-start md:gap-4">
         <div className="flex items-center gap-3">
           <TastyBitesIcon size={36} />
-          <div className="md:block">
-            <p className="text-[10px] uppercase tracking-[0.4em] text-[#d69e2e] font-bold mb-1">Hotel Management</p>
-            <h2 className="font-display text-lg md:text-2xl text-white tracking-tight">Tasty Bites Hub<span className="text-[#d69e2e]">.</span></h2>
-          </div>
+          {!collapsed && (
+            <div className="md:block">
+              <p className="text-[10px] uppercase tracking-[0.4em] text-[#d69e2e] font-bold mb-1">Hotel Management</p>
+              <h2 className="font-display text-lg md:text-2xl text-white tracking-tight">Tasty Bites Hub<span className="text-[#d69e2e]">.</span></h2>
+            </div>
+          )}
         </div>
+        <button
+          type="button"
+          onClick={() => setCollapsed(!collapsed)}
+          className="rounded-full border border-slate-700 bg-slate-900 p-2 text-slate-200 transition hover:bg-slate-800 md:hidden lg:inline-flex"
+          aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+        >
+          {collapsed ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
+        </button>
       </div>
-      <nav className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:flex md:flex-col md:gap-3">
+      <nav className={`grid grid-cols-2 gap-2 sm:grid-cols-3 md:flex md:flex-col md:gap-3 ${collapsed ? 'gap-0' : ''}`}>
         {navItems.map(({ to, label, icon: Icon, end }) => (
           <NavLink
             key={label}
@@ -56,11 +67,11 @@ const AdminSidebar: React.FC = () => {
                 isActive
                   ? 'bg-[#1a365d] text-[#d69e2e] shadow-lg shadow-[#1a365d]/20 border border-[#d69e2e]/30'
                   : 'hover:bg-slate-800 hover:text-white'
-              }`
+              } ${collapsed ? 'justify-center md:justify-center' : ''}`
             }
           >
             <Icon className="h-5 w-5 flex-shrink-0" />
-            <span className="text-center md:text-left">{label}</span>
+            {!collapsed && <span className="text-center md:text-left">{label}</span>}
           </NavLink>
         ))}
 
@@ -72,10 +83,10 @@ const AdminSidebar: React.FC = () => {
                 isActive
                   ? 'bg-[#1a365d] text-[#d69e2e] shadow-lg shadow-[#1a365d]/20 border border-[#d69e2e]/30'
                   : 'hover:bg-slate-800 hover:text-white'
-              }`
+              } ${collapsed ? 'justify-center' : ''}`
             }
           >
-            Admin Sign In
+            {!collapsed && 'Admin Sign In'}
           </NavLink>
         )}
       </nav>

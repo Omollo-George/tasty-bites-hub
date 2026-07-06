@@ -287,12 +287,6 @@ const StaffPage: React.FC = () => {
             <h1 className="font-display text-4xl text-slate-100 mt-1 uppercase tracking-tight">Staff Workstation</h1>
           </div>
           <div className="flex flex-wrap gap-3 justify-end">
-             {isAdmin && (
-              <Link to="/admin" className="flex items-center gap-2 bg-slate-800 border border-slate-700 text-slate-300 px-5 py-3 rounded-xl font-bold hover:bg-slate-700 transition-all active:scale-95">
-                <Monitor size={20} />
-                <span className="hidden sm:inline">Admin Dashboard</span>
-              </Link>
-             )}
              <Link to="/" className="flex items-center gap-2 bg-slate-800 border border-slate-700 text-slate-300 px-5 py-3 rounded-xl font-bold hover:bg-slate-700 transition-all active:scale-95">
                 <Home size={20} />
                 <span className="hidden sm:inline">Home</span>
@@ -370,7 +364,7 @@ const StaffPage: React.FC = () => {
         
         {/* Table Status Overview (hidden for cashiers) */}
         {roleLower !== 'cashier' && (
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
             <div className="bg-slate-900 border border-slate-800 p-6 rounded-2xl flex items-center gap-5 hover:border-slate-700 transition-colors">
               <div className="p-4 rounded-xl bg-blue-500/10 text-blue-400"><ShoppingCart size={28} /></div>
               <div><p className="text-sm text-slate-400 font-medium">Orders Taken</p><p className="text-2xl font-bold text-slate-100">{summary.orders_taken}</p></div>
@@ -386,7 +380,7 @@ const StaffPage: React.FC = () => {
           </div>
         )}
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        <div className="grid grid-cols-1 gap-8 xl:grid-cols-2">
           {/* Announcements & Shift Checklist */}
           <section className="bg-slate-900 border border-slate-800 p-8 rounded-3xl space-y-6">
             <div className="flex items-center gap-2">
@@ -403,12 +397,6 @@ const StaffPage: React.FC = () => {
             <div className="space-y-4">
               <h4 className="text-sm font-bold uppercase text-slate-500 tracking-wider">Shift Checklist</h4>
               <div className="flex gap-3">
-                 {isAdmin && (
-                   <Link to="/admin" className="flex items-center gap-2 bg-slate-800 border border-slate-700 text-slate-300 px-5 py-3 rounded-xl font-bold hover:bg-slate-700 transition-all active:scale-95">
-                      <Monitor size={20} />
-                      <span className="hidden sm:inline">Admin Dashboard</span>
-                   </Link>
-                 )}
                  <Link to="/" className="flex items-center gap-2 bg-slate-800 border border-slate-700 text-slate-300 px-5 py-3 rounded-xl font-bold hover:bg-slate-700 transition-all active:scale-95">
                     <Home size={20} />
                     <span className="hidden sm:inline">Home</span>

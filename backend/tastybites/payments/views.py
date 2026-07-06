@@ -1170,12 +1170,26 @@ def _build_mpesa_callback_url(request=None):
 
     if request is not None:
         try:
-            built = request.build_absolute_uri('/api/payments/stk/callback/')
+            forwarded_proto = request.META.get('HTTP_X_FORWARDED_PROTO') or request.META.get('X-Forwarded-Proto')
+            forwarded_host = request.META.get('HTTP_X_FORWARDED_HOST') or request.META.get('HTTP_HOST') or request.get_host()
+            is_secure = bool(request.is_secure()) or (forwarded_proto and forwarded_proto.lower() == 'https')
+
+            if forwarded_host:
+                scheme = 'https' if is_secure else 'http'
+                built = f"{scheme}://{forwarded_host}/api/payments/callback/"
+                if built.startswith('https://') and not _is_local_callback_url(built):
+                    return built
+
+                if forwarded_proto and forwarded_proto.lower() == 'https':
+                    parsed = urlparse(built)
+                    secure_url = urlunparse(parsed._replace(scheme='https'))
+                    if secure_url.startswith('https://') and not _is_local_callback_url(secure_url):
+                        return secure_url
+
+            built = request.build_absolute_uri('/api/payments/callback/')
             if built.startswith('https://') and not _is_local_callback_url(built):
                 return built
 
-            # If behind a proxy that terminates TLS, honor forwarded proto headers.
-            forwarded_proto = request.META.get('HTTP_X_FORWARDED_PROTO') or request.META.get('X-Forwarded-Proto')
             if forwarded_proto and forwarded_proto.lower() == 'https':
                 parsed = urlparse(built)
                 secure_url = urlunparse(parsed._replace(scheme='https'))
@@ -2389,6 +2403,7 @@ def _answer_system_query(query: str, history: list[dict] | None = None):
         summary_label = 'Today'
 
     report = _build_report_summary(start, end, summary_label)
+    today_report = _build_report_summary(today_start, end, 'Today')
     low_stock_items = list(MenuItem.objects.filter(stock_level__lte=F('min_stock_level')).values(
         'id', 'sku', 'name', 'category', 'stock_level', 'min_stock_level'
     )[:10])
@@ -2505,15 +2520,16 @@ def _answer_system_query(query: str, history: list[dict] | None = None):
 
     if any(word in lc for word in ['status', 'how is', 'dashboard', 'quick update']):
         today_orders = Order.objects.filter(created_at__gte=today_start).count()
-        today_revenue = Order.objects.filter(created_at__gte=today_start, status='completed').aggregate(
-            total=Sum('total_amount')
-        )['total'] or 0
+        today_revenue = today_report['totals'].get('revenue', _format_currency(0))
+        today_profit = today_report['totals'].get('profit', _format_currency(0))
+        today_food_cost_ratio = today_report['totals'].get('food_cost_ratio', 0)
         return {
             'query': query,
             'answer': friendly(
                 f"Here's your real-time snapshot {get_emoji_summary()}: "
                 f"{active_orders} orders actively being processed, {today_orders} orders completed today so far, "
-                f"today's revenue is {_format_currency(today_revenue)}. "
+                f"today's revenue is {today_revenue}, profit is {today_profit}, "
+                f"and food cost ratio is {today_food_cost_ratio}%. "
                 f"{len(low_stock_items)} stock alert{'s' if len(low_stock_items) != 1 else ''}. "
                 f"Everything's running smoothly!"
             )
@@ -3468,14 +3484,40 @@ def miscellaneous_log(request):
 
     try:
         payload = json.loads(request.body.decode('utf-8'))
+    except Exception:
+        return JsonResponse({'error': 'Invalid JSON'}, status=400)
+    
+    try:
         item_name = (payload.get('item_name') or '').strip()
         reason = (payload.get('reason') or '').strip()
-        cost = Decimal(str(payload.get('cost') or '0'))
-        if not item_name: return JsonResponse({'error': 'item_name required'}, status=400)
+        cost_raw = payload.get('cost')
+        
+        # Validate item_name
+        if not item_name:
+            return JsonResponse({'error': 'Item name is required'}, status=400)
+        
+        # Validate and parse cost
+        if cost_raw is None or cost_raw == '':
+            cost = Decimal('0.00')
+        else:
+            try:
+                cost = Decimal(str(cost_raw))
+            except (ValueError, InvalidOperation):
+                return JsonResponse({'error': 'Cost must be a valid number'}, status=400)
+            if cost < 0:
+                return JsonResponse({'error': 'Cost cannot be negative'}, status=400)
+        
         log = MiscellaneousExpense.objects.create(item_name=item_name, reason=reason, cost=cost)
-        return JsonResponse({'id': log.id, 'item_name': log.item_name, 'cost': _to_display_currency(log.cost)})
+        return JsonResponse({
+            'id': log.id,
+            'item_name': log.item_name,
+            'reason': log.reason,
+            'cost': _to_display_currency(log.cost),
+            'created_at': log.created_at.isoformat() if log.created_at else None,
+        })
     except Exception as e:
-        return JsonResponse({'error': str(e)}, status=400)
+        logger.exception('Error creating miscellaneous expense')
+        return JsonResponse({'error': f'Failed to create expense: {str(e)}'}, status=400)
 
 @csrf_exempt
 def admin_delete_misc_log(request, log_id: int):
@@ -3677,11 +3719,19 @@ def create_order(request):
         if not name:
             continue
         price = Decimal(str(item.get('price') or '0') or '0')
-        food_cost = Decimal(str(item.get('food_cost') or item.get('cost') or '0') or '0')
         quantity = max(1, int(item.get('quantity') or 1))
         modifiers = item.get('modifiers') or []
         if isinstance(modifiers, str):
             modifiers = [mod.strip() for mod in modifiers.split(',') if mod.strip()]
+
+        # Resolve food_cost from the menu item in the database instead of from request
+        food_cost = Decimal('0.00')
+        try:
+            mi = _resolve_menu_item_from_payload(item)
+            if mi:
+                food_cost = Decimal(str(mi.food_cost or '0'))
+        except Exception:
+            pass
 
         OrderItem.objects.create(
             order=order,
@@ -3992,11 +4042,22 @@ def orders_list(request):
     page_size = min(page_size, 100)  # Cap at 100
     offset = (page - 1) * page_size
 
+    # Get optional status filter
+    status_filter = request.GET.get('statuses', 'all')
+    
+    # Build base queryset
+    query = Order.objects.all()
+    
+    # Apply status filter if provided
+    if status_filter != 'all' and status_filter:
+        status_list = status_filter.split(',')
+        query = query.filter(status__in=status_list)
+
     # Count total for pagination
-    total = Order.objects.count()
+    total = query.count()
 
     # Optimize with select_related and prefetch_related
-    orders = Order.objects.select_related('table', 'waiter').prefetch_related('items').order_by('-created_at')[offset:offset + page_size]
+    orders = query.select_related('table', 'waiter').prefetch_related('items').order_by('-created_at')[offset:offset + page_size]
     
     data = [
         {
@@ -4081,12 +4142,22 @@ def _build_report_summary(start_date: datetime.datetime, end_date: datetime.date
         if cached_result:
             return cached_result
 
-        # OPTIMIZATION: Single query with all necessary joins and aggregations
-        # Get paid orders efficiently with select_related
-        paid_orders = Order.objects.filter(
+        # OPTIMIZATION: Only include orders with completed/successful transactions
+        # First get all orders in the date range that are paid or completed
+        all_period_orders = Order.objects.filter(
             created_at__gte=start_date,
             created_at__lte=end_date,
-            status='completed'
+            status__in=[Order.STATUS_PAID, Order.STATUS_COMPLETED]
+        ).values_list('id', flat=True)
+        
+        # Now filter to only orders that have at least one successful transaction
+        orders_with_successful_tx = Transaction.objects.filter(
+            order__id__in=list(all_period_orders),
+            status='success'
+        ).values_list('order_id', flat=True).distinct()
+        
+        paid_orders = Order.objects.filter(
+            id__in=list(orders_with_successful_tx)
         ).values_list('id', flat=True)[:10000]  # Limit to prevent memory explosion
         
         paid_orders_list = list(paid_orders)
@@ -4100,15 +4171,30 @@ def _build_report_summary(start_date: datetime.datetime, end_date: datetime.date
                 item_food_cost=ExpressionWrapper(F('food_cost') * F('quantity'), output_field=DecimalField()),
             ).values('name', 'item_revenue', 'item_food_cost', 'quantity'))
 
+            # OPTIMIZATION: Pull stock cost from menu records for sold items
+            stock_cost_map = {}
+            if order_items:
+                item_names = set(item['name'] for item in order_items if item.get('name'))
+                menu_items = MenuItem.objects.filter(name__in=item_names).values('name', 'food_cost')
+                stock_cost_map = {m['name']: Decimal(str(m['food_cost'] or 0)) for m in menu_items}
+
             # OPTIMIZATION: Single pass through items for all aggregations
             item_map = {}
             for item in order_items:
                 name = item['name']
+                unit_stock_cost = stock_cost_map.get(name, Decimal('0'))
+                sold_stock_cost = unit_stock_cost * item['quantity']
                 if name not in item_map:
-                    item_map[name] = {'quantity': 0, 'revenue': Decimal('0'), 'food_cost': Decimal('0')}
+                    item_map[name] = {
+                        'quantity': 0,
+                        'revenue': Decimal('0'),
+                        'food_cost': Decimal('0'),
+                        'stock_cost': Decimal('0'),
+                    }
                 item_map[name]['quantity'] += item['quantity']
                 item_map[name]['revenue'] += item['item_revenue'] or Decimal('0')
                 item_map[name]['food_cost'] += item['item_food_cost'] or Decimal('0')
+                item_map[name]['stock_cost'] += sold_stock_cost
 
             # Build best and worst items
             sorted_items = sorted(item_map.items(), key=lambda x: x[1]['quantity'], reverse=True)
@@ -4117,6 +4203,11 @@ def _build_report_summary(start_date: datetime.datetime, end_date: datetime.date
                 'quantity': data['quantity'],
                 'revenue': _to_display_currency(data['revenue']),
                 'food_cost': _to_display_currency(data['food_cost']),
+                'stock_cost': _to_display_currency(data['stock_cost']),
+                'profit': _to_display_currency(data['revenue'] - data['food_cost']),
+                'stock_profit': _to_display_currency(data['revenue'] - data['stock_cost']),
+                'food_cost_ratio': round(float((data['food_cost'] / data['revenue'] * 100)) if data['revenue'] else 0, 2),
+                'stock_cost_ratio': round(float((data['stock_cost'] / data['revenue'] * 100)) if data['revenue'] else 0, 2),
             } for name, data in sorted_items[:5]]
 
             worst_items = [{
@@ -4124,6 +4215,11 @@ def _build_report_summary(start_date: datetime.datetime, end_date: datetime.date
                 'quantity': data['quantity'],
                 'revenue': _to_display_currency(data['revenue']),
                 'food_cost': _to_display_currency(data['food_cost']),
+                'stock_cost': _to_display_currency(data['stock_cost']),
+                'profit': _to_display_currency(data['revenue'] - data['food_cost']),
+                'stock_profit': _to_display_currency(data['revenue'] - data['stock_cost']),
+                'food_cost_ratio': round(float((data['food_cost'] / data['revenue'] * 100)) if data['revenue'] else 0, 2),
+                'stock_cost_ratio': round(float((data['stock_cost'] / data['revenue'] * 100)) if data['revenue'] else 0, 2),
             } for name, data in sorted(sorted_items, key=lambda x: x[1]['quantity'])[:5]]
 
             # OPTIMIZATION: Single query for hourly data with database grouping
@@ -4142,22 +4238,30 @@ def _build_report_summary(start_date: datetime.datetime, end_date: datetime.date
                 'revenue': _to_display_currency(row['revenue'] or 0),
             } for row in hourly_data]
 
-            # OPTIMIZATION: Single aggregation query for all revenue types
-            transactions = Transaction.objects.filter(
+            # OPTIMIZATION: Only include completed/successful transactions (status='success')
+            # Get only transactions with successful payments
+            successful_transactions = Transaction.objects.filter(
                 order__id__in=paid_orders_list,
                 status='success'
-            ).values('method').annotate(total=Sum('amount'))
+            ).values('method').annotate(
+                total_by_method=Sum('amount')
+            )
 
-            total_revenue = Decimal('0')
+            # Map to get total by payment method and calculate total revenue from successful txns
             cash_revenue = Decimal('0')
             mpesa_revenue = Decimal('0')
+            total_revenue_from_txns = Decimal('0')
 
-            for tx in transactions:
+            for tx in successful_transactions:
+                amount = Decimal(str(tx['total_by_method'] or 0))
                 if tx['method'] == Transaction.METHOD_CASH:
-                    cash_revenue = Decimal(str(tx['total'] or 0))
+                    cash_revenue = amount
                 elif tx['method'] == Transaction.METHOD_M_PESA:
-                    mpesa_revenue = Decimal(str(tx['total'] or 0))
-                total_revenue += Decimal(str(tx['total'] or 0))
+                    mpesa_revenue = amount
+                total_revenue_from_txns += amount
+            
+            # Use the total from successful transactions only
+            total_revenue = total_revenue_from_txns
 
             # OPTIMIZATION: Aggregate food cost from materialized item_map
             total_food_cost = sum(data['food_cost'] for data in item_map.values())
@@ -4205,6 +4309,13 @@ def _build_report_summary(start_date: datetime.datetime, end_date: datetime.date
             created_at__gte=start_date, created_at__lte=end_date
         ).aggregate(total=Sum('cost'))['total'] or 0))
 
+        stock_sold_cost = sum(data['stock_cost'] for data in item_map.values())
+        stock_inventory_cost = Decimal(str(MenuItem.objects.filter(
+            stock_level__gt=0
+        ).aggregate(
+            total=Sum(ExpressionWrapper(F('stock_level') * F('food_cost'), output_field=DecimalField()))
+        )['total'] or 0))
+
         final_profit = total_revenue - total_food_cost - total_wastage - total_misc
         food_cost_ratio = float((total_food_cost / total_revenue * 100) if total_revenue else 0)
 
@@ -4251,6 +4362,8 @@ def _build_report_summary(start_date: datetime.datetime, end_date: datetime.date
                 'cash_revenue': _to_display_currency(cash_revenue),
                 'mpesa_revenue': _to_display_currency(mpesa_revenue),
                 'food_cost': _to_display_currency(total_food_cost),
+                'sold_stock_cost': _to_display_currency(stock_sold_cost),
+                'stock_inventory_cost': _to_display_currency(stock_inventory_cost),
                 'wastage': _to_display_currency(total_wastage),
                 'miscellaneous': _to_display_currency(total_misc),
                 'profit': _to_display_currency(final_profit),
@@ -4419,23 +4532,49 @@ def wastage_log(request):
     except Exception:
         return JsonResponse({'error': 'Invalid JSON'}, status=400)
 
-    item_name = (payload.get('item_name') or '').strip()
-    quantity = int(payload.get('quantity') or 1)
-    reason = (payload.get('reason') or '').strip()
-    cost = Decimal(str(payload.get('cost') or '0') or '0')
-
-    if not item_name or quantity <= 0:
-        return JsonResponse({'error': 'item_name and quantity are required'}, status=400)
-
-    log = WastageLog.objects.create(item_name=item_name, quantity=quantity, reason=reason, cost=cost)
-    return JsonResponse({
-        'id': log.id,
-        'item_name': log.item_name,
-        'quantity': log.quantity,
-        'reason': log.reason,
-        'cost': _to_display_currency(log.cost),
-        'created_at': log.created_at.isoformat() if log.created_at else None,
-    })
+    try:
+        item_name = (payload.get('item_name') or '').strip()
+        quantity_raw = payload.get('quantity')
+        reason = (payload.get('reason') or '').strip()
+        cost_raw = payload.get('cost')
+        
+        # Validate and parse quantity
+        if quantity_raw is None:
+            quantity = 1
+        else:
+            quantity = int(quantity_raw)
+            if quantity <= 0:
+                return JsonResponse({'error': 'Quantity must be greater than 0'}, status=400)
+        
+        # Validate and parse cost
+        if cost_raw is None or cost_raw == '':
+            cost = Decimal('0.00')
+        else:
+            try:
+                cost = Decimal(str(cost_raw))
+            except (ValueError, InvalidOperation):
+                return JsonResponse({'error': 'Cost must be a valid number'}, status=400)
+            if cost < 0:
+                return JsonResponse({'error': 'Cost cannot be negative'}, status=400)
+        
+        # Validate item_name
+        if not item_name:
+            return JsonResponse({'error': 'Item name is required'}, status=400)
+        
+        log = WastageLog.objects.create(item_name=item_name, quantity=quantity, reason=reason, cost=cost)
+        return JsonResponse({
+            'id': log.id,
+            'item_name': log.item_name,
+            'quantity': log.quantity,
+            'reason': log.reason,
+            'cost': _to_display_currency(log.cost),
+            'created_at': log.created_at.isoformat() if log.created_at else None,
+        })
+    except ValueError as e:
+        return JsonResponse({'error': f'Invalid data format: {str(e)}'}, status=400)
+    except Exception as e:
+        logger.exception('Error creating wastage log')
+        return JsonResponse({'error': f'Failed to create log: {str(e)}'}, status=400)
 
 
 @csrf_exempt
@@ -4668,7 +4807,12 @@ def create_pos_order(request):
 
         total_amount += delivery_cost
         split_count = max(1, int(payload.get('split_count', 1)))
-        initial_status = payload.get('status', 'preparing')
+        initial_status = (payload.get('status') or 'preparing').strip() or 'preparing'
+
+        # Staff-created kitchen orders should be exposed to the chef display as
+        # a sent-to-kitchen order rather than leaving them in a generic prep state.
+        if not _is_customer_order(request) and initial_status in {'preparing', 'pending'}:
+            initial_status = 'sent_kitchen'
 
         # Get waiter info once
         waiter_obj = None
@@ -4746,14 +4890,10 @@ def create_pos_order(request):
         _run_async_task(_process_deferred_stock_updates, items_data)
         
         # Return immediately with minimal response
-        quick_response = {
-            'order_id': order.order_id,
-            'order_type': order_type,
-            'table': table.number if table else 'Takeaway',
-            'status': order.status,
-            'total_amount': float(total_amount),
-            'created_at': order.created_at.isoformat() if order.created_at else None,
-        }
+        quick_response = _serialize_order(order)
+        quick_response['order_type'] = order_type
+        quick_response['table'] = table.number if table else 'Takeaway'
+        quick_response['total_amount'] = float(total_amount)
 
         # ASYNC: Emit SSE and log staff activity in background
         from django.core.cache import cache
@@ -4826,7 +4966,7 @@ def create_pos_order(request):
                 quick_response['checkout_request_id'] = tx.checkout_request_id
             quick_response['payment_method'] = payment_method
         
-        return JsonResponse(quick_response, status=201)
+        return JsonResponse(quick_response, status=200)
         
     except (db_utils.ProgrammingError, db_utils.OperationalError) as exc:
         logger.error('create_pos_order failed due to missing payments schema: %s', exc)
@@ -4937,26 +5077,56 @@ def cashier_pending_bills(request):
         page_size = min(page_size, 50)  # Cap at 50
         offset = (page - 1) * page_size
 
+        pending_statuses = ['pending', 'sent_kitchen', 'bill_pending', 'ready']
+
         # Count total
-        total = Order.objects.filter(status__in=['pending', 'sent_kitchen', 'bill_pending', 'ready']).count()
+        total = Order.objects.filter(status__in=pending_statuses).count()
 
         # Use lightweight format for list (not full serialization)
         bills = Order.objects.filter(
-            status__in=['pending', 'sent_kitchen', 'bill_pending', 'ready']
+            status__in=pending_statuses
         ).select_related('table', 'waiter').order_by('-created_at')[offset:offset + page_size]
         
-        results = [
-            {
+        results = []
+        for b in bills:
+            items_payload = []
+            for item in b.items.all().order_by('id'):
+                items_payload.append({
+                    'id': item.id,
+                    'name': item.name,
+                    'item_name': item.name,
+                    'price': float(item.price or 0),
+                    'unit_price': float(item.price or 0),
+                    'subtotal': float((item.price or Decimal('0.00')) * item.quantity),
+                    'quantity': item.quantity,
+                    'is_served': item.is_served,
+                })
+
+            paid_amount = Decimal('0.00')
+            successful_transactions = b.transactions.filter(status='success')
+            for tx in successful_transactions:
+                try:
+                    paid_amount += Decimal(str(tx.amount or 0))
+                except Exception:
+                    continue
+
+            outstanding_amount = max(Decimal('0.00'), (b.total_amount or Decimal('0.00')) - paid_amount)
+
+            results.append({
                 'order_id': b.order_id,
                 'table': b.table.number if b.table else 'Takeaway',
+                'table_id': b.table.id if b.table else None,
                 'status': b.status,
                 'total_amount': float(b.total_amount or 0),
+                'amount_paid': float(paid_amount),
+                'outstanding_amount': float(outstanding_amount),
                 'phone': b.phone,
                 'created_at': b.created_at.isoformat() if b.created_at else None,
                 'waiter_name': b.waiter_name or (b.waiter.name if b.waiter else ''),
-            }
-            for b in bills
-        ]
+                'waiter_id': b.waiter.id if b.waiter else None,
+                'order_type': _get_order_type(b),
+                'items': items_payload,
+            })
         
         return JsonResponse({
             'bills': results,
@@ -5048,7 +5218,7 @@ def cashier_confirm_payment(request, order_id):
 
             if payment_method == 'cash':
                 order.status = 'paid'
-                order.save()
+                order.save(update_fields=['status'])
 
                 Transaction.objects.create(
                     phone=order.phone or '',
@@ -5107,6 +5277,43 @@ def cashier_confirm_payment(request, order_id):
         return JsonResponse({'error': f'Internal server error: {str(e)}'}, status=500)
 
 
+@csrf_exempt
+def claim_order(request, order_id):
+    """Allow a chef to claim an order for preparation."""
+    if not _is_staff(request):
+        return JsonResponse({'error': 'unauthorized'}, status=403)
+
+    try:
+        order = Order.objects.get(order_id=order_id)
+    except Order.DoesNotExist:
+        return JsonResponse({'error': 'not_found'}, status=404)
+
+    staff = _get_staff_employee(request)
+    claimant_name = getattr(staff, 'name', '') or ''
+
+    order.claimed_by = staff
+    order.claimed_by_name = claimant_name
+    order.claimed_at = timezone.now()
+    order.save(update_fields=['claimed_by', 'claimed_by_name', 'claimed_at'])
+
+    try:
+        _emit_event('order_claimed', {
+            'order_id': order.order_id,
+            'claimed_by_id': getattr(staff, 'id', None),
+            'claimed_by_name': claimant_name,
+            'claimed_at': order.claimed_at.isoformat() if order.claimed_at else None,
+        })
+    except Exception:
+        logger.debug('Failed to emit order_claimed SSE event for order %s', order.order_id)
+
+    return JsonResponse({
+        'ok': True,
+        'order_id': order.order_id,
+        'claimed_by_id': getattr(staff, 'id', None),
+        'claimed_by_name': claimant_name,
+    })
+
+
 def kds_queue(request):
     """Live queue for the kitchen with response caching."""
     # Allow unauthenticated access in local development for convenience when
@@ -5163,12 +5370,15 @@ def kds_queue(request):
                 'split_count': o.split_count or 1,
                 'waiter_id': o.waiter_id,
                 'waiter_name': o.waiter_name,
+                'claimed_by_id': getattr(o.claimed_by, 'id', None) if getattr(o, 'claimed_by', None) else None,
+                'claimed_by_name': o.claimed_by_name or (o.claimed_by.name if getattr(o, 'claimed_by', None) else ''),
+                'claimed_at': o.claimed_at.isoformat() if o.claimed_at else None,
             })
 
         response = JsonResponse({'queue': results})
         # Add short-lived cache header - SSE will still push updates immediately
         response['Cache-Control'] = 'public, max-age=2'
-        response['ETag'] = str(hash(frozenset((tuple(sorted(r.items())) for r in results))))
+        response['ETag'] = str(hash(json.dumps(results, sort_keys=True, default=str)))
         return response
     except Exception as e:
         # Log the actual error to server console and return a JSON error instead of crashing
