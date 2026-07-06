@@ -49,6 +49,12 @@ urlpatterns = [
     path('api/health', health_check), # No slash for compatibility
     path('api/payments/', include('payments.urls')),
     path('payments/', include('payments.urls')),  # Frontend expects /payments/ endpoint
+    path('admin/login', homepage),
+    path('admin', homepage),
+    path('admin/<path:path>', homepage),
+    path('staff/login', homepage),
+    path('staff', homepage),
+    path('staff/<path:path>', homepage),
     re_path(r'^(?!(api/|payments/|media/|django-admin/)).*$', homepage),
 ]
 
