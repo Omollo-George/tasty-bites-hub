@@ -47,29 +47,9 @@ export const getApiUrl = (path: string) => {
     return `${defaultLocalBackend}${normalizedPath}`
   }
 
-  return `${normalizedOrigin}${normalizedPath}`
-}
-
-const DEFAULT_CONFIG_PAYLOAD = {
-  base_currency: 'KES',
-  display_currency: 'KES',
-  conversion_rate: 1,
-  delivery_rate_per_km: 100,
-  min_delivery_fee: 50,
-}
-
-export async function apiFetch(path: string, options?: RequestInit) {
-  const url = getApiUrl(path)
-  const isConfigRequest = /\/payments\/config\/?$/.test(path.replace(/\?.*$/, ''))
-
-  try {
-    const res = await fetch(url, options)
-    if (!res.ok) {
-      if (isConfigRequest) {
-        return DEFAULT_CONFIG_PAYLOAD
-      }
-
-      const text = await res.text().catch(() => '')
+  // In production, if no explicit API host is configured, use the same-host
+  // backend route under /api, which matches the default Django/Vercel routing.
+  return `/api${normalizedPath}`
       const status = res.status
       const statusText = res.statusText
       const ct = res.headers.get('content-type') || ''
