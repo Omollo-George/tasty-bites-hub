@@ -12,9 +12,9 @@ import os
 from django.core.asgi import get_asgi_application
 
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'tastybites.settings')
+application = get_asgi_application()
 
 from .startup import run_startup
 
+# Run startup tasks after the Django app registry is initialized
 run_startup()
-
-application = get_asgi_application()
