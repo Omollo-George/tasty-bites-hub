@@ -457,6 +457,7 @@ const ProfessionalCustomerHome = () => {
   };
 
   const handleCheckout = async () => {
+    console.debug('handleCheckout invoked', { cartLength: cart.length, phoneNumber, orderType });
     if (cart.length === 0) {
       toast.error("Your cart is empty!", { description: "Add some delicious items before checking out." });
       return;

@@ -304,7 +304,12 @@ const CartModal: React.FC<CartModalProps> = ({
             <span className="text-2xl font-black text-orange-500">{formatCurrency(cartTotalPrice, currency)}</span>
           </div>
           <button
-            onClick={onCheckout}
+            onClick={() => {
+              try {
+                console.debug('CartModal: checkout button clicked', { isProcessing, isAwaitingMpesa, phoneNumber });
+              } catch (e) {}
+              onCheckout && onCheckout();
+            }}
             disabled={cart.length === 0 || isProcessing || isAwaitingMpesa}
             className="w-full py-4 rounded-2xl bg-orange-600 text-white font-black text-lg transition-all hover:bg-orange-500 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
           >
