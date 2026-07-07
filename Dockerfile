@@ -1,7 +1,7 @@
 # Multi-stage Dockerfile: build frontend with Node, then build Python backend
 ### Stage 1: build the frontend
 # Use a Debian-based Node image to avoid native/binary issues that occur on Alpine
-FROM node:20-bullseye-slim AS frontend-build
+FROM node:22-bullseye-slim AS frontend-build
 ARG VITE_API_URL=http://localhost:8000
 ARG VITE_BASE=/static/
 ENV VITE_API_URL=${VITE_API_URL}

@@ -10,7 +10,7 @@
     "test:run": "vitest run --workspace=client"
   },
   "engines": {
-    "node": ">=20.0.0"
+    "node": ">=22.0.0"
   },
   "devDependencies": {
     "@types/node": "^20.11.0",
