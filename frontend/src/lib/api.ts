@@ -50,6 +50,31 @@ export const getApiUrl = (path: string) => {
   return `/api${normalizedPath}`
 }
 
+// Return a full backend URL appropriate for Server-Sent Events (EventSource).
+// In development this will point directly to the backend (127.0.0.1:8000) so
+// the browser can open a long-lived connection without going through the Vite proxy.
+export const getSseUrl = (path: string) => {
+  const normalizedPath = path.startsWith('/') ? path : `/${path}`
+  const defaultLocalBackend = 'http://127.0.0.1:8000'
+
+  const envBase = import.meta.env.VITE_API_URL?.trim()
+  if (import.meta.env.DEV) {
+    if (envBase) {
+      const cleanedBase = envBase.replace(/\/$/, '')
+      return `${cleanedBase}${normalizedPath}`
+    }
+    return `${defaultLocalBackend}${normalizedPath}`
+  }
+
+  if (envBase) {
+    const cleanedBase = envBase.replace(/\/$/, '')
+    return `${cleanedBase}${normalizedPath}`
+  }
+
+  // In production, SSE should be available under the same origin API path
+  return `/api${normalizedPath}`
+}
+
 const DEFAULT_CONFIG_PAYLOAD = {
   base_currency: 'KES',
   display_currency: 'KES',
@@ -94,3 +119,6 @@ export async function apiFetch(path: string, options?: RequestInit) {
     throw e
   }
 }
+
+// Explicit named exports to ensure the bundler recognizes all helpers.
+export { getApiUrl, getSseUrl, apiFetch }
