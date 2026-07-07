@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { ShoppingCart, UtensilsCrossed, Clock, CheckCircle, TrendingUp, Bell, LayoutGrid, Users, LogOut, Home, Monitor, CreditCard } from 'lucide-react';
-import { getApiUrl, apiFetch } from '@/lib/api';
+import { getApiUrl, apiFetch, getSseUrl } from '@/lib/api';
 import { getAdminToken, isAdminSessionValid } from '@/lib/admin-session';
 import { getAuthHeaders } from '@/lib/auth';
 import { useToast } from '@/hooks/use-toast';
@@ -196,7 +196,7 @@ const StaffPage: React.FC = () => {
 
   // SSE listener for order ready notifications (waiter only)
   useEffect(() => {
-    const eventSource = new EventSource('/payments/stream/')
+    const eventSource = new EventSource(getSseUrl('/payments/stream/'))
     const staffId = getStaffId()
     const isWaiter = roleLower === 'waiter'
 
@@ -277,110 +277,167 @@ const StaffPage: React.FC = () => {
     <div className="min-h-screen bg-slate-950 text-slate-100 p-6 md:p-10">
       <div className="max-w-7xl mx-auto space-y-8">
         {/* Header Section */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-2">
-              <p className="text-sm text-slate-400 font-medium italic">Welcome back, {staffName || (isAdmin ? 'Administrator' : 'Team Member')}</p>
-              {staffRole && <span className="bg-orange-500/10 text-orange-400 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border border-orange-500/20">{staffRole}</span>}
-
-            </div>
-            <h1 className="font-display text-4xl text-slate-100 mt-1 uppercase tracking-tight">Staff Workstation</h1>
-          </div>
-          <div className="flex flex-wrap gap-3 justify-end">
-             <Link to="/" className="flex items-center gap-2 bg-slate-800 border border-slate-700 text-slate-300 px-5 py-3 rounded-xl font-bold hover:bg-slate-700 transition-all active:scale-95">
-                <Home size={20} />
-                <span className="hidden sm:inline">Home</span>
-             </Link>
-             {!isAdmin && ( // Only show logout for non-admin staff
-               <button onClick={handleLogout} className="bg-slate-800 border border-slate-700 text-slate-300 px-5 py-3 rounded-xl font-bold hover:bg-slate-700 transition-all active:scale-95 flex items-center gap-2">
-                 <LogOut size={20} /><span>Logout</span>
-               </button>
-             )}
-             {(canAccessPOS && roleLower !== 'cashier') && (
-               <Link to="/staff/pos" className="bg-orange-500 text-white px-6 py-3 rounded-xl font-bold shadow-lg shadow-orange-500/20 hover:bg-orange-600 transition-all active:scale-95 flex items-center gap-2">
-                  <ShoppingCart size={20} />
-                  <span>Launch POS</span>
-               </Link>
-             )}
-             {canAccessKDS && (
-               <Link to="/staff/kds" className="bg-slate-800 border border-slate-700 text-white px-6 py-3 rounded-xl font-bold hover:bg-slate-700 transition-all active:scale-95 flex items-center gap-2">
-                  <UtensilsCrossed size={20} />
-                  <span>Kitchen Display</span>
-               </Link>
-             )}
-          </div>
-        </div>
-        {canAccessCashier && (
-          <section className="bg-slate-900 border border-slate-800 rounded-3xl p-6 mt-6 shadow-xl shadow-slate-950/20">
-            <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6">
-              <div className="max-w-3xl">
-                <p className="text-sm uppercase tracking-[0.3em] text-slate-500">Cashier Workstation</p>
-                <h2 className="text-3xl text-slate-100 font-display mt-3">Process payments and settle orders.</h2>
-                <p className="mt-3 text-slate-400 text-sm sm:text-base">
-                  Open the cashier console to confirm payments, print receipts, and manage open tickets with the same smooth interface as the cashier home page.
-                </p>
-              </div>
-              <Link
-                to="/staff/cashier"
-                className="inline-flex items-center justify-center gap-2 rounded-3xl bg-orange-500 px-6 py-4 text-sm font-bold text-white shadow-lg shadow-orange-500/20 hover:bg-orange-600 transition-all active:scale-95"
-              >
-                <CreditCard size={20} />
-                <span>Launch Cashier</span>
-              </Link>
-            </div>
-
-            <div className="mt-8 border-t border-slate-800 pt-8">
-              <div className="flex items-center justify-between mb-6">
-                <div>
-                  <p className="text-sm uppercase tracking-[0.3em] text-slate-500">Cashier Activity</p>
-                  <h3 className="text-2xl font-display text-slate-100">Recent cashier events</h3>
+        <div className="grid gap-4 grid-cols-[0.7fr_1.9fr] items-stretch">
+          <div className="space-y-4">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+              <div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className="text-sm text-slate-400 font-medium italic">Welcome back, {staffName || (isAdmin ? 'Administrator' : 'Team Member')}</p>
+                  {staffRole && <span className="bg-orange-500/10 text-orange-400 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border border-orange-500/20">{staffRole}</span>}
                 </div>
-                <TrendingUp className="text-slate-500" size={20} />
+                <h1 className="font-display text-4xl text-slate-100 mt-1 uppercase tracking-tight">Staff Workstation</h1>
               </div>
 
-              <div className="space-y-4">
-                {loadingActivities ? (
-                  <p className="text-slate-400 animate-pulse">Loading cashier activity...</p>
-                ) : activities.length === 0 ? (
-                  <p className="text-slate-400">No recent cashier activity available.</p>
-                ) : (
-                  activities.map((activity) => (
-                    <div key={activity.id} className="flex items-center justify-between p-4 bg-slate-800/50 rounded-xl border border-slate-800 hover:border-slate-700 transition-all">
-                      <div>
-                        <p className="font-semibold text-slate-200">{activity.action}</p>
-                        {activity.table && <p className="text-xs text-slate-400">Table: {activity.table}</p>}
-                        {activity.order_id && <p className="text-xs text-slate-400">Order: {activity.order_id}</p>}
-                      </div>
-                      <span className="text-xs text-slate-500 italic">{activity.time}</span>
-                    </div>
-                  ))
+              <div className="grid grid-cols-3 gap-3 items-stretch">
+                <Link to="/" className="min-w-0 flex flex-col items-center justify-center gap-2 bg-slate-800 border border-slate-700 text-slate-300 px-4 py-4 rounded-2xl font-semibold hover:bg-slate-700 transition-all active:scale-95 text-center">
+                  <Home size={20} />
+                  <span className="truncate text-xs uppercase tracking-[0.14em]">Home</span>
+                </Link>
+                {(canAccessPOS && roleLower !== 'cashier') && (
+                  <Link to="/staff/pos" className="min-w-0 flex flex-col items-center justify-center gap-2 bg-orange-500 text-white px-4 py-4 rounded-2xl font-semibold shadow-lg shadow-orange-500/20 hover:bg-orange-600 transition-all active:scale-95 text-center">
+                    <ShoppingCart size={20} />
+                    <span className="truncate text-xs uppercase tracking-[0.14em]">POS</span>
+                  </Link>
+                )}
+                {canAccessKDS && (
+                  <Link to="/staff/kds" className="min-w-0 flex flex-col items-center justify-center gap-2 bg-slate-800 border border-slate-700 text-white px-4 py-4 rounded-2xl font-semibold hover:bg-slate-700 transition-all active:scale-95 text-center">
+                    <UtensilsCrossed size={20} />
+                    <span className="truncate text-xs uppercase tracking-[0.14em]">KDS</span>
+                  </Link>
+                )}
+                {canAccessCashier && (
+                  <Link to="/staff/cashier" className="min-w-0 flex flex-col items-center justify-center gap-2 bg-slate-800 border border-slate-700 text-slate-200 px-4 py-4 rounded-2xl font-semibold hover:bg-slate-700 transition-all active:scale-95 text-center">
+                    <CreditCard size={20} />
+                    <span className="truncate text-xs uppercase tracking-[0.14em]">Cashier</span>
+                  </Link>
+                )}
+                {!isAdmin && (
+                  <button onClick={handleLogout} className="min-w-0 flex flex-col items-center justify-center gap-2 bg-slate-800 border border-slate-700 text-slate-200 px-4 py-4 rounded-2xl font-semibold hover:bg-slate-700 transition-all active:scale-95 text-center">
+                    <LogOut size={20} />
+                    <span className="truncate text-xs uppercase tracking-[0.14em]">Logout</span>
+                  </button>
                 )}
               </div>
             </div>
-          </section>
-        )}
+
+            {canAccessCashier && (
+              <section className="bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-xl shadow-slate-950/20">
+                <div className="grid gap-8 grid-cols-[1.45fr_1fr] items-start">
+                  <div>
+                    <p className="text-sm uppercase tracking-[0.3em] text-slate-500">Cashier Workstation</p>
+                    <h2 className="text-3xl text-slate-100 font-display mt-3">Process payments and settle orders.</h2>
+                    <p className="mt-3 text-slate-400 text-sm sm:text-base">
+                      Open the cashier console to confirm payments, print receipts, and manage open tickets with the same smooth interface as the cashier home page.
+                    </p>
+                    <div className="mt-6 flex flex-wrap gap-3">
+                      <Link
+                        to="/staff/cashier"
+                        className="inline-flex items-center justify-center gap-2 rounded-3xl bg-orange-500 px-5 py-3 text-sm font-bold text-white shadow-lg shadow-orange-500/20 hover:bg-orange-600 transition-all active:scale-95"
+                      >
+                        <CreditCard size={20} />
+                        <span>Launch Cashier</span>
+                      </Link>
+                      <span className="inline-flex items-center gap-2 rounded-3xl border border-slate-700 bg-slate-950/80 px-4 py-3 text-sm text-slate-300">
+                        <Bell size={18} />
+                        <span>Live cash flow and ticket management</span>
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="bg-slate-950/80 border border-slate-800 rounded-3xl p-5">
+                    <div className="flex items-center justify-between mb-4">
+                      <div>
+                        <p className="text-sm uppercase tracking-[0.3em] text-slate-500">Cashier Activity</p>
+                        <h3 className="text-2xl font-display text-slate-100">Recent cashier events</h3>
+                      </div>
+                      <TrendingUp className="text-slate-500" size={20} />
+                    </div>
+                    <div className="space-y-3">
+                      {loadingActivities ? (
+                        <p className="text-slate-400 animate-pulse">Loading cashier activity...</p>
+                      ) : activities.length === 0 ? (
+                        <p className="text-slate-400">No recent cashier activity available.</p>
+                      ) : (
+                        activities.map((activity) => (
+                          <div key={activity.id} className="flex items-center justify-between p-4 bg-slate-900 rounded-2xl border border-slate-800 hover:border-slate-700 transition-all">
+                            <div>
+                              <p className="font-semibold text-slate-200">{activity.action}</p>
+                              {activity.table && <p className="text-xs text-slate-400">Table: {activity.table}</p>}
+                              {activity.order_id && <p className="text-xs text-slate-400">Order: {activity.order_id}</p>}
+                            </div>
+                            <span className="text-xs text-slate-500 italic">{activity.time}</span>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </section>
+            )}
+          </div>
+
+          <aside className="flex flex-col gap-6 h-full">
+            <section className="flex-1 bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-xl shadow-slate-950/10 flex flex-col">
+              <p className="text-sm uppercase tracking-[0.3em] text-slate-500">Staff Quick Panel</p>
+              <h2 className="mt-3 text-2xl font-display text-slate-100">Desktop-ready tools</h2>
+              <p className="mt-3 text-slate-400 text-sm leading-6">
+                The staff section is optimized for laptop and large screens: use the quick actions, review live counts, and keep the shift checklist visible while you work.
+              </p>
+              <div className="mt-6 grid gap-3 flex-1">
+                <div className="rounded-3xl border border-slate-800 bg-slate-950/90 p-4">
+                  <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Live Tables</p>
+                  <p className="mt-2 text-3xl font-bold text-slate-100">{availableTables}</p>
+                  <p className="text-sm text-slate-400">Available tables</p>
+                </div>
+                <div className="rounded-3xl border border-slate-800 bg-slate-950/90 p-4">
+                  <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Occupied</p>
+                  <p className="mt-2 text-3xl font-bold text-slate-100">{occupiedTables}</p>
+                  <p className="text-sm text-slate-400">Occupied tables</p>
+                </div>
+              </div>
+            </section>
+
+            <section className="bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-xl shadow-slate-950/10 w-full">
+              <p className="text-sm uppercase tracking-[0.3em] text-slate-500">Quick Instructions</p>
+              <ul className="mt-4 space-y-3 text-sm text-slate-400">
+                <li className="rounded-2xl border border-slate-800 bg-slate-950/90 p-3">Use the POS shortcut for new orders and split bills.</li>
+                <li className="rounded-2xl border border-slate-800 bg-slate-950/90 p-3">Open KDS to track kitchen progress for live cooking orders.</li>
+                <li className="rounded-2xl border border-slate-800 bg-slate-950/90 p-3">Log out when your shift ends to keep the workstation secure.</li>
+              </ul>
+            </section>
+          </aside>
+        </div>
 
         {/* Performance Overview removed for cashier/staff landing */}
         
         {/* Table Status Overview (hidden for cashiers) */}
         {roleLower !== 'cashier' && (
-          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-            <div className="bg-slate-900 border border-slate-800 p-6 rounded-2xl flex items-center gap-5 hover:border-slate-700 transition-colors">
+          <div className="grid grid-cols-3 gap-6">
+            <div className="bg-slate-900 border border-slate-800 p-6 rounded-2xl flex flex-col items-start gap-4 hover:border-slate-700 transition-colors min-h-[130px]">
               <div className="p-4 rounded-xl bg-blue-500/10 text-blue-400"><ShoppingCart size={28} /></div>
-              <div><p className="text-sm text-slate-400 font-medium">Orders Taken</p><p className="text-2xl font-bold text-slate-100">{summary.orders_taken}</p></div>
+              <div className="min-w-0">
+                <p className="text-sm text-slate-400 font-medium">Orders Taken</p>
+                <p className="text-2xl font-bold text-slate-100">{summary.orders_taken}</p>
+              </div>
             </div>
-            <div className="bg-slate-900 border border-slate-800 p-6 rounded-2xl flex items-center gap-5 hover:border-slate-700 transition-colors">
+            <div className="bg-slate-900 border border-slate-800 p-6 rounded-2xl flex flex-col items-start gap-4 hover:border-slate-700 transition-colors min-h-[130px]">
               <div className="p-4 rounded-xl bg-emerald-500/10 text-emerald-400"><LayoutGrid size={28} /></div>
-              <div><p className="text-sm text-slate-400 font-medium">Tables Served</p><p className="text-2xl font-bold text-slate-100">{summary.tables_served}</p></div>
+              <div className="min-w-0">
+                <p className="text-sm text-slate-400 font-medium">Tables Served</p>
+                <p className="text-2xl font-bold text-slate-100">{summary.tables_served}</p>
+              </div>
             </div>
-            <div className="bg-slate-900 border border-slate-800 p-6 rounded-2xl flex items-center gap-5 hover:border-slate-700 transition-colors">
+            <div className="bg-slate-900 border border-slate-800 p-6 rounded-2xl flex flex-col items-start gap-4 hover:border-slate-700 transition-colors min-h-[130px]">
               <div className="p-4 rounded-xl bg-purple-500/10 text-purple-400"><CheckCircle size={28} /></div>
-              <div><p className="text-sm text-slate-400 font-medium">Completed Orders</p><p className="text-2xl font-bold text-slate-100">{summary.completed_orders}</p></div>
+              <div className="min-w-0">
+                <p className="text-sm text-slate-400 font-medium">Completed Orders</p>
+                <p className="text-2xl font-bold text-slate-100">{summary.completed_orders}</p>
+              </div>
             </div>
           </div>
         )}
 
-        <div className="grid grid-cols-1 gap-8 xl:grid-cols-2">
+        <div className="grid grid-cols-1 gap-8">
           {/* Announcements & Shift Checklist */}
           <section className="bg-slate-900 border border-slate-800 p-8 rounded-3xl space-y-6">
             <div className="flex items-center gap-2">
@@ -397,15 +454,6 @@ const StaffPage: React.FC = () => {
             <div className="space-y-4">
               <h4 className="text-sm font-bold uppercase text-slate-500 tracking-wider">Shift Checklist</h4>
               <div className="flex gap-3">
-                 <Link to="/" className="flex items-center gap-2 bg-slate-800 border border-slate-700 text-slate-300 px-5 py-3 rounded-xl font-bold hover:bg-slate-700 transition-all active:scale-95">
-                    <Home size={20} />
-                    <span className="hidden sm:inline">Home</span>
-                 </Link>
-                 {!isAdmin && ( // Only show logout for non-admin staff
-                   <button onClick={handleLogout} className="bg-slate-800 border border-slate-700 text-slate-300 px-5 py-3 rounded-xl font-bold hover:bg-slate-700 transition-all active:scale-95 flex items-center gap-2">
-                     <LogOut size={20} /><span>Logout</span>
-                   </button>
-                 )}
                  {canAccessKDS && (
                    <Link to="/staff/kds" className="bg-slate-800 border border-slate-700 text-white px-6 py-3 rounded-xl font-bold hover:bg-slate-700 transition-all active:scale-95 flex items-center gap-2">
                       <UtensilsCrossed size={20} />
@@ -419,6 +467,7 @@ const StaffPage: React.FC = () => {
       </div>
     </div>
   );
+
 };
 
 export default StaffPage;
