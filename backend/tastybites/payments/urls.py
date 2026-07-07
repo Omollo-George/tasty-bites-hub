@@ -5,6 +5,7 @@ urlpatterns = [
     path('stk/', views.stk_push, name='stk_push'),
     path('callback/', views.stk_callback, name='stk_callback'),
     path('status/', views.payment_status, name='payment_status'),
+    path('manual-confirm/', views.manual_mpesa_confirm, name='manual_mpesa_confirm'),
     path('config/', views.config, name='payments_config'),
     path('admin/signup/', views.admin_signup, name='admin_signup'),
     path('admin/signin/', views.admin_signin, name='admin_signin'),

@@ -1209,8 +1209,28 @@ def _execute_stk_push(msisdn, amount, account_ref, tx, request=None):
     callback_url = _build_mpesa_callback_url(request)
 
     if not shortcode or not passkey or not consumer_key or not consumer_secret or not callback_url.startswith('https://'):
-        logger.info('Using simulated M-Pesa flow because Daraja credentials or callback URL are unavailable.')
-        return _simulate_stk_success(tx, amount, account_ref)
+        # If credentials or callback URL are missing, initiate a simulated STK push
+        # but leave the transaction in `pending` state so the frontend can prompt
+        # the user to confirm completion (useful on platforms like Render).
+        logger.info('Using simulated M-Pesa PUSH (pending) because Daraja credentials or callback URL are unavailable.')
+        checkout_id = f"SIM-{uuid.uuid4().hex[:12]}"
+        merchant_id = f"SIM-{uuid.uuid4().hex[:12]}"
+        resp_json = {
+            'ResponseCode': '0',
+            'ResponseDescription': 'Simulated M-Pesa push initiated (pending).',
+            'CheckoutRequestID': checkout_id,
+            'MerchantRequestID': merchant_id,
+            'simulated': True,
+        }
+
+        tx.checkout_request_id = checkout_id
+        tx.merchant_request_id = merchant_id
+        tx.status = 'pending'
+        tx.method = Transaction.METHOD_M_PESA
+        tx.raw_response = resp_json
+        tx.save()
+
+        return resp_json, 200
 
     try:
         token = _get_oauth_token()
@@ -1429,6 +1449,61 @@ def payment_status(request):
         return JsonResponse({'status': 'not_found'})
 
     return JsonResponse({'status': tx.status, 'raw': tx.raw_response})
+
+
+@csrf_exempt
+def manual_mpesa_confirm(request):
+    """Endpoint to manually confirm a pending (simulated) M-Pesa transaction.
+    Useful in environments where Daraja callbacks are not reachable (e.g., Render).
+    Expects JSON: { "checkout_id": "...", "code": "MPESA123" }
+    """
+    if request.method != 'POST':
+        return HttpResponseBadRequest('Only POST allowed')
+
+    try:
+        payload = json.loads(request.body.decode('utf-8'))
+    except Exception:
+        return JsonResponse({'error': 'Invalid JSON'}, status=400)
+
+    checkout_id = payload.get('checkout_id') or payload.get('checkoutId')
+    code = payload.get('code') or payload.get('receipt') or ''
+
+    if not checkout_id:
+        return JsonResponse({'error': 'checkout_id required'}, status=400)
+
+    tx = Transaction.objects.filter(checkout_request_id=checkout_id).first()
+    if not tx:
+        return JsonResponse({'error': 'not_found'}, status=404)
+
+    try:
+        tx.mpesa_receipt = str(code or '')
+        tx.status = 'success'
+        tx.method = Transaction.METHOD_M_PESA
+        raw = tx.raw_response or {}
+        try:
+            raw_dict = dict(raw) if isinstance(raw, dict) else {'raw': raw}
+        except Exception:
+            raw_dict = {'raw': raw}
+        raw_dict['manual_confirm'] = {'code': code, 'confirmed_at': timezone.now().isoformat()}
+        tx.raw_response = raw_dict
+        tx.save()
+
+        # Finalize linked order if present
+        try:
+            if tx.order:
+                tx.order.status = 'paid'
+                tx.order.save(update_fields=['status'])
+                if tx.order.table:
+                    tx.order.table.status = Table.STATUS_AVAILABLE
+                    tx.order.table.save(update_fields=['status'])
+                _emit_event('order_update', {'order_id': tx.order.order_id, 'status': 'paid'})
+        except Exception:
+            logger.debug('Failed to finalize order for manual confirm tx=%s', tx.id)
+
+        return JsonResponse({'status': 'ok'})
+    except Exception as e:
+        logger.exception('manual_mpesa_confirm failed: %s', e)
+        return JsonResponse({'error': 'confirm_failed', 'details': str(e)}, status=500)
 
 
 def config(request):

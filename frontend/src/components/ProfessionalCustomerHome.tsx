@@ -231,6 +231,56 @@ const buildDefaultHomeData = (): HomeData => {
       delivery_min: 0,
     },
   };
+
+  const handleManualMpesaConfirm = async (code: string) => {
+    if (!mpesaCheckoutId) {
+      toast.error("No MPesa checkout id available");
+      return;
+    }
+
+    try {
+      const res = await fetch(getApiUrl('/payments/manual-confirm/'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ checkout_id: mpesaCheckoutId, code }),
+      });
+
+      if (!res.ok) {
+        const txt = await res.text().catch(() => '');
+        throw new Error(txt || `Confirm failed (${res.status})`);
+      }
+
+      // Treat as successful payment
+      clearTimers();
+      setMpesaCheckoutId(null);
+      setAwaitingMpesaConfirm(false);
+      setProcessing(false);
+
+      const trackingId = Math.floor(10000 + Math.random() * 90000).toString();
+      window.localStorage.setItem('tastyBites.lastOrderId', trackingId);
+
+      const orderDetails: OrderReceipt = {
+        order_id: trackingId,
+        items: cart,
+        total_amount: cartTotalPrice,
+        payment_method: 'mpesa',
+        order_type: orderType,
+        table_number: '',
+        delivery_address: orderType === 'delivery' ? deliveryAddress : undefined,
+        cashier_notified: true,
+      };
+
+      setLastOrder(orderDetails);
+      setShowCartModal(false);
+      setCart([]);
+      setPhoneNumber('');
+      setCurrentOrderId(null);
+      toast.success('Payment Confirmed', { description: 'Thank you — your payment was recorded.' });
+    } catch (err: any) {
+      console.error('Manual confirm failed', err);
+      toast.error('Confirm Failed', { description: err?.message || 'Unable to confirm payment.' });
+    }
+  };
 };
 
 const DEFAULT_HOME_DATA: HomeData = buildDefaultHomeData();
@@ -676,6 +726,8 @@ const ProfessionalCustomerHome = () => {
           isProcessing={processing}
           isAwaitingMpesa={awaitingMpesaConfirm}
           onCancelMpesaPayment={handleCancelMpesaTransaction} // Pass the new handler
+          mpesaCheckoutId={mpesaCheckoutId || undefined}
+          onManualConfirm={handleManualMpesaConfirm}
           points={points}
           onRedeemPoints={handleRedeemPoints}
           orderType={orderType}

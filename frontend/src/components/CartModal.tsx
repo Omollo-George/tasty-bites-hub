@@ -26,6 +26,8 @@ interface CartModalProps {
   isProcessing: boolean;
   isAwaitingMpesa: boolean;
   onCancelMpesaPayment: () => void; // New prop for cancelling M-Pesa
+  mpesaCheckoutId?: string;
+  onManualConfirm?: (code: string) => Promise<void>;
   points: number;
   onRedeemPoints: () => void;
   orderType: 'takeaway' | 'delivery';
@@ -48,6 +50,8 @@ const CartModal: React.FC<CartModalProps> = ({
   isProcessing,
   isAwaitingMpesa,
   onCancelMpesaPayment, // Destructure new prop
+  mpesaCheckoutId,
+  onManualConfirm,
   points,
   onRedeemPoints,
   orderType,
@@ -57,6 +61,7 @@ const CartModal: React.FC<CartModalProps> = ({
 }) => {
   const [dragY, setDragY] = useState(0); // Changed from dragOffset to dragY
   const [isDragging, setIsDragging] = useState(false);
+  const [manualCode, setManualCode] = useState('');
   const startY = useRef(0); // Changed from startPos to startY
   const currentDragY = useRef(0); // To track current dragY for closing logic
   const accumulatedY = useRef(0); // To keep track of the total offset
@@ -321,6 +326,26 @@ const CartModal: React.FC<CartModalProps> = ({
             >
               Cancel Payment
             </button>
+          )}
+          {isAwaitingMpesa && onManualConfirm && (
+            <div className="mt-3 space-y-2">
+              <label className="text-xs font-bold text-gray-500 uppercase tracking-widest">Enter M-Pesa confirmation code</label>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  placeholder="e.g. PA12345AB"
+                  value={manualCode}
+                  onChange={(e) => setManualCode(e.target.value)}
+                  className="flex-1 bg-white/5 border border-white/10 rounded-xl py-3 px-4 outline-none text-sm placeholder:text-gray-600"
+                />
+                <button
+                  onClick={async () => { if (manualCode.trim()) await onManualConfirm(manualCode.trim()); }}
+                  className="px-4 py-3 rounded-xl bg-green-600 text-white font-bold hover:bg-green-500"
+                >
+                  Confirm
+                </button>
+              </div>
+            </div>
           )}
         </div>
       </div>
