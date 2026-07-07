@@ -23,6 +23,7 @@ urlpatterns = [
     path('customer/home/', views.customer_home, name='customer_home'),
     path('orders/<str:order_id>/', views.order_detail, name='order_detail'),
     path('orders/<str:order_id>/update/', views.order_status_update, name='order_update'),
+    path('orders/<str:order_id>/discard/', views.order_discard, name='order_discard'),
     path('orders/<str:order_id>/item/<int:item_id>/update-price/', views.order_item_price_update, name='order_item_price_update'),
     path('menu-items/', views.menu_items, name='menu_items'),
     path('menu-items/create/', views.menu_item_create, name='menu_item_create'),

@@ -4219,6 +4219,37 @@ def order_detail(request, order_id: str):
     return JsonResponse(_serialize_order(order))
 
 
+@csrf_exempt
+def order_discard(request, order_id: str):
+    """Discard a pending order and release any associated table."""
+    if request.method != 'DELETE':
+        return HttpResponseBadRequest('Only DELETE allowed')
+
+    if not _payments_schema_ready():
+        return _schema_error_response()
+
+    order = Order.objects.filter(order_id=order_id).first()
+    if not order:
+        return JsonResponse({'ok': True, 'order_id': order_id, 'status': 'cancelled', 'message': 'order_not_found'})
+
+    if order.status in [Order.STATUS_PAID, Order.STATUS_COMPLETED]:
+        return JsonResponse({'ok': True, 'order_id': order.order_id, 'status': order.status, 'message': 'already_complete'})
+
+    order.status = Order.STATUS_CANCELLED
+    order.save(update_fields=['status'])
+
+    if order.table:
+        order.table.status = Table.STATUS_AVAILABLE
+        order.table.save(update_fields=['status'])
+
+    try:
+        _emit_event('order_update', {'order_id': order.order_id, 'status': 'cancelled'})
+    except Exception:
+        pass
+
+    return JsonResponse({'ok': True, 'order_id': order.order_id, 'status': order.status})
+
+
 def _empty_report_summary_payload(range_label: str = '') -> dict:
     return {
         'range_days': 0,
