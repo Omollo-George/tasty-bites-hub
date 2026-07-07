@@ -25,6 +25,7 @@ interface CartModalProps {
   onPhoneNumberChange: (phone: string) => void;
   isProcessing: boolean;
   isAwaitingMpesa: boolean;
+  isAwaitingMpesaSimulated?: boolean;
   onCancelMpesaPayment: () => void; // New prop for cancelling M-Pesa
   mpesaCheckoutId?: string;
   onManualConfirm?: (code: string) => Promise<void>;
@@ -49,6 +50,7 @@ const CartModal: React.FC<CartModalProps> = ({
   onPhoneNumberChange,
   isProcessing,
   isAwaitingMpesa,
+  isAwaitingMpesaSimulated = false,
   onCancelMpesaPayment, // Destructure new prop
   mpesaCheckoutId,
   onManualConfirm,
@@ -323,6 +325,11 @@ const CartModal: React.FC<CartModalProps> = ({
           </button>
           {(isProcessing || isAwaitingMpesa) && (
             <p className="text-[10px] text-center text-orange-500/60 mt-3 animate-pulse">Please do not close or refresh this page</p>
+          )}
+          {isAwaitingMpesa && isAwaitingMpesaSimulated && (
+            <p className="text-[11px] text-center text-yellow-400/80 mt-2">
+              Local sandbox mode is active. This is a simulated M-Pesa flow and will not trigger a real phone prompt unless you configure a public HTTPS callback URL.
+            </p>
           )}
           {isAwaitingMpesa && (
             <button

@@ -19,8 +19,11 @@ from corsheaders.defaults import default_headers
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-# Load environment variables from .env file if it exists
-load_dotenv(BASE_DIR / '.env')
+# Load environment variables from the backend .env file if it exists.
+env_candidates = [BASE_DIR / '.env', BASE_DIR.parent / '.env', BASE_DIR.parent.parent / '.env']
+for env_path in env_candidates:
+    if env_path.exists():
+        load_dotenv(env_path, override=False)
 
 
 # Quick-start development settings - unsuitable for production
@@ -33,9 +36,19 @@ SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY', 'django-insecure-_@p9bh$hzz=4m+
 DEBUG = os.environ.get('DJANGO_DEBUG', 'True') == 'True'
 
 # Allow local/dev hosts by default; override via env var if needed
+DEFAULT_ALLOWED_HOSTS = [
+    '127.0.0.1',
+    'localhost',
+    '[::1]',
+    '.vercel.app',
+    '.onrender.com',
+    '.loca.lt',
+    '.ngrok-free.app',
+    '.ngrok.io',
+]
 ALLOWED_HOSTS = os.environ.get(
     'ALLOWED_HOSTS',
-    '127.0.0.1,localhost,[::1],.vercel.app,.onrender.com'
+    ','.join(DEFAULT_ALLOWED_HOSTS)
 ).replace(' ', '').replace(';', ',').split(',')
 
 
@@ -87,12 +100,30 @@ WSGI_APPLICATION = 'tastybites.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/6.0/ref/settings/#databases
 
-DATABASES = {
-    'default': dj_database_url.config(
-        default=f"sqlite:///{BASE_DIR / 'db.sqlite3'}",
-        conn_max_age=600
-    )
-}
+raw_db_url = os.environ.get('DATABASE_URL', '') or None
+if not raw_db_url:
+    raw_db_url = os.environ.get('tastybites_POSTGRES_URL', '') or None
+if not raw_db_url:
+    raw_db_url = os.environ.get('tastybites_NILEDB_URL', '') or None
+if not raw_db_url:
+    raw_db_url = os.environ.get('tastybites_NILEDB_POSTGRES_URL', '') or None
+if isinstance(raw_db_url, str):
+    raw_db_url = raw_db_url.strip()
+    placeholder_markers = ('[YOUR-PASSWORD]', '<your', 'your-password', 'your-db-url', 'YOUR-PASSWORD', 'postgresql://postgres:', 'postgres://postgres:')
+    if not raw_db_url or any(marker in raw_db_url for marker in placeholder_markers) or ('[' in raw_db_url and ']' in raw_db_url):
+        raw_db_url = None
+
+if raw_db_url:
+    DATABASES = {
+        'default': dj_database_url.parse(raw_db_url, conn_max_age=600)
+    }
+else:
+    DATABASES = {
+        'default': dj_database_url.config(
+            default=f"sqlite:///{BASE_DIR / 'db.sqlite3'}",
+            conn_max_age=600
+        )
+    }
 # Password validation
 # https://docs.djangoproject.com/en/6.0/ref/settings/#auth-password-validators
 
@@ -178,9 +209,16 @@ CORS_ALLOW_METHODS = [
 ]
 
 # CSRF Trusted Origins for production
+DEFAULT_TRUSTED_ORIGINS = [
+    'http://localhost:5173',
+    'http://127.0.0.1:5173',
+    'http://localhost:5174',
+    'http://127.0.0.1:5174',
+    'https://tastybites-hub-local.loca.lt',
+]
 CSRF_TRUSTED_ORIGINS = os.environ.get(
     'CSRF_TRUSTED_ORIGINS',
-    'http://localhost:5173,http://127.0.0.1:5173,http://localhost:5174,http://127.0.0.1:5174'
+    ','.join(DEFAULT_TRUSTED_ORIGINS)
 ).replace(' ', '').replace(';', ',').split(',')
 # MPESA callback URL can be overridden via environment variable.
 

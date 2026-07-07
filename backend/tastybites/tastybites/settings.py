@@ -21,8 +21,13 @@ from corsheaders.defaults import default_headers
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-# Load environment variables from .env file if it exists
-load_dotenv(BASE_DIR / '.env')
+# Load environment variables from the backend .env file if it exists.
+# The app stores its runtime settings in backend/.env, while Django's project
+# directory is backend/tastybites, so we check both locations.
+env_candidates = [BASE_DIR / '.env', BASE_DIR.parent / '.env', BASE_DIR.parent.parent / '.env']
+for env_path in env_candidates:
+    if env_path.exists():
+        load_dotenv(env_path, override=False)
 
 
 # Quick-start development settings - unsuitable for production
@@ -37,14 +42,33 @@ DEBUG_VALUE = os.environ.get('DJANGO_DEBUG', os.environ.get('DEBUG', 'False'))
 DEBUG = str(DEBUG_VALUE).strip().lower() in ('1', 'true', 'yes', 'on')
 
 # Allow local/dev hosts by default; override via env var if needed
+DEFAULT_ALLOWED_HOSTS = [
+    '127.0.0.1',
+    'localhost',
+    '[::1]',
+    '.vercel.app',
+    '.onrender.com',
+    '.fly.dev',
+    '.loca.lt',
+    '.ngrok-free.app',
+    '.ngrok.io',
+    '.tunnelmole.net',
+]
 ALLOWED_HOSTS = os.environ.get(
     'ALLOWED_HOSTS',
-    '127.0.0.1,localhost,[::1],.vercel.app,.onrender.com,.fly.dev'
+    ','.join(DEFAULT_ALLOWED_HOSTS)
 ).replace(' ', '').replace(';', ',').split(',')
 
-# Force local development mode when running manage.py directly without explicit DEBUG env.
-if 'runserver' in sys.argv and os.environ.get('DJANGO_DEBUG', '').strip() == '':
+# Force local development mode when running manage.py directly without explicit
+# DEBUG override. The local runserver command should always use the SQLite
+# fallback rather than failing with the production-only DATABASE_URL guard.
+RUNSERVER_COMMAND = 'runserver' in sys.argv
+if RUNSERVER_COMMAND:
     DEBUG = True
+
+# When running the local dev server, allow an empty or missing DATABASE_URL to
+# fall back to the bundled SQLite file instead of raising a production-only error.
+LOCAL_RUNSERVER = RUNSERVER_COMMAND and DEBUG
 
 
 # Application definition
@@ -109,6 +133,14 @@ if not raw_db_url:
     raw_db_url = os.environ.get('tastybites_NILEDB_URL', '') or None
 if not raw_db_url:
     raw_db_url = os.environ.get('tastybites_NILEDB_POSTGRES_URL', '') or None
+
+# Treat placeholder or obviously invalid database URLs as unset so local dev can
+# fall back to the bundled SQLite DB instead of crashing at startup.
+if isinstance(raw_db_url, str):
+    raw_db_url = raw_db_url.strip()
+    placeholder_markers = ('[YOUR-PASSWORD]', '<your', 'your-password', 'your-db-url', 'YOUR-PASSWORD', 'postgresql://postgres:', 'postgres://postgres:')
+    if not raw_db_url or any(marker in raw_db_url for marker in placeholder_markers) or ('[' in raw_db_url and ']' in raw_db_url):
+        raw_db_url = None
 def add_sslmode_if_requested(url):
     if not url or 'sslmode=' in url:
         return url
@@ -137,7 +169,7 @@ if isinstance(raw_db_url, str):
 else:
     cleaned_db_url = None
 
-if cleaned_db_url is None and not DEBUG:
+if cleaned_db_url is None and not DEBUG and not LOCAL_RUNSERVER:
     raise ImproperlyConfigured(
         'DATABASE_URL is required in production. Set DATABASE_URL in your Vercel environment variables.'
     )
@@ -150,12 +182,13 @@ try:
                 conn_max_age=600
             )
         }
-    elif DEBUG:
+    elif DEBUG or LOCAL_RUNSERVER:
         DATABASES = {
-            'default': dj_database_url.config(
-                default=f"sqlite:///{BASE_DIR / 'db.sqlite3'}",
-                conn_max_age=600
-            )
+            'default': {
+                'ENGINE': 'django.db.backends.sqlite3',
+                'NAME': str(BASE_DIR / 'db.sqlite3'),
+                'CONN_MAX_AGE': 600,
+            }
         }
     else:
         raise ImproperlyConfigured(
@@ -255,13 +288,13 @@ MPESA_EXPRESS_SHORTCODE = '174379'
 MPESA_PASSKEY = 'bfb279f9aa9bdbcf158e97dd71a467cd2e0c893059b10f78e6b72ada1ed2c919'
 MPESA_INITIATOR_USERNAME = 'Tasty Bites'
 # CORS Configuration
-CORS_ALLOW_ALL_ORIGINS = os.environ.get('CORS_ALLOW_ALL_ORIGINS', 'False') == 'True'
+CORS_ALLOW_ALL_ORIGINS = os.environ.get('CORS_ALLOW_ALL_ORIGINS', 'True') == 'True'
 
 # Allow frontend domain from environment
 if not CORS_ALLOW_ALL_ORIGINS:
     frontend_url = os.environ.get('CORS_ALLOWED_ORIGINS', '')
     # Ensure we handle multiple origins, trim whitespace, and remove trailing slashes
-    CORS_ALLOWED_ORIGINS = [url.strip().rstrip('/') for url in frontend_url.split(',') if url.strip()] 
+    CORS_ALLOWED_ORIGINS = [url.strip().rstrip('/') for url in frontend_url.split(',') if url.strip()]
     if not CORS_ALLOWED_ORIGINS:
         # Default to local Vite development origins.
         CORS_ALLOWED_ORIGINS = [
@@ -270,14 +303,34 @@ if not CORS_ALLOW_ALL_ORIGINS:
             'http://localhost:5174',
             'http://127.0.0.1:5174',
         ]
+else:
+    CORS_ALLOWED_ORIGINS = [
+        'http://localhost:5173',
+        'http://127.0.0.1:5173',
+        'http://localhost:5174',
+        'http://127.0.0.1:5174',
+    ]
 
 CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOW_HEADERS = list(default_headers) + ['Authorization', 'X-ADMIN-TOKEN', 'X-STAFF-TOKEN']
+CORS_ALLOWED_METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS']
 
 # CSRF Trusted Origins for production and local development.
+DEFAULT_TRUSTED_ORIGINS = [
+    'http://localhost:5173',
+    'http://127.0.0.1:5173',
+    'https://localhost:5173',
+    'https://127.0.0.1:5173',
+    'http://localhost:5174',
+    'http://127.0.0.1:5174',
+    'https://localhost:5174',
+    'https://127.0.0.1:5174',
+    'https://tasty-bites-hub.fly.dev',
+    'https://tastybites-hub-local.loca.lt',
+]
 CSRF_TRUSTED_ORIGINS = os.environ.get(
     'CSRF_TRUSTED_ORIGINS',
-    'http://localhost:5173,http://127.0.0.1:5173,https://localhost:5173,https://127.0.0.1:5173,http://localhost:5174,http://127.0.0.1:5174,https://localhost:5174,https://127.0.0.1:5174,https://tasty-bites-hub.fly.dev'
+    ','.join(DEFAULT_TRUSTED_ORIGINS)
 ).replace(' ', '').replace(';', ',').split(',')
 # MPESA callback URL can be overridden via environment variable.
 
@@ -286,7 +339,8 @@ CSRF_TRUSTED_ORIGINS = os.environ.get(
 MPESA_CALLBACK_URL = os.environ.get(
     'MPESA_CALLBACK_URL',
     # IMPORTANT: Safaricom requires a public HTTPS callback.
-    # For local/dev without ngrok/webhook, set MPESA_CALLBACK_URL to a reachable HTTPS URL.
+    # For local/dev, expose your backend with ngrok or another HTTPS tunnel and set
+    # MPESA_CALLBACK_URL=https://<your-ngrok-subdomain>.ngrok.io/api/payments/callback/
     # Leaving it blank will allow the request-based callback URL builder to construct the correct hosted URL.
     ''
 )

@@ -1,15 +1,17 @@
+import importlib
 import json
 from unittest.mock import patch
 
+from django.core.exceptions import ImproperlyConfigured
 from django.db import connection
 from django.db.utils import OperationalError
-from django.test import RequestFactory, TestCase
+from django.test import Client, RequestFactory, TestCase
 from django.utils import timezone
 
 from decimal import Decimal
 from datetime import timedelta
 
-from .views import admin_signin, _build_mpesa_callback_url, _payments_schema_ready, order_detail, order_status_update, report_summary, create_pos_order, menu_items, cashier_pending_bills, claim_order
+from .views import admin_signin, _build_mpesa_callback_url, _ensure_required_tables, _payments_schema_ready, order_detail, order_status_update, report_summary, create_pos_order, menu_items, cashier_pending_bills, claim_order
 from .models import AdminToken, AdminUser, Employee, MiscellaneousExpense, Order, OrderItem, StaffActivity, StaffToken, Transaction, WastageLog
 
 
@@ -30,6 +32,35 @@ class AdminSigninSchemaTests(SchemaCleanupMixin, TestCase):
         callback_url = _build_mpesa_callback_url(request)
 
         self.assertEqual(callback_url, 'https://example.com/api/payments/callback/')
+
+    def test_callback_endpoint_accepts_public_tunnel_host(self):
+        client = Client(HTTP_HOST='tastybites-hub-local.loca.lt')
+
+        response = client.get('/api/payments/callback/')
+
+        self.assertEqual(response.status_code, 400)
+        self.assertContains(response, 'Only POST allowed')
+
+    def test_settings_loads_backend_env_file_for_mpesa_config(self):
+        import tastybites.settings as settings_module
+
+        with patch.object(settings_module, 'load_dotenv') as mock_load_dotenv:
+            importlib.reload(settings_module)
+
+        loaded_env_paths = [call.args[0] for call in mock_load_dotenv.call_args_list]
+        self.assertIn(settings_module.BASE_DIR.parent / '.env', loaded_env_paths)
+
+    def test_runserver_forces_sqlite_fallback_when_database_url_is_missing(self):
+        import os
+        import sys
+        import tastybites.settings as settings_module
+
+        with patch.dict(os.environ, {'DJANGO_DEBUG': 'False', 'DATABASE_URL': ''}, clear=False):
+            with patch.object(sys, 'argv', ['manage.py', 'runserver']):
+                reloaded_settings = importlib.reload(settings_module)
+
+        self.assertTrue(reloaded_settings.DEBUG)
+        self.assertEqual(reloaded_settings.DATABASES['default']['ENGINE'], 'django.db.backends.sqlite3')
 
     def test_create_pos_order_retries_when_schema_check_is_transient(self):
         employee = Employee.objects.create(name='Waiter Mike', role='Waiter', status='on_shift')
@@ -123,6 +154,10 @@ class AdminSigninSchemaTests(SchemaCleanupMixin, TestCase):
         self.drop_table_if_exists('payments_orderitem')
 
         self.assertTrue(_payments_schema_ready())
+
+    def test_schema_repair_returns_false_when_database_backend_is_not_ready(self):
+        with patch('payments.views.connection.introspection.table_names', side_effect=ImproperlyConfigured('ENGINE missing')):
+            self.assertFalse(_ensure_required_tables())
 
     def test_schema_repair_adds_missing_orderitem_columns(self):
         self.drop_table_if_exists('payments_orderitem')

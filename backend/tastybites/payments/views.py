@@ -156,11 +156,25 @@ def _normalize_phone(ph: str) -> str:
 
 def _ensure_required_tables() -> bool:
     try:
+        db_settings = connection.settings_dict
+        if not db_settings or not db_settings.get('ENGINE'):
+            logger.warning('Payments schema repair skipped because the database backend is not ready')
+            return False
+    except Exception as exc:
+        logger.warning('Payments schema repair skipped because the database backend is not ready: %s', exc)
+        return False
+
+    try:
         call_command('migrate', 'payments', verbosity=0, interactive=False)
     except Exception as exc:
         logger.warning('Migrate repair failed, trying direct table creation: %s', exc)
 
-    existing_tables = set(connection.introspection.table_names())
+    try:
+        existing_tables = set(connection.introspection.table_names())
+    except Exception as exc:
+        logger.warning('Payments schema repair could not inspect tables: %s', exc)
+        return False
+
     vendor = connection.vendor
 
     create_statements = []
@@ -1163,9 +1177,15 @@ def _is_local_callback_url(url: str) -> bool:
 
 def _build_mpesa_callback_url(request=None):
     callback_url = getattr(settings, 'MPESA_CALLBACK_URL', '').strip()
+    environment = getattr(settings, 'MPESA_ENVIRONMENT', 'sandbox')
+    is_sandbox = environment == 'sandbox'
+
     if callback_url:
-        # Ignore placeholder callback values and local URLs for live M-Pesa calls.
-        if callback_url != 'https://example.ngrok-free.app/api/payments/callback/' and not _is_local_callback_url(callback_url):
+        # Accept local callbacks in sandbox for local development.
+        if callback_url != 'https://example.ngrok-free.app/api/payments/callback/' and (
+            callback_url.startswith('https://') and not _is_local_callback_url(callback_url)
+            or (is_sandbox and _is_local_callback_url(callback_url))
+        ):
             return callback_url
 
     if request is not None:
@@ -1179,21 +1199,29 @@ def _build_mpesa_callback_url(request=None):
                 built = f"{scheme}://{forwarded_host}/api/payments/callback/"
                 if built.startswith('https://') and not _is_local_callback_url(built):
                     return built
+                if is_sandbox and _is_local_callback_url(built):
+                    return built
 
                 if forwarded_proto and forwarded_proto.lower() == 'https':
                     parsed = urlparse(built)
                     secure_url = urlunparse(parsed._replace(scheme='https'))
                     if secure_url.startswith('https://') and not _is_local_callback_url(secure_url):
                         return secure_url
+                    if is_sandbox and _is_local_callback_url(secure_url):
+                        return secure_url
 
             built = request.build_absolute_uri('/api/payments/callback/')
             if built.startswith('https://') and not _is_local_callback_url(built):
+                return built
+            if is_sandbox and _is_local_callback_url(built):
                 return built
 
             if forwarded_proto and forwarded_proto.lower() == 'https':
                 parsed = urlparse(built)
                 secure_url = urlunparse(parsed._replace(scheme='https'))
                 if secure_url.startswith('https://') and not _is_local_callback_url(secure_url):
+                    return secure_url
+                if is_sandbox and _is_local_callback_url(secure_url):
                     return secure_url
         except Exception:
             return ''
@@ -1207,12 +1235,22 @@ def _execute_stk_push(msisdn, amount, account_ref, tx, request=None):
     consumer_key = getattr(settings, 'MPESA_CONSUMER_KEY', '').strip()
     consumer_secret = getattr(settings, 'MPESA_CONSUMER_SECRET', '').strip()
     callback_url = _build_mpesa_callback_url(request)
+    environment = getattr(settings, 'MPESA_ENVIRONMENT', 'sandbox')
+    is_sandbox = environment == 'sandbox'
+    logger.info('M-Pesa STK push callback URL=%s sandbox=%s', callback_url, is_sandbox)
 
-    if not shortcode or not passkey or not consumer_key or not consumer_secret or not callback_url.startswith('https://'):
-        # If credentials or callback URL are missing, initiate a simulated STK push
-        # but leave the transaction in `pending` state so the frontend can prompt
-        # the user to confirm completion (useful on platforms like Render).
-        logger.info('Using simulated M-Pesa PUSH (pending) because Daraja credentials or callback URL are unavailable.')
+    # Daraja requires a valid HTTPS callback URL for real STK pushes.
+    # Local HTTP callbacks are useful for sandbox testing but are not valid
+    # for the actual Daraja API; those must be handled by the simulated fallback.
+    callback_valid = callback_url.startswith('https://')
+    if not shortcode or not passkey or not consumer_key or not consumer_secret or not callback_valid:
+        if is_sandbox and callback_url and _is_local_callback_url(callback_url):
+            logger.info(
+                'Local sandbox callback URL detected (%s); using simulated STK push because Daraja rejects local HTTP callbacks.',
+                callback_url,
+            )
+        else:
+            logger.info('Using simulated M-Pesa PUSH (pending) because Daraja credentials or callback URL are unavailable.')
         checkout_id = f"SIM-{uuid.uuid4().hex[:12]}"
         merchant_id = f"SIM-{uuid.uuid4().hex[:12]}"
         resp_json = {

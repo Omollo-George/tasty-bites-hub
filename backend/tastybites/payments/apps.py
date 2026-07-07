@@ -22,12 +22,13 @@ class PaymentsConfig(AppConfig):
     def ready(self):
         logger = logging.getLogger(__name__)
 
-        # Only run the worker in the actual server process, not in the autoreloader parent.
-        autoreload_active = os.environ.get('RUN_MAIN') == 'true' or os.environ.get('WERKZEUG_RUN_MAIN') == 'true'
+        # Skip the background schema repair in local debug runs so the dev server
+        # can boot cleanly without racing the database backend initialization.
         if self._should_skip_auto_repair():
             logger.info('Payments auto-repair skipped for management command: %s', sys.argv[1:])
             return
-        if settings.DEBUG and not autoreload_active:
+        if settings.DEBUG:
+            logger.info('Payments auto-repair skipped in DEBUG mode')
             return
 
         # Skip index worker completely on initial app startup - too many DB dependency issues

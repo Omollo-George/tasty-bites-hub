@@ -249,6 +249,7 @@ const ProfessionalCustomerHome = () => {
   const [lastOrder, setLastOrder] = useState<OrderReceipt | null>(null); // State to show receipt after checkout
   const [processing, setProcessing] = useState(false);
   const [awaitingMpesaConfirm, setAwaitingMpesaConfirm] = useState(false);
+  const [awaitingMpesaSimulated, setAwaitingMpesaSimulated] = useState(false);
   const [currentOrderId, setCurrentOrderId] = useState<string | null>(null); // To track order for cancellation
   const [mpesaCheckoutId, setMpesaCheckoutId] = useState<string | null>(null);
   const [points, setPoints] = useState<number>(() => parseInt(localStorage.getItem('loyaltyPoints') || '0'));
@@ -532,9 +533,14 @@ const ProfessionalCustomerHome = () => {
 
       setCurrentOrderId(dataRes.order_id || null);
       setMpesaCheckoutId(checkoutId);
+      setAwaitingMpesaSimulated(Boolean(dataRes?.stk_response?.simulated));
       setProcessing(false);
       setAwaitingMpesaConfirm(true);
-      toast.info("M-Pesa Push Sent", { description: "Check your phone for the M-Pesa prompt." });
+      toast.info(
+        dataRes?.stk_response?.simulated
+          ? "M-Pesa flow started in local sandbox mode. No real phone prompt will be sent unless you configure a public HTTPS callback URL."
+          : "M-Pesa Push Sent. Check your phone for the M-Pesa prompt.",
+      );
 
       let transactionSettled = false;
 
