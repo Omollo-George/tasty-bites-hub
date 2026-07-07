@@ -119,6 +119,3 @@ export async function apiFetch(path: string, options?: RequestInit) {
     throw e
   }
 }
-
-// Explicit named exports to ensure the bundler recognizes all helpers.
-export { getApiUrl, getSseUrl, apiFetch }
