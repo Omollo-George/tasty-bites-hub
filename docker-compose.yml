@@ -12,4 +12,16 @@ services:
       - PORT=8000
       - DJANGO_SECRET_KEY=changeme
       - RUN_MIGRATIONS=false
+      # Mail settings for local development when using docker-compose
+      - FORCE_CONSOLE_EMAIL=0
+      - EMAIL_BACKEND=django.core.mail.backends.smtp.EmailBackend
+      - EMAIL_HOST=mailhog
+      - EMAIL_PORT=1025
+      - EMAIL_USE_TLS=False
     command: /usr/local/bin/docker-entrypoint.sh
+  mailhog:
+    image: mailhog/mailhog:latest
+    ports:
+      - "1025:1025"
+      - "8025:8025"
+    restart: unless-stopped

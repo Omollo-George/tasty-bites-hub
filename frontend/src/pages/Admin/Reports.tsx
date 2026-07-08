@@ -50,7 +50,7 @@ type MiscExpenseLog = {
 }
 
 const ReportCard = ({ label, value, valueClassName }: { label: string; value: string; valueClassName?: string }) => (
-  <div className="bg-slate-800 p-4 rounded-xl shadow-card border border-slate-700 min-h-[120px] flex flex-col justify-between overflow-hidden min-w-0 w-full">
+  <div className="min-w-[220px] flex-[0_0_220px] bg-slate-800 p-4 rounded-xl shadow-card border border-slate-700 min-h-[120px] flex flex-col justify-between overflow-hidden">
     <p className="text-xs sm:text-sm text-slate-400 truncate whitespace-nowrap">{label}</p>
     <h3 className={`text-lg sm:text-xl lg:text-2xl font-display font-semibold leading-snug truncate whitespace-nowrap ${valueClassName || 'text-slate-100'}`}>{value}</h3>
   </div>
@@ -245,7 +245,7 @@ const Reports: React.FC = () => {
   useEffect(() => {
     let es: EventSource | null = null
     try {
-      es = new EventSource('/payments/stream/')
+      es = new EventSource(getSseUrl('/payments/stream/'))
       es.onmessage = (e) => {
         try {
           const payload = JSON.parse(e.data)
@@ -577,7 +577,7 @@ const Reports: React.FC = () => {
       </p>
 
       <div className="pb-2">
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+        <div className="flex gap-4 overflow-x-auto pb-2 snap-x snap-mandatory">
           <ReportCard label="Revenue" value={data ? new Intl.NumberFormat('en-KE', { style: 'currency', currency: 'KES' }).format(data.totals.revenue) : 'Loading...'} />
           <ReportCard label="Cash Revenue" value={data ? new Intl.NumberFormat('en-KE', { style: 'currency', currency: 'KES' }).format(data.totals.cash_revenue) : 'Loading...'} />
           <ReportCard label="M-Pesa Revenue" value={data ? new Intl.NumberFormat('en-KE', { style: 'currency', currency: 'KES' }).format(data.totals.mpesa_revenue) : 'Loading...'} />
@@ -592,16 +592,16 @@ const Reports: React.FC = () => {
         </div>
       </div>
       {data?.best_waiter || data?.least_waiter ? (
-        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="flex gap-4 overflow-x-auto pb-2 snap-x snap-mandatory">
           {data?.best_waiter ? (
-            <div className="bg-slate-800 p-5 rounded-xl shadow-card border border-slate-700">
+            <div className="min-w-[260px] flex-[0_0_260px] bg-slate-800 p-5 rounded-xl shadow-card border border-slate-700">
               <p className="text-sm text-slate-400">Top Waiter</p>
               <h3 className="text-2xl sm:text-3xl font-display font-semibold text-slate-100">{data.best_waiter.waiter_name}</h3>
               <p className="text-sm text-slate-400">Orders: {data.best_waiter.orders}</p>
             </div>
           ) : null}
           {data?.least_waiter ? (
-            <div className="bg-slate-800 p-5 rounded-xl shadow-card border border-slate-700">
+            <div className="min-w-[260px] flex-[0_0_260px] bg-slate-800 p-5 rounded-xl shadow-card border border-slate-700">
               <p className="text-sm text-slate-400">Least Active Waiter</p>
               <h3 className="text-2xl sm:text-3xl font-display font-semibold text-slate-100">{data.least_waiter.waiter_name}</h3>
               <p className="text-sm text-slate-400">Orders: {data.least_waiter.orders}</p>

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { Zap, Users, MessageSquare, TrendingUp, Bell, ShieldCheck } from 'lucide-react';
 import { getAdminToken } from '@/lib/admin-session';
 import { getApiUrl } from '@/lib/api';
@@ -11,6 +11,13 @@ const AdminAutomation: React.FC = () => {
   const [answer, setAnswer] = useState<string | null>(null);
   const [queryLoading, setQueryLoading] = useState(false);
   const [history, setHistory] = useState<Array<{ query: string; answer: string }>>([]);
+  const liveConversationRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (liveConversationRef.current) {
+      liveConversationRef.current.scrollTop = 0;
+    }
+  }, [history]);
 
   const submitQuery = async () => {
     if (!query.trim()) return;
@@ -167,6 +174,12 @@ const AdminAutomation: React.FC = () => {
             <textarea
               value={query}
               onChange={(e) => setQuery(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  submitQuery();
+                }
+              }}
               placeholder="Ask: e.g. 'Which stock items are low?', 'How much revenue did we make this week?', 'Who is the top waiter?'"
               className="min-h-[120px] w-full resize-none rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3 text-sm text-slate-100 placeholder:text-slate-500"
             />
@@ -222,52 +235,19 @@ const AdminAutomation: React.FC = () => {
               </button>
             </div>
           </div>
-          {insights?.automation_report ? (
-            <div className="rounded-2xl border border-slate-700 bg-slate-950/80 p-5 mb-6">
-              <div className="flex items-center justify-between gap-3 mb-4">
-                <div>
-                  <h4 className="text-sm font-semibold">AI Automation Report</h4>
-                  <p className="text-xs text-slate-400">Live metrics from the last 7 days</p>
-                </div>
-                <span className="rounded-full bg-emerald-500/10 px-3 py-1 text-[11px] text-emerald-300">Live Data</span>
-              </div>
-              <p className="text-sm text-slate-200 mb-4">{insights.automation_report.summary}</p>
-              <div className="grid gap-3 sm:grid-cols-3 mb-4">
-                {insights.automation_report.key_metrics?.map((metric: any, index: number) => (
-                  <div key={index} className="rounded-2xl bg-slate-900/70 p-3 text-xs">
-                    <p className="text-slate-400">{metric.label}</p>
-                    <p className="mt-2 font-semibold text-slate-100">{metric.value}</p>
-                  </div>
-                ))}
-              </div>
-              {insights.automation_report.top_items?.length > 0 ? (
-                <div className="text-xs text-slate-300">
-                  <div className="font-semibold text-slate-100 mb-2">Top Items</div>
-                  <ul className="space-y-2">
-                    {insights.automation_report.top_items.slice(0, 3).map((item: any, index: number) => (
-                      <li key={index} className="flex items-center justify-between rounded-2xl bg-slate-900/60 px-3 py-2">
-                        <span>{item.name}</span>
-                        <span className="text-slate-300">{item.quantity} sold</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ) : null}
-            </div>
-          ) : null}
           <div className="rounded-2xl border border-slate-700 bg-slate-950/80 p-5 min-h-[160px] max-h-[400px] overflow-y-auto">
             <p className="text-xs uppercase text-slate-500 mb-3">Live Conversation</p>
-            <div className="space-y-3 text-sm">
+            <div ref={liveConversationRef} className="space-y-3 text-sm">
               {history.length > 0 ? (
-                history.map((entry, i) => (
+                [...history].reverse().map((entry, i) => (
                   <div key={i} className="space-y-2 animate-fadeIn">
                     <div className="rounded-2xl bg-slate-900/80 p-4 ml-auto max-w-xs">
                       <p className="text-[11px] uppercase text-slate-500 mb-1">You</p>
-                      <p className="whitespace-pre-wrap text-slate-100">{entry.query}</p>
+                      <p className="whitespace-pre-wrap break-words text-slate-100">{entry.query}</p>
                     </div>
                     <div className="rounded-2xl bg-emerald-950/40 border border-emerald-500/30 p-4 max-w-xs">
                       <p className="text-[11px] uppercase text-emerald-400 mb-1">🤖 Tasty Bites AI</p>
-                      <p className="whitespace-pre-wrap text-slate-100">{entry.answer}</p>
+                      <p className="whitespace-pre-wrap break-words text-slate-100">{entry.answer}</p>
                     </div>
                   </div>
                 ))

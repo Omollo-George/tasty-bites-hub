@@ -51,7 +51,7 @@ const ContactDrawer = () => {
     if (typeof window === 'undefined' || !trackedOrder?.order_id) return;
 
     const orderId = trackedOrder.order_id;
-    const eventSource = new EventSource(getApiUrl('/payments/stream/'));
+    const eventSource = new EventSource(getSseUrl('/payments/stream/'));
 
     const handleKitchenUpdate = (event: MessageEvent) => {
       try {

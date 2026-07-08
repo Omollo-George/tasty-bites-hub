@@ -299,7 +299,15 @@ const AdminEmployees: React.FC = () => {
 
   const handleBulkEmail = async () => {
     if (selectedIds.length === 0) return
-    const message = window.prompt(`Send an email to ${selectedIds.length} selected employees:\n\nEnter your message:`)
+    const selectedEmployees = employees.filter(e => selectedIds.includes(e.id))
+    const emailEmployees = selectedEmployees.filter(e => e.email && e.email.trim())
+
+    if (emailEmployees.length === 0) {
+      alert('No selected employees have valid email addresses.')
+      return
+    }
+
+    const message = window.prompt(`Send an email to ${emailEmployees.length} of ${selectedEmployees.length} selected employees with email addresses:\n\nEnter your message:`)
     if (!message) return
 
     try {
@@ -309,7 +317,7 @@ const AdminEmployees: React.FC = () => {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${adminToken}` 
         },
-        body: JSON.stringify({ employee_ids: selectedIds, message })
+        body: JSON.stringify({ employee_ids: emailEmployees.map((e) => e.id), message })
       })
 
       if (!res.headers.get("content-type")?.includes("application/json")) {
@@ -317,11 +325,11 @@ const AdminEmployees: React.FC = () => {
       }
 
       const data = await res.json()
-      if (res.ok) {
+      if (res.ok && typeof data.count === 'number' && data.count > 0) {
         alert(`Email sent successfully to ${data.count} employees!`)
         setSelectedIds([])
       } else {
-        alert(data.error || 'Failed to send bulk email.')
+        alert(data.error || 'Failed to send bulk email. No emails were delivered.')
       }
     } catch (err) {
       alert('Error connecting to email service.')

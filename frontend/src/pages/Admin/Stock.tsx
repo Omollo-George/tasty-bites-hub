@@ -253,14 +253,14 @@ const AdminStock: React.FC = () => {
 
       {/* Stats Overview */}
       <div className="pb-2">
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="flex gap-4 overflow-x-auto pb-2 snap-x snap-mandatory">
           {[
             { label: 'Total Items', value: stats.total, icon: CheckCircle, color: 'text-blue-400', bg: 'bg-blue-500/10' },
             { label: 'Low Stock', value: stats.lowStock, icon: AlertTriangle, color: 'text-amber-400', bg: 'bg-amber-500/10' },
             { label: 'Out of Stock', value: stats.outOfStock, icon: XCircle, color: 'text-red-400', bg: 'bg-red-500/10' },
             { label: 'Inventory Value', value: `KES ${stats.totalValue.toLocaleString()}`, icon: Filter, color: 'text-emerald-400', bg: 'bg-emerald-500/10' },
           ].map((stat, idx) => (
-            <div key={idx} className="bg-slate-900 border border-slate-800 p-5 rounded-2xl flex flex-col sm:flex-row sm:items-center gap-4">
+            <div key={idx} className="min-w-[220px] flex-[0_0_220px] bg-slate-900 border border-slate-800 p-5 rounded-2xl flex flex-col sm:flex-row sm:items-center gap-4">
               <div className={`p-3 rounded-xl ${stat.bg} ${stat.color}`}>
                 <stat.icon size={24} />
               </div>

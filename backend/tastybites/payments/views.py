@@ -3316,10 +3316,50 @@ def send_bulk_employee_email(request):
 
         # Ensure IDs are integers to prevent lookup failures
         clean_ids = [int(eid) for eid in employee_ids if str(eid).isdigit()]
-        employees = Employee.objects.filter(id__in=clean_ids).exclude(email='')
-        
+        employees_qs = Employee.objects.filter(id__in=clean_ids)
+
+        # Validate emails and categorize recipients
+        from django.core.validators import validate_email
+        from django.core.exceptions import ValidationError
+
+        attempted_emails = []
+        skipped_emails = []
+        employees = []
+        for emp in employees_qs:
+            email = (emp.email or '').strip()
+            if not email:
+                skipped_emails.append({'id': emp.id, 'reason': 'empty_or_missing'})
+                continue
+            try:
+                validate_email(email)
+            except ValidationError:
+                skipped_emails.append({'id': emp.id, 'email': email, 'reason': 'invalid_format'})
+                continue
+            employees.append(emp)
+            attempted_emails.append(email)
+
+        if not employees:
+            return JsonResponse({'error': 'No selected employees have valid email addresses.', 'skipped': skipped_emails}, status=400)
+
         sender = getattr(settings, 'EMAIL_HOST_USER', getattr(settings, 'DEFAULT_FROM_EMAIL', 'admin@tastybites.com'))
+
+        # Diagnose connection upfront
+        from django.core.mail import get_connection
+        conn = get_connection()
+        try:
+            conn.open()
+        except Exception as e:
+            logger.exception('Failed to open mail connection: %s', e)
+            return JsonResponse({'error': f'Could not connect to mail server: {str(e)}', 'settings': {
+                'EMAIL_BACKEND': getattr(settings, 'EMAIL_BACKEND', None),
+                'EMAIL_HOST': getattr(settings, 'EMAIL_HOST', None),
+                'EMAIL_PORT': getattr(settings, 'EMAIL_PORT', None),
+                'EMAIL_USE_TLS': getattr(settings, 'EMAIL_USE_TLS', None),
+                'EMAIL_HOST_USER': bool(getattr(settings, 'EMAIL_HOST_USER', None)),
+            }, 'skipped': skipped_emails}, status=500)
+
         count = 0
+        failed = []
         for emp in employees:
             try:
                 send_mail(
@@ -3331,9 +3371,19 @@ def send_bulk_employee_email(request):
                 )
                 count += 1
             except Exception as e:
-                print(f"Bulk email error for {emp.email}: {e}")
+                logger.exception("Bulk email error for %s: %s", emp.email, e)
+                failed.append({'id': emp.id, 'email': emp.email, 'error': str(e)})
 
-        return JsonResponse({'ok': True, 'count': count})
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+        if count == 0:
+            # No successful sends
+            return JsonResponse({'error': 'No emails were sent.', 'failed': failed, 'skipped': skipped_emails}, status=500)
+
+        return JsonResponse({'ok': True, 'count': count, 'attempted': attempted_emails, 'failed': failed, 'skipped': skipped_emails})
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
 

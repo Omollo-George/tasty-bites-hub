@@ -166,7 +166,7 @@ const EmployeeTable: React.FC = () => {
     if (typeof window === 'undefined' || !window.EventSource) return;
     let es: EventSource | null = null;
     try {
-      es = new EventSource('/payments/stream/');
+      es = new EventSource(getSseUrl('/payments/stream/'));
       es.onmessage = (ev) => {
         try {
           const payload = JSON.parse(ev.data || '{}');
@@ -493,7 +493,7 @@ const EmployeeTable: React.FC = () => {
     <>
       <div className="flex flex-col lg:flex-row gap-6 h-full min-h-[calc(100vh-12rem)]">
       {/* Left: Menu Selection */}
-      <div className="flex-1 flex flex-col bg-slate-900 rounded-2xl border border-slate-800 overflow-hidden">
+      <div className="flex-1 flex flex-col min-w-0 bg-slate-900 rounded-2xl border border-slate-800 overflow-hidden">
         <div className="px-4 py-3 bg-slate-800/50 border-b border-slate-800 flex items-center justify-between">
           <Link to="/staff" className="text-slate-400 hover:text-white transition-colors"><ArrowLeft size={20}/></Link>
           <div className="text-center">
@@ -533,19 +533,22 @@ const EmployeeTable: React.FC = () => {
             )}
           </div>
         </div>
-        <div className="flex-1 overflow-y-auto p-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 2xl:grid-cols-5">
+        <div className="flex-1 overflow-y-auto p-4 grid grid-cols-3 gap-4">
           {filteredMenu.map(item => (
             <button 
             key={item.id} // Use item.id as key
             onContextMenu={(e) => { e.preventDefault(); updateCartQuantity(item.id, -99); }} // Hold to remove from cart
             onClick={() => addToCart(item)}
-            className="bg-slate-800 rounded-xl p-3 text-left border border-slate-700 hover:border-orange-500 transition-all active:scale-95 group relative"
+            className="bg-slate-800 rounded-xl p-3 text-left border border-slate-700 hover:border-orange-500 transition-all active:scale-95 group relative min-h-[120px]"
             >
               <img
                 src={formatImageUrl(item.image_url)}
-                alt={item.name} 
-                className="w-full h-24 object-cover rounded-lg mb-2" 
+                alt={item.name}
+                className="w-full h-20 object-cover rounded-lg mb-2"
               />
+              <div className="min-h-[42px]">
+                {/* spacer to keep title/price aligned */}
+              </div>
               <p className="font-semibold text-slate-100 text-sm truncate">{item.name}</p>
               <p className="text-orange-500 font-bold text-sm">KES {item.price}</p>
             </button>

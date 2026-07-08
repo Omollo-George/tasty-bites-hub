@@ -362,6 +362,11 @@ EMAIL_HOST_USER = os.environ.get('EMAIL_HOST_USER', 'omollogeorge096@gmail.com')
 EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD', 'xqyeohuglxczgqze')
 DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL', f"Tasty Bites Admin <{EMAIL_HOST_USER}>")
 
+# For local development, prefer the console email backend so tests don't depend
+# on external SMTP. Set environment variable FORCE_CONSOLE_EMAIL=0 to disable.
+if DEBUG and os.environ.get('FORCE_CONSOLE_EMAIL', '1') == '1':
+    EMAIL_BACKEND = os.environ.get('EMAIL_BACKEND', 'django.core.mail.backends.console.EmailBackend')
+
 MPESA_TO_KES_RATE = float(os.environ.get('MPESA_TO_KES_RATE', '1'))
 
 # Production Security Settings

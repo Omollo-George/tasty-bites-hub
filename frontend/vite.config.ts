@@ -31,6 +31,17 @@ export default defineConfig({
     strictPort: true,
     https: false,
     proxy: {
+      // SSE endpoint needs a dedicated proxy entry to avoid ECONNRESET
+      // Use no websocket handling and disable timeouts so EventSource long-polling stays open.
+      '/payments/stream': {
+        target: 'http://127.0.0.1:8000',
+        changeOrigin: true,
+        secure: false,
+        ws: false,
+        // disable proxy timeouts for long-lived SSE connections
+        timeout: 0,
+        proxyTimeout: 0,
+      },
       // Proxy API calls to the Django backend during local development
       '/api': {
         target: 'http://127.0.0.1:8000',

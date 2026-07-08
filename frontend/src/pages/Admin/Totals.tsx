@@ -50,20 +50,20 @@ const Totals: React.FC = () => {
 
   return (
     <div className="pb-2 mb-8">
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 sm:gap-6">
-        <div className="bg-slate-800 p-6 rounded-xl shadow-card border border-slate-700 min-w-0">
+      <div className="flex gap-4 overflow-x-auto pb-2 snap-x snap-mandatory">
+        <div className="min-w-[240px] flex-[0_0_240px] bg-slate-800 p-6 rounded-xl shadow-card border border-slate-700">
           <p className="text-sm text-slate-400 truncate whitespace-nowrap">Total Orders</p>
           <h3 className="text-3xl font-display text-slate-100">{totalOrders}</h3>
         </div>
-        <div className="bg-slate-800 p-6 rounded-xl shadow-card border border-slate-700 min-w-0">
+        <div className="min-w-[240px] flex-[0_0_240px] bg-slate-800 p-6 rounded-xl shadow-card border border-slate-700">
           <p className="text-sm text-slate-400 truncate whitespace-nowrap">Pending Payments</p>
           <h3 className="text-3xl font-display text-slate-100">{pending}</h3>
         </div>
-        <div className="bg-slate-800 p-6 rounded-xl shadow-card border border-slate-700 min-w-0">
+        <div className="min-w-[240px] flex-[0_0_240px] bg-slate-800 p-6 rounded-xl shadow-card border border-slate-700">
           <p className="text-sm text-slate-400 truncate whitespace-nowrap">Outstanding Balance</p>
           <h3 className="text-3xl font-display text-amber-300">{new Intl.NumberFormat('en-KE', { style: 'currency', currency: 'KES' }).format(outstandingBalance)}</h3>
         </div>
-        <div className="bg-slate-800 p-6 rounded-xl shadow-card border border-slate-700 min-w-0">
+        <div className="min-w-[240px] flex-[0_0_240px] bg-slate-800 p-6 rounded-xl shadow-card border border-slate-700">
           <p className="text-sm text-slate-400 truncate whitespace-nowrap">Revenue (24h)</p>
           <h3 className="text-3xl font-display text-slate-100">{new Intl.NumberFormat('en-KE', { style: 'currency', currency: 'KES' }).format(revenue)}</h3>
         </div>

@@ -113,7 +113,7 @@ const AdminKDS: React.FC = () => {
     // Reduce polling from 5s to 15s since we have SSE for real-time updates
     const interval = setInterval(fetchQueue, 15000);
 
-    const eventSource = new EventSource('/payments/stream/');
+    const eventSource = new EventSource(getSseUrl('/payments/stream/'));
     eventSource.onmessage = (event) => {
       try {
         const payload = JSON.parse(event.data);
