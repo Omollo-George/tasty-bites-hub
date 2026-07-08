@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import { getApiUrl } from '@/lib/api'
+import { getApiUrl, getSseUrl } from '@/lib/api'
 import { getAdminToken } from '@/lib/admin-session'
 
 const normalizeStatus = (status: string, isPaid?: boolean) => {
@@ -176,7 +176,7 @@ const OrdersTable: React.FC = () => {
   useEffect(() => {
     let es: EventSource | null = null;
     try {
-      es = new EventSource('/payments/stream/');
+      es = new EventSource(getSseUrl('/payments/stream/'));
       es.onmessage = (e) => {
         try {
           const payload = JSON.parse(e.data);
