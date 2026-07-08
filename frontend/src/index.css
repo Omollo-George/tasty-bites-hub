@@ -201,6 +201,16 @@
   }
 }
 
+/* Hide any fixed sidebar artifacts on admin pages at desktop breakpoints */
+@media (min-width: 1024px) {
+  .admin-layout [data-sidebar="sidebar"] {
+    display: none !important;
+  }
+  .admin-layout .fixed.inset-y-0.w-\[--sidebar-width\] {
+    display: none !important;
+  }
+}
+
 
 @layer utilities {
   .text-gradient {
