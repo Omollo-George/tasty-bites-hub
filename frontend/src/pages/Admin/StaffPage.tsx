@@ -277,7 +277,7 @@ const StaffPage: React.FC = () => {
     <div className="min-h-screen bg-slate-950 text-slate-100 p-6 md:p-10">
       <div className="max-w-7xl mx-auto space-y-8">
         {/* Header Section */}
-        <div className="grid gap-4 grid-cols-[0.7fr_1.9fr] items-stretch">
+        <div className="grid gap-4 grid-cols-[1.5fr_0.95fr] items-start">
           <div className="space-y-4">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
               <div>
