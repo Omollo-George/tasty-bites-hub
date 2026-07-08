@@ -30,16 +30,24 @@ def homepage(request):
     try:
         index_path = settings.STATIC_ROOT / 'index.html'
         if index_path.exists():
-            return HttpResponse(index_path.read_text(encoding='utf-8'), content_type='text/html')
+            response = HttpResponse(index_path.read_text(encoding='utf-8'), content_type='text/html')
+            response['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+            response['Pragma'] = 'no-cache'
+            response['Expires'] = '0'
+            return response
     except Exception:
         # Fall back to a simple backend index page when static index is not available
         pass
 
-    return HttpResponse(
+    response = HttpResponse(
         '<h1>Tasty Bites Backend</h1>'
         '<p>API is available at <a href="/api/health/">/api/health/</a> and <a href="/api/payments/">/api/payments/</a>.</p>',
         content_type='text/html'
     )
+    response['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+    response['Pragma'] = 'no-cache'
+    response['Expires'] = '0'
+    return response
 
 urlpatterns = [
     path('', homepage, name='homepage'),
