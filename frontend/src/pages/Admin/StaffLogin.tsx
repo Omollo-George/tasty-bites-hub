@@ -68,7 +68,7 @@ const StaffLogin: React.FC = () => {
           setError(data?.error || 'Invalid staff credentials or no token returned')
         } else {
           const expiresAt = data.expires_at || new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString()
-          setStaffTokenWithId(data.token, data.name, data.role, expiresAt, data.id)
+          setStaffTokenWithId(data.token, data.name, String(data.role || ''), expiresAt, data.id)
           navigate(from, { replace: true })
         }
       } catch (err: any) {

@@ -2,7 +2,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import { Link, useSearchParams, Navigate } from 'react-router-dom';
 import { getApiUrl, apiFetch } from '@/lib/api';
 import { getAdminToken, isAdminSessionValid } from '@/lib/admin-session';
-import { getStaffRole, getStaffName, getStaffId } from '@/lib/staff-session';
+import { getNormalizedStaffRole, getStaffName, getStaffId } from '@/lib/staff-session';
 import { getAuthToken, getAuthHeaders } from '@/lib/auth'; // Import the new getAuthToken and getAuthHeaders
 import { formatImageUrl } from '@/lib/image';
 import Receipt from '@/components/Receipt';
@@ -101,10 +101,10 @@ const EmployeeTable: React.FC = () => {
 
   const adminToken = getAdminToken();
   const isAdmin = adminToken && isAdminSessionValid();
-  const staffRole = getStaffRole()?.toLowerCase();
+  const staffRole = getNormalizedStaffRole();
   const staffName = getStaffName();
   const authToken = getAuthToken();
-  const canAccess = isAdmin || ['waiter', 'cashier', 'manager'].includes(staffRole || '');
+  const canAccess = isAdmin || ['waiter', 'cashier', 'manager'].includes(staffRole);
 
   const normalizeOrder = (value: any): PosOrderReceipt | null => {
     if (!value || typeof value !== 'object') return null;

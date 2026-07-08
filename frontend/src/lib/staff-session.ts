@@ -13,6 +13,10 @@ const getStaffExpiresAt = (): string | null => {
   return getStoredValue(STAFF_EXPIRES_KEY)
 }
 
+const normalizeStaffRole = (role?: string | null): string => {
+  return role?.trim().toLowerCase() || ''
+}
+
 const clearStaffSessionInternal = () => {
   localStorage.removeItem(STAFF_TOKEN_KEY)
   localStorage.removeItem(STAFF_NAME_KEY)
@@ -24,7 +28,7 @@ export const setStaffToken = (token: string, name: string, role: string, expires
   if (typeof window === 'undefined') return
   localStorage.setItem(STAFF_TOKEN_KEY, token)
   localStorage.setItem(STAFF_NAME_KEY, name)
-  localStorage.setItem(STAFF_ROLE_KEY, role)
+  localStorage.setItem(STAFF_ROLE_KEY, role.trim())
   localStorage.setItem(STAFF_EXPIRES_KEY, expiresAt)
 }
 
@@ -83,7 +87,17 @@ export const getStaffRole = (): string | null => {
     clearStaffSessionInternal()
     return null
   }
-  return localStorage.getItem(STAFF_ROLE_KEY)
+  const role = localStorage.getItem(STAFF_ROLE_KEY)
+  return role ? role.trim() : null
+}
+
+export const getNormalizedStaffRole = (): string => {
+  if (typeof window === 'undefined') return ''
+  if (!isStaffSessionValid()) {
+    clearStaffSessionInternal()
+    return ''
+  }
+  return normalizeStaffRole(localStorage.getItem(STAFF_ROLE_KEY))
 }
 
 export const clearStaffSession = () => {

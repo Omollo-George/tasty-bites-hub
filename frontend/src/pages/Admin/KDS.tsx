@@ -2,8 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { Link, Navigate } from 'react-router-dom';
 import AdminHeader from '@/components/AdminHeader';
 import { getAdminToken, isAdminSessionValid } from '@/lib/admin-session';
-import { getStaffId, getStaffName, getStaffRole } from '@/lib/staff-session';
-import { getApiUrl } from '@/lib/api';
+import { getStaffId, getStaffName, getNormalizedStaffRole } from '@/lib/staff-session';
+import { getApiUrl, getSseUrl } from '@/lib/api';
 import { getAuthToken, getAuthHeaders } from '@/lib/auth';
 import { useToast } from '@/hooks/use-toast';
 import { ArrowLeft } from 'lucide-react';
@@ -38,12 +38,12 @@ const AdminKDS: React.FC = () => {
   const { toast } = useToast();
   const adminToken = getAdminToken();
   const isAdmin = adminToken && isAdminSessionValid(); // Check if admin is logged in
-  const staffRole = getStaffRole()?.toLowerCase();
+  const staffRole = getNormalizedStaffRole();
   const authToken = getAuthToken(); // Get the appropriate token
   
   const staffName = getStaffName() || '';
   const staffId = getStaffId();
-  const canAccess = isAdmin || ['chef', 'manager'].includes(staffRole || '');
+  const canAccess = isAdmin || ['chef', 'manager', 'cook', 'kitchen'].includes(staffRole);
   
   // Debounce timer for SSE-triggered fetches
   const sseDebounceRef = React.useRef<NodeJS.Timeout | null>(null);
@@ -76,7 +76,11 @@ const AdminKDS: React.FC = () => {
         }
       }
       const data = await res.json();
-      setQueue(data.queue || []);
+      const queueItems = Array.isArray(data.queue) ? data.queue : [];
+      setQueue(queueItems.map((order: any) => ({
+        items: Array.isArray(order.items) ? order.items : [],
+        ...order,
+      })));
       lastFetchRef.current = Date.now();
     } catch (error) {
       console.error("Error fetching KDS queue:", error);
