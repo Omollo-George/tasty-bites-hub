@@ -275,7 +275,7 @@ const StaffPage: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 p-6 md:p-10">
-      <div className="max-w-7xl mx-auto space-y-8">
+      <div className="w-full space-y-8">
         {/* Header Section */}
         <div className="grid gap-4 grid-cols-[1.5fr_0.95fr] items-start">
           <div className="space-y-4">

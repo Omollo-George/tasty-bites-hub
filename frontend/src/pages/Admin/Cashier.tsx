@@ -82,7 +82,7 @@ export default function Cashier() {
     fetchPendingBills();
     const interval = setInterval(fetchPendingBills, 3000);
 
-    const eventSource = new EventSource('/payments/stream/');
+    const eventSource = new EventSource(getSseUrl('/payments/stream/'));
     eventSource.onmessage = (event) => {
       try {
         const payload = JSON.parse(event.data);
@@ -405,7 +405,7 @@ export default function Cashier() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 p-6 md:p-10">
-      <div className="max-w-7xl mx-auto space-y-8">
+      <div className="w-full space-y-8">
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
           <div>
             <p className="text-sm uppercase tracking-[0.3em] text-slate-500">Cashier Dashboard</p>
