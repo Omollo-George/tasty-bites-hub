@@ -396,11 +396,20 @@ const StaffPage: React.FC = () => {
                 </div>
               </div>
             </section>
+            {/* Mobile: keep Quick Instructions inside the sidebar area */}
+            <section className="lg:hidden bg-slate-900 border border-slate-800 rounded-3xl p-4">
+              <p className="text-sm uppercase tracking-[0.3em] text-slate-500">Quick Instructions</p>
+              <ul className="mt-3 space-y-2 text-sm text-slate-400">
+                <li className="rounded-2xl border border-slate-800 bg-slate-950/90 p-2">Use the POS shortcut for new orders and split bills.</li>
+                <li className="rounded-2xl border border-slate-800 bg-slate-950/90 p-2">Open KDS to track kitchen progress for live cooking orders.</li>
+                <li className="rounded-2xl border border-slate-800 bg-slate-950/90 p-2">Log out when your shift ends to keep the workstation secure.</li>
+              </ul>
+            </section>
           </aside>
         </div>
 
         {/* Quick Instructions moved to top as full-width card */}
-        <section className="bg-slate-900 border border-slate-800 p-6 rounded-3xl shadow-xl shadow-slate-950/10">
+        <section className="hidden lg:block bg-slate-900 border border-slate-800 p-6 rounded-3xl shadow-xl shadow-slate-950/10">
           <p className="text-sm uppercase tracking-[0.3em] text-slate-500">Quick Instructions</p>
           <ul className="mt-4 space-y-3 text-sm text-slate-400">
             <li className="rounded-2xl border border-slate-800 bg-slate-950/90 p-3">Use the POS shortcut for new orders and split bills.</li>
