@@ -246,6 +246,15 @@
   .admin-layout [style*="--sidebar-width"] { display: none !important; }
 }
 
+/* Hide the sidebar wrapper's spacer and ensure admin layout backgrounds are transparent */
+@media (min-width: 1024px) {
+  .admin-layout [class*="group/sidebar-wrapper"] > div:first-child { display: none !important; }
+  .admin-layout [class*="relative"][class*="h-svh"][class*="w-[--sidebar-width]"] { display: none !important; }
+  .admin-layout { background-color: transparent !important; }
+  .admin-layout :is(html, body, #root, #app) { background-color: transparent !important; }
+}
+
+
 @layer utilities {
   .text-gradient {
     background: var(--hero-gradient);
