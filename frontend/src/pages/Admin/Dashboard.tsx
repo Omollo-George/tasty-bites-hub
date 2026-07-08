@@ -8,7 +8,7 @@ import { SidebarProvider } from '@/components/ui/sidebar'
 const Dashboard: React.FC = () => {
   return (
     <SidebarProvider defaultOpen={true}>
-      <div className="admin-layout min-h-screen bg-slate-950 text-slate-100 flex flex-col overflow-x-hidden">
+      <div className="admin-layout min-h-screen w-screen bg-slate-950 text-slate-100 flex flex-col overflow-x-hidden">
         <AdminTopNav />
         <div className="lg:hidden">
           <AdminSidebar />
