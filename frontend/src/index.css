@@ -211,6 +211,16 @@
   }
 }
 
+/* Hide sidebar placeholder gap and rails used for layout inside admin pages */
+@media (min-width: 1024px) {
+  .admin-layout .w-\[--sidebar-width\],
+  .admin-layout .group > .w-\[--sidebar-width\],
+  .admin-layout [data-sidebar="rail"],
+  .admin-layout [data-sidebar="rail"] + * {
+    display: none !important;
+  }
+}
+
 
 @layer utilities {
   .text-gradient {
