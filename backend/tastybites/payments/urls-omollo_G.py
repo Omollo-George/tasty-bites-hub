@@ -56,6 +56,7 @@ urlpatterns = [
     path('pos/tables/<int:table_id>/mark-free/', views.mark_table_free, name='mark_table_free'),
     path('pos/create-order/', views.create_pos_order, name='create_pos_order'),
     path('pos/active-order/', views.get_active_pos_order, name='get_active_pos_order'),
+    path('pos/mark-item-served/<str:order_id>/<int:item_index>/', views.mark_item_served, name='mark_item_served'),
     path('pos/request-bill/<str:order_id>/', views.request_bill, name='request_bill'),
     path('pos/add-to-order/<str:order_id>/', views.add_to_pos_order, name='add_to_pos_order'),
     path('kds/queue/', views.kds_queue, name='kds_queue'),

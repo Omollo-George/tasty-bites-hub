@@ -994,6 +994,25 @@ def _log_staff_activity(request, action, details=None, order=None):
         return None
 
 
+def _select_least_busy_chef(exclude_employee_ids=None):
+    """Select the chef/cook with the lowest number of active kitchen orders."""
+    active_statuses = ['pending', 'bill_pending', 'sent_kitchen', 'preparing']
+    chefs = Employee.objects.filter(
+        Q(role__icontains='chef') | Q(role__icontains='cook') | Q(role__icontains='kitchen')
+    )
+
+    if exclude_employee_ids:
+        chefs = chefs.exclude(id__in=exclude_employee_ids)
+
+    return chefs.annotate(
+        active_order_count=Count(
+            'claimed_orders',
+            filter=Q(claimed_orders__status__in=active_statuses),
+            distinct=True
+        )
+    ).order_by('active_order_count', 'name').first()
+
+
 def _is_staff(request):
     return bool(_get_staff_token(request))
 
@@ -4059,6 +4078,7 @@ def order_status_update(request, order_id: str):
         elif status in ['ready', 'served']:
             # Notify waiter that order is ready to be picked up or served
             table_display = f"Table {order.table.number}" if order.table else 'Takeaway'
+            order_type = 'takeaway' if not order.table and not order.delivery_address else ('delivery' if order.delivery_address else 'dine_in')
 
             # Record a staff activity for the waiter so the notification time is persisted
             try:
@@ -4088,21 +4108,51 @@ def order_status_update(request, order_id: str):
             except Exception:
                 logger.debug('Failed to create StaffActivity for order_ready for order %s', order.order_id)
 
-            # Emit SSE event so waiter UIs update immediately
+            # Assign the least-busy chef to receive the order
+            assigned_chef = None
+            try:
+                current_staff = _get_staff_employee(request)
+                excluded_ids = [getattr(current_staff, 'id')] if current_staff else None
+                assigned_chef = _select_least_busy_chef(exclude_employee_ids=excluded_ids)
+                if not assigned_chef and current_staff:
+                    assigned_chef = _select_least_busy_chef()
+                if assigned_chef:
+                    try:
+                        StaffActivity.objects.create(
+                            employee=assigned_chef,
+                            order=order,
+                            action='Order Pickup Notification',
+                            details={
+                                'order_id': order.order_id,
+                                'table': table_display,
+                                'status': status,
+                                'assigned_by': getattr(current_staff, 'name', '') if current_staff else '',
+                            }
+                        )
+                    except Exception:
+                        logger.debug('Failed to create StaffActivity for chef pickup notification for order %s', order.order_id)
+            except Exception:
+                logger.debug('Failed chef assignment for order_ready order %s', order.order_id)
+
+            # Emit SSE event so waiter and chef UIs update immediately
             try:
                 payload = {
                     'order_id': order.order_id,
                     'status': status,
                     'table': table_display,
                     'table_id': order.table_id,
+                    'order_type': order_type,
                     'waiter_id': order.waiter_id if getattr(order, 'waiter_id', None) is not None else None,
                     'waiter_name': order.waiter_name or (order.waiter.name if getattr(order, 'waiter', None) else ''),
+                    'assigned_chef_id': getattr(assigned_chef, 'id', None),
+                    'assigned_chef_name': getattr(assigned_chef, 'name', None) if assigned_chef else None,
                     'created_at': order.created_at.isoformat() if order.created_at else None,
+                    'source': 'kds',
                 }
                 _emit_event('order_ready', payload)
-                logger.info('Emitted SSE order_ready for order=%s waiter_id=%s waiter_name=%s', order.order_id, payload.get('waiter_id'), payload.get('waiter_name'))
+                logger.info('Emitted SSE order_ready for order=%s waiter_id=%s waiter_name=%s assigned_chef_id=%s', order.order_id, payload.get('waiter_id'), payload.get('waiter_name'), payload.get('assigned_chef_id'))
                 try:
-                    print(f"[LOG] Emitted SSE order_ready order={order.order_id} waiter_id={payload.get('waiter_id')} waiter_name={payload.get('waiter_name')}")
+                    print(f"[LOG] Emitted SSE order_ready order={order.order_id} waiter_id={payload.get('waiter_id')} waiter_name={payload.get('waiter_name')} assigned_chef_id={payload.get('assigned_chef_id')}")
                 except Exception:
                     pass
             except Exception as e:
@@ -4336,20 +4386,15 @@ def _build_report_summary(start_date: datetime.datetime, end_date: datetime.date
         if cached_result:
             return cached_result
 
-        # OPTIMIZATION: Only include orders with completed/successful transactions
-        # First get all orders in the date range that are paid or completed
-        all_period_orders = Order.objects.filter(
-            created_at__gte=start_date,
-            created_at__lte=end_date,
-            status__in=[Order.STATUS_PAID, Order.STATUS_COMPLETED]
-        ).values_list('id', flat=True)
-        
-        # Now filter to only orders that have at least one successful transaction
+        # OPTIMIZATION: Only include orders with successful transactions.
+        # This allows customer-paid orders that are still in chef workflow
+        # to contribute to revenue even if they are not yet marked fully completed.
         orders_with_successful_tx = Transaction.objects.filter(
-            order__id__in=list(all_period_orders),
+            order__created_at__gte=start_date,
+            order__created_at__lte=end_date,
             status='success'
         ).values_list('order_id', flat=True).distinct()
-        
+
         paid_orders = Order.objects.filter(
             id__in=list(orders_with_successful_tx)
         ).values_list('id', flat=True)[:10000]  # Limit to prevent memory explosion
@@ -5003,9 +5048,9 @@ def create_pos_order(request):
         split_count = max(1, int(payload.get('split_count', 1)))
         initial_status = (payload.get('status') or 'preparing').strip() or 'preparing'
 
-        # Staff-created kitchen orders should be exposed to the chef display as
-        # a sent-to-kitchen order rather than leaving them in a generic prep state.
-        if not _is_customer_order(request) and initial_status in {'preparing', 'pending'}:
+        # All new kitchen orders should route directly to the chef queue
+        # unless an explicit status is provided.
+        if initial_status in {'preparing', 'pending'}:
             initial_status = 'sent_kitchen'
 
         # Get waiter info once
@@ -5088,6 +5133,27 @@ def create_pos_order(request):
         quick_response['order_type'] = order_type
         quick_response['table'] = table.number if table else 'Takeaway'
         quick_response['total_amount'] = float(total_amount)
+        quick_response['payment_method'] = payment_method
+
+        if is_cash:
+            try:
+                Transaction.objects.create(
+                    phone=phone or '',
+                    amount=total_amount,
+                    item=order.order_id,
+                    status=Transaction.STATUS_SUCCESS,
+                    method=Transaction.METHOD_CASH,
+                    order=order,
+                )
+                order.status = Order.STATUS_PAID
+                order.save(update_fields=['status'])
+                quick_response['status'] = order.status
+                try:
+                    _emit_event('order_update', {'order_id': order.order_id, 'status': order.status, 'source': 'customer_cash'})
+                except Exception:
+                    logger.debug('Failed to emit order_update SSE for customer cash order %s', order.order_id)
+            except Exception as e:
+                logger.exception('Failed to record customer cash transaction for order %s: %s', order.order_id, e)
 
         # ASYNC: Emit SSE and log staff activity in background
         from django.core.cache import cache
@@ -5618,21 +5684,47 @@ def order_complete(request, order_id):
         except Exception:
             logger.debug('Failed to create StaffActivity for order_ready for order %s', order.order_id)
 
-        # Emit SSE event so waiter UIs update immediately
+        # Emit SSE event so waiter UIs update immediately and assign the next chef for pickup
         try:
+            current_chef = _get_staff_employee(request)
+            excluded_ids = [getattr(current_chef, 'id')] if current_chef else None
+            assigned_chef = _select_least_busy_chef(exclude_employee_ids=excluded_ids)
+            if not assigned_chef and current_chef:
+                assigned_chef = _select_least_busy_chef()
+
+            if assigned_chef:
+                try:
+                    StaffActivity.objects.create(
+                        employee=assigned_chef,
+                        order=order,
+                        action='Order Pickup Notification',
+                        details={
+                            'order_id': order.order_id,
+                            'table': table_display,
+                            'status': 'ready',
+                            'assigned_by': getattr(current_chef, 'name', '') if current_chef else '',
+                        }
+                    )
+                except Exception:
+                    logger.debug('Failed to create StaffActivity for chef pickup notification for order %s', order.order_id)
+
             payload = {
                 'order_id': order.order_id,
                 'status': 'ready',
                 'table': table_display,
                 'table_id': order.table_id,
+                'order_type': 'takeaway' if not order.table and not order.delivery_address else ('delivery' if order.delivery_address else 'dine_in'),
                 'waiter_id': order.waiter_id if getattr(order, 'waiter_id', None) is not None else None,
                 'waiter_name': order.waiter_name or (order.waiter.name if getattr(order, 'waiter', None) else ''),
                 'created_at': order.created_at.isoformat() if order.created_at else None,
+                'source': 'kds',
+                'assigned_chef_id': getattr(assigned_chef, 'id', None),
+                'assigned_chef_name': getattr(assigned_chef, 'name', None) if assigned_chef else None,
             }
             _emit_event('order_ready', payload)
-            logger.info('Emitted SSE order_ready for order=%s waiter_id=%s waiter_name=%s', order.order_id, payload.get('waiter_id'), payload.get('waiter_name'))
+            logger.info('Emitted SSE order_ready for order=%s waiter_id=%s waiter_name=%s assigned_chef_id=%s', order.order_id, payload.get('waiter_id'), payload.get('waiter_name'), payload.get('assigned_chef_id'))
             try:
-                print(f"[LOG] KDS emitted SSE order_ready order={order.order_id} waiter_id={payload.get('waiter_id')} waiter_name={payload.get('waiter_name')}")
+                print(f"[LOG] KDS emitted SSE order_ready order={order.order_id} waiter_id={payload.get('waiter_id')} waiter_name={payload.get('waiter_name')} assigned_chef_id={payload.get('assigned_chef_id')}")
             except Exception:
                 pass
         except Exception as e:

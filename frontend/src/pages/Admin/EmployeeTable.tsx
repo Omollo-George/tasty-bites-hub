@@ -311,6 +311,7 @@ const EmployeeTable: React.FC = () => {
         if (order.status === 'sent_kitchen' || order.status === 'preparing') {
           setActiveOrder(null);
           setLastSentOrder(order);
+          setReceiptData(order);
         } else {
           setActiveOrder(order);
           setLastSentOrder(null);
@@ -475,12 +476,13 @@ const EmployeeTable: React.FC = () => {
   const visibleOrderItems = Array.isArray(visibleOrder?.items) ? visibleOrder.items : [];
 
   const handlePrintTicket = async () => {
-    if (!activeOrder) {
-      toast({ title: "No Active Order", description: "Please create or select an order first.", variant: "destructive" });
+    const orderToPrint = activeOrder || receiptData;
+    if (!orderToPrint) {
+      toast({ title: "No Order to Print", description: "Please create or select an order first.", variant: "destructive" });
       return;
     }
-    
-    setReceiptData(activeOrder);
+
+    setReceiptData(orderToPrint);
     setShowReceiptModal(true);
   };
 
@@ -705,7 +707,7 @@ const EmployeeTable: React.FC = () => {
           </div>
 
           <button
-            disabled={!activeOrder}
+            disabled={!(activeOrder || receiptData)}
             onClick={handlePrintTicket}
             className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white py-3 rounded-xl font-bold shadow-lg transition-all active:scale-95 flex items-center justify-center gap-2"
           >

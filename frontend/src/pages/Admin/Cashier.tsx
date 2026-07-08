@@ -1,13 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { getStaffName, clearStaffSession } from '@/lib/staff-session';
-import { getApiUrl } from '@/lib/api';
+import { getStaffName, clearStaffSession, getStaffToken } from '@/lib/staff-session';
+import { getApiUrl, getSseUrl } from '@/lib/api';
 import { getAuthHeaders } from '@/lib/auth';
 import { normalizePhoneNumber, isValidMpesaPhone } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
-import { AlertCircle, CheckCircle, Loader, X } from 'lucide-react';
+import { AlertCircle, ArrowLeft, CheckCircle, Loader, X } from 'lucide-react';
 
 interface OrderItem {
   id?: string | number;
@@ -74,7 +74,9 @@ export default function Cashier() {
   };
 
   useEffect(() => {
-    if (!staffName) {
+    const staffToken = getStaffToken();
+    if (!staffName || !staffToken) {
+      clearStaffSession();
       navigate('/staff/login');
       return;
     }
@@ -109,6 +111,12 @@ export default function Cashier() {
         method: 'GET',
         headers: getAuthHeaders(),
       });
+
+      if (response.status === 401 || response.status === 403) {
+        clearStaffSession();
+        navigate('/staff/login');
+        return;
+      }
 
       if (!response.ok) {
         let errorMessage = `Failed to fetch pending bills (${response.status})`
@@ -407,12 +415,21 @@ export default function Cashier() {
     <div className="min-h-screen bg-slate-950 text-slate-100 p-6 md:p-10">
       <div className="w-full space-y-8">
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-          <div>
-            <p className="text-sm uppercase tracking-[0.3em] text-slate-500">Cashier Dashboard</p>
-            <h1 className="text-4xl font-display font-bold text-white mt-2">Cashier Workstation</h1>
-            <p className="mt-2 text-slate-400 max-w-2xl">
-              Manage open tickets, confirm payments, and print receipts from a unified cashier interface.
-            </p>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => navigate('/staff')}
+              className="inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-slate-800 bg-slate-900 text-slate-100 hover:bg-slate-800 transition"
+              aria-label="Back to Cashier Dashboard"
+            >
+              <ArrowLeft size={18} />
+            </button>
+            <div>
+              <p className="text-sm uppercase tracking-[0.3em] text-slate-500">Cashier Dashboard</p>
+              <h1 className="text-4xl font-display font-bold text-white mt-2">Cashier Workstation</h1>
+              <p className="mt-2 text-slate-400 max-w-2xl">
+                Manage open tickets, confirm payments, and print receipts from a unified cashier interface.
+              </p>
+            </div>
           </div>
           <Button
             onClick={() => {
@@ -461,46 +478,39 @@ export default function Cashier() {
               {bills.map((bill) => {
                 const safeItems = Array.isArray(bill.items) ? bill.items : [];
                 const orderTypeLabel = bill.order_type === 'table' ? 'Dine-in' : (bill.order_type === 'delivery' ? 'Delivery' : 'Takeaway');
+                const firstItem = safeItems[0];
+                const moreItems = safeItems.length > 1 ? `+${safeItems.length - 1} more` : '';
                 return (
-                <div key={bill.order_id} className="rounded-3xl border border-slate-800 bg-slate-950 p-6 shadow-xl shadow-slate-950/20 hover:border-slate-700 transition-all">
-                  <div className="flex items-start justify-between gap-4">
-                    <div>
-                      <p className="text-sm uppercase tracking-[0.2em] text-slate-500">Order #{bill.order_id}</p>
-                      <p className="text-xl font-semibold text-white mt-2">Waiter: {bill.waiter_name && bill.waiter_name.trim() ? bill.waiter_name : (bill.waiter_id ? `ID: ${bill.waiter_id}` : '—')}</p>
+                <div key={bill.order_id} className="min-w-[280px] max-w-[320px] rounded-[1.75rem] border border-slate-800 bg-slate-950 p-4 shadow-xl shadow-slate-950/20 hover:border-slate-700 transition-all">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-[0.65rem] uppercase tracking-[0.3em] text-slate-500 truncate">Order #{bill.order_id.toString().slice(0, 4).toUpperCase()}</p>
+                      <p className="mt-2 text-sm text-slate-400">{bill.created_at ? new Date(bill.created_at).toLocaleString() : 'No timestamp'}</p>
+                      <p className="mt-2 text-lg font-semibold text-white truncate">{firstItem?.item_name || firstItem?.name || 'Order item'}</p>
                     </div>
-                    <span className={`rounded-full px-3 py-1 text-xs font-semibold ${
-                      bill.order_type === 'table' ? 'bg-sky-500/10 text-sky-300' : 'bg-orange-500/10 text-orange-300'
+                    <span className={`shrink-0 rounded-full border border-slate-800 px-3 py-1 text-[0.65rem] font-semibold uppercase tracking-[0.2em] ${
+                      bill.order_type === 'table' ? 'bg-sky-500/10 text-sky-300 border-sky-500/20' : 'bg-orange-500/10 text-orange-300 border-orange-500/20'
                     }`}>
                       {orderTypeLabel}
                     </span>
                   </div>
-                  <div className="mt-5 space-y-4">
-                    <div className="rounded-3xl border border-slate-800 bg-slate-900 p-4">
-                      <div className="flex items-center justify-between text-slate-400 text-sm mb-3">
-                        <span>Items</span>
-                        <span>{safeItems.length} total</span>
-                      </div>
-                      <div className="space-y-2">
-                        {safeItems.length === 0 ? (
-                          <p className="text-sm text-slate-500">No item details available yet.</p>
-                        ) : safeItems.map((item, idx) => (
-                          <div key={idx} className="flex justify-between text-slate-200 text-sm">
-                            <span>{(item.item_name || item.name || 'Item')} x{item.quantity || 1}</span>
-                            <span>KES {((item.subtotal ?? ((item.unit_price || item.price || 0) * (item.quantity || 1))) || 0).toFixed(2)}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+
+                  <div className="mt-4 border-t border-slate-800 pt-4">
+                    <p className="text-[0.65rem] uppercase tracking-[0.25em] text-slate-500">Item</p>
+                    <p className="mt-2 text-2xl font-semibold text-white truncate">{firstItem?.item_name || firstItem?.name || 'Item'}</p>
+                    <p className="mt-1 text-sm text-slate-400">x{firstItem?.quantity || 1} {moreItems}</p>
+                  </div>
+
+                  <div className="mt-4 border-t border-slate-800 pt-4">
+                    <div className="flex items-center justify-between gap-3">
                       <div>
-                        <p className="text-sm text-slate-400">Total amount</p>
-                        <p className="text-3xl font-semibold text-emerald-300">KES {bill.total_amount.toFixed(2)}</p>
-                        {bill.phone && <p className="text-xs text-slate-500 mt-1">Phone: {bill.phone}</p>}
+                        <p className="text-[0.65rem] uppercase tracking-[0.2em] text-slate-500">KES</p>
+                        <p className="text-2xl font-semibold text-amber-300">{bill.total_amount.toFixed(2)}</p>
                       </div>
                       <Button
                         onClick={() => handleConfirmPayment(bill)}
                         disabled={processingPayment && selectedBill?.order_id === bill.order_id}
-                        className="w-full sm:w-auto bg-emerald-500 text-slate-950 hover:bg-emerald-400"
+                        className="w-full rounded-full bg-orange-500 px-4 py-3 text-sm font-semibold text-white hover:bg-orange-400 disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         {processingPayment && selectedBill?.order_id === bill.order_id ? (
                           <Loader className="animate-spin mr-2" size={16} />
@@ -517,20 +527,23 @@ export default function Cashier() {
         </section>
 
         <Dialog open={showPaymentMethod} onOpenChange={setShowPaymentMethod}>
-          <DialogContent className="max-w-md bg-slate-950 text-slate-100 border border-slate-800">
+          <DialogContent className="max-w-sm bg-slate-950 text-slate-100 border border-slate-800 shadow-[0_20px_60px_-20px_rgba(0,0,0,0.75)]">
             <DialogHeader>
-              <DialogTitle>
-                {selectedBill ? `Order #${selectedBill.order_id}` : 'Select Payment Method'}
+              <DialogTitle className="text-lg font-semibold text-white">
+                {selectedBill ? `Order #${selectedBill.order_id}` : 'Payment'}
               </DialogTitle>
             </DialogHeader>
             {selectedBill && (
-              <div className="space-y-4">
-                <div className="rounded-3xl border border-slate-800 bg-slate-900 p-4 space-y-2 text-sm">
-                  <p className="font-semibold text-lg text-white">Waiter: {selectedBill.waiter_name && selectedBill.waiter_name.trim() ? selectedBill.waiter_name : (selectedBill.waiter_id ? `ID: ${selectedBill.waiter_id}` : '—')}</p>
-                  <p className="text-slate-400">Amount: <span className="font-bold text-2xl text-emerald-300">KES {selectedBill.total_amount.toFixed(2)}</span></p>
-                  <p className="text-slate-500">{selectedBill.items.length} items</p>
+              <div className="rounded-[1.75rem] border border-slate-800 bg-slate-900 p-5 space-y-4">
+                <div>
+                  <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Waiter</p>
+                  <p className="mt-2 text-lg font-semibold text-white">{selectedBill.waiter_name && selectedBill.waiter_name.trim() ? selectedBill.waiter_name : (selectedBill.waiter_id ? `ID: ${selectedBill.waiter_id}` : '—')}</p>
                 </div>
-                <p className="text-sm font-semibold text-slate-300">Choose Payment Method:</p>
+                <div className="rounded-[1.5rem] border border-slate-800 bg-slate-950/70 p-4">
+                  <p className="text-[0.65rem] uppercase tracking-[0.25em] text-slate-500">Amount</p>
+                  <p className="mt-2 text-3xl font-semibold text-emerald-300">KES {selectedBill.total_amount.toFixed(2)}</p>
+                </div>
+                <p className="text-sm text-slate-400">{selectedBill.items.length} item{selectedBill.items.length === 1 ? '' : 's'}</p>
                 <div className="grid grid-cols-2 gap-3">
                   <Button
                     onClick={() => {
@@ -539,7 +552,7 @@ export default function Cashier() {
                       setPaymentMethod('mpesa');
                     }}
                     disabled={processingPayment}
-                    className="bg-emerald-500 text-slate-950 hover:bg-emerald-400"
+                    className="rounded-full bg-emerald-500 px-3 py-3 text-sm font-semibold text-slate-950 hover:bg-emerald-400 disabled:opacity-50"
                   >
                     {processingPayment && paymentMethod === 'mpesa' ? (
                       <Loader className="animate-spin mr-2" size={16} />
@@ -549,7 +562,7 @@ export default function Cashier() {
                   <Button
                     onClick={() => handleProcessPayment('cash')}
                     disabled={processingPayment}
-                    className="bg-sky-500 text-slate-950 hover:bg-sky-400"
+                    className="rounded-full bg-sky-500 px-3 py-3 text-sm font-semibold text-slate-950 hover:bg-sky-400 disabled:opacity-50"
                   >
                     {processingPayment && paymentMethod === 'cash' ? (
                       <Loader className="animate-spin mr-2" size={16} />

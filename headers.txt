@@ -1,0 +1,21 @@
+HTTP/1.1 200 OK
+Date: Wed, 08 Jul 2026 08:49:34 GMT
+Content-Type: text/html
+Transfer-Encoding: chunked
+Connection: keep-alive
+Cache-Control: no-cache, no-store, must-revalidate
+cf-cache-status: DYNAMIC
+cross-origin-opener-policy: same-origin
+expires: 0
+pragma: no-cache
+referrer-policy: same-origin
+rndr-id: ce244b7f-1645-428a
+Server: cloudflare
+vary: origin
+vary: Accept-Encoding
+x-content-type-options: nosniff
+x-frame-options: DENY
+x-render-origin-server: gunicorn
+CF-RAY: a17dd61c3eba941f-DXB
+alt-svc: h3=":443"; ma=86400
+
