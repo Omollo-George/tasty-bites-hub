@@ -2,8 +2,9 @@ import React, { useState, useEffect } from 'react'
 import { useToast } from '@/hooks/use-toast'
 import { useNavigate } from 'react-router-dom'
 import { clearAdminSession, getAdminToken, getAdminUser } from '@/lib/admin-session'
-import { getApiUrl } from '@/lib/api'
+import { getApiUrl, getSseUrl } from '@/lib/api'
 import { Monitor, LogOut } from 'lucide-react'
+import { SidebarTrigger } from '@/components/ui/sidebar'
 
 const AdminHeader: React.FC<{title?:string}> = ({title}) => {
   const navigate = useNavigate()
@@ -19,7 +20,7 @@ const AdminHeader: React.FC<{title?:string}> = ({title}) => {
   useEffect(() => {
     let es: EventSource | null = null
     try {
-      es = new EventSource('/payments/stream/')
+      es = new EventSource(getSseUrl('/payments/stream/'))
       es.onmessage = (e) => {
         try {
           const payload = JSON.parse(e.data)
@@ -54,18 +55,21 @@ const AdminHeader: React.FC<{title?:string}> = ({title}) => {
   }
 
   return (
-    <header className="flex flex-col gap-4 mb-8 border-b border-slate-800 pb-6 lg:flex-row lg:items-center lg:justify-between">
-      <div className="min-w-0">
-        <h1 className="font-display text-2xl text-slate-100">{title}</h1>
-        {admin && <p className="text-sm text-slate-400 mt-1 truncate">Signed in as <span className="font-semibold text-orange-400">{admin.display_name || admin.username}</span></p>}
+    <header className="flex flex-col gap-4 mb-8 border-b border-slate-800 pb-6 lg:flex-row lg:items-center lg:justify-between lg:flex-wrap">
+      <div className="flex items-center justify-between gap-4 sm:flex-row sm:items-center">
+        <SidebarTrigger className="md:hidden" />
+        <div className="min-w-0">
+          <h1 className="font-display text-2xl text-slate-100">{title}</h1>
+          {admin && <p className="text-sm text-slate-400 mt-1 truncate">Signed in as <span className="font-semibold text-orange-400">{admin.display_name || admin.username}</span></p>}
+        </div>
       </div>
-      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
-        <button type="button" onClick={() => navigate('/staff')} className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-orange-500/30 text-orange-500 hover:bg-orange-500/10 transition-all font-semibold"><Monitor size={18} /> <span>Staff Portal</span></button>
-        <button type="button" onClick={() => navigate('/admin/orders')} className="w-full sm:w-auto bg-[#1a365d] text-[#d69e2e] px-4 py-2.5 rounded-xl font-semibold shadow-md hover:bg-[#d69e2e] hover:text-white transition-all active:scale-95">New Order</button>
+      <div className="order-first flex gap-3 overflow-x-auto pb-2 snap-x snap-mandatory lg:order-last lg:flex-row lg:flex-wrap lg:items-center lg:justify-end lg:overflow-x-visible lg:pb-0">
+        <button type="button" onClick={() => navigate('/staff')} className="min-w-[160px] flex-[0_0_160px] lg:min-w-0 lg:flex-[unset] lg:w-auto flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-orange-500/30 text-orange-500 hover:bg-orange-500/10 transition-all font-semibold"><Monitor size={18} /> <span>Staff Portal</span></button>
+        <button type="button" onClick={() => navigate('/admin/orders')} className="min-w-[140px] flex-[0_0_140px] lg:min-w-0 lg:flex-[unset] lg:w-auto bg-[#1a365d] text-[#d69e2e] px-4 py-2.5 rounded-xl font-semibold shadow-md hover:bg-[#d69e2e] hover:text-white transition-all active:scale-95">New Order</button>
         {token ? (
-          <button type="button" onClick={clearToken} className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-slate-600 text-slate-200 hover:bg-slate-700 transition-colors"><LogOut size={16} /> <span>Sign Out</span></button>
+          <button type="button" onClick={clearToken} className="min-w-[130px] flex-[0_0_130px] lg:min-w-0 lg:flex-[unset] lg:w-auto flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-slate-600 text-slate-200 hover:bg-slate-700 transition-colors"><LogOut size={16} /> <span>Sign Out</span></button>
         ) : (
-          <button type="button" onClick={() => navigate('/admin/login')} className="w-full sm:w-auto px-4 py-2.5 rounded-xl border border-slate-600 text-slate-200 hover:bg-slate-700 transition-colors">Admin Sign In</button>
+          <button type="button" onClick={() => navigate('/admin/login')} className="min-w-[140px] flex-[0_0_140px] lg:min-w-0 lg:flex-[unset] lg:w-auto px-4 py-2.5 rounded-xl border border-slate-600 text-slate-200 hover:bg-slate-700 transition-colors">Admin Sign In</button>
         )}
       </div>
     </header>
