@@ -221,6 +221,15 @@
   }
 }
 
+/* Extra catch-all hide rules for any leftover fixed sidebar elements inside admin pages */
+@media (min-width: 1024px) {
+  .admin-layout [class*="w-[--sidebar-width]"] { display: none !important; }
+  .admin-layout [class*="fixed"][class*="inset-y-0"] { display: none !important; }
+  .admin-layout [class*="left-0"][class*="fixed"] { display: none !important; }
+  .admin-layout [class*="right-0"][class*="fixed"] { display: none !important; }
+  .admin-layout [data-sidebar] { display: none !important; }
+}
+
 
 @layer utilities {
   .text-gradient {
