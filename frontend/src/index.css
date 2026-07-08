@@ -230,6 +230,21 @@
   .admin-layout [data-sidebar] { display: none !important; }
 }
 
+/* Force zero sidebar width and remove backgrounds for any remaining fixed/sidebar elements */
+@media (min-width: 1024px) {
+  .admin-layout {
+    --sidebar-width: 0 !important;
+  }
+
+  .admin-layout [class*="fixed"] {
+    background-color: transparent !important;
+    box-shadow: none !important;
+    border: 0 !important;
+  }
+
+  /* Catch elements with inline styles referencing the sidebar width */
+  .admin-layout [style*="--sidebar-width"] { display: none !important; }
+}
 
 @layer utilities {
   .text-gradient {
