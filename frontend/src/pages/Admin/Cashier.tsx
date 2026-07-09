@@ -70,6 +70,13 @@ export default function Cashier() {
     }
   };
 
+  const getInitials = (name?: string) => {
+    if (!name) return 'U';
+    const parts = name.trim().split(/\s+/).filter(Boolean);
+    if (parts.length === 1) return parts[0].slice(0, 1).toUpperCase();
+    return (parts[0].slice(0, 1) + parts[parts.length - 1].slice(0, 1)).toUpperCase();
+  };
+
   const [bills, setBills] = useState<PendingBill[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -537,21 +544,29 @@ export default function Cashier() {
                 const firstItem = safeItems[0];
                 const moreItems = safeItems.length > 1 ? `+${safeItems.length - 1} more` : '';
                 return (
-                <div key={bill.order_id} className="relative min-w-0 w-full rounded-[1.2rem] border border-slate-700/50 bg-slate-950/95 p-2 shadow-2xl shadow-slate-950/20 transition-all hover:-translate-y-0.5 hover:shadow-[0_25px_80px_-35px_rgba(0,0,0,0.75)] sm:rounded-[2rem] sm:p-5">
-                  <div className="absolute inset-x-0 top-0 h-24 bg-gradient-to-r from-orange-500/10 via-slate-950/0 to-sky-500/10"></div>
-                  <div className="relative space-y-5">
-                    <div className="flex items-start justify-between gap-4">
+                <div key={bill.order_id} className="relative min-w-0 w-full rounded-[1.2rem] border border-slate-700/50 bg-slate-950/95 p-0 shadow-2xl shadow-slate-950/20 transition-all hover:-translate-y-0.5 hover:shadow-[0_25px_80px_-35px_rgba(0,0,0,0.75)] sm:rounded-[2rem] sm:p-0">
+                  <div className="flex items-center justify-between gap-4 p-3 bg-gradient-to-r from-orange-500/6 via-transparent to-sky-500/6 rounded-t-[1.1rem]">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-amber-500 to-orange-500 text-slate-950 font-bold">{getInitials(bill.waiter_name)}</div>
                       <div className="min-w-0">
-                        <p className="text-[0.55rem] uppercase tracking-[0.2em] text-slate-500 truncate sm:text-[0.65rem] sm:tracking-[0.3em]">Order #{bill.order_id.toString().slice(0, 4).toUpperCase()}</p>
-                        <p className="mt-1 text-[0.7rem] text-slate-400 sm:mt-3 sm:text-sm">{bill.created_at ? formatClockTime(bill.created_at) : 'No timestamp'}</p>
-                        <p className="mt-2 text-[0.8rem] font-semibold text-white truncate sm:mt-4 sm:text-xl">{firstItem?.item_name || firstItem?.name || 'Order item'}</p>
+                        <p className="text-[0.6rem] uppercase tracking-[0.2em] text-slate-500 truncate sm:text-[0.65rem]">Order #{bill.order_id.toString().slice(0, 4).toUpperCase()}</p>
+                        <p className="mt-0.5 text-[0.68rem] text-slate-400">{bill.created_at ? formatClockTime(bill.created_at) : 'No timestamp'}</p>
+                        <p className="mt-1 text-[0.9rem] font-semibold text-white truncate">{firstItem?.item_name || firstItem?.name || 'Order item'}</p>
                       </div>
-                      <span className={`shrink-0 rounded-full border px-2 py-1 text-[0.5rem] font-semibold uppercase tracking-[0.18em] sm:px-3 sm:py-1.5 sm:text-[0.65rem] sm:tracking-[0.22em] ${
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <div className="text-right">
+                        <p className="text-[0.6rem] text-slate-400">Total</p>
+                        <div className="mt-1 inline-block rounded-full bg-gradient-to-r from-amber-400 to-orange-400 px-3 py-1 text-slate-950 font-bold shadow-md">KES {bill.total_amount.toFixed(2)}</div>
+                      </div>
+                      <span className={`hidden md:inline-block shrink-0 rounded-full border px-2 py-1 text-[0.65rem] font-semibold uppercase tracking-[0.18em] ${
                         bill.order_type === 'table' ? 'border-sky-500/20 bg-sky-500/10 text-sky-300' : 'border-orange-500/20 bg-orange-500/10 text-orange-300'
                       }`}>
                         {orderTypeLabel}
                       </span>
                     </div>
+                  </div>
+                  <div className="relative space-y-4 p-3">
 
                     <div className="rounded-[1rem] border border-slate-800/70 bg-slate-900/90 p-2 overflow-hidden sm:rounded-[1.75rem] sm:p-4">
                       <div className="grid gap-4">
