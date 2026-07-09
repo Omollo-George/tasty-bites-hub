@@ -42,6 +42,7 @@ interface Receipt {
   waiter_id?: string | number;
   order_type: string;
   table?: number;
+  table_id?: string | number;
   phone?: string;
   items: OrderItem[];
   total_amount: number;
@@ -266,7 +267,7 @@ export default function Cashier() {
                   if (ordResp.ok) {
                     const ordJson = await ordResp.json();
                     const ord = ordJson.order || ordJson;
-                    setReceipt({
+                    const receiptData: Receipt = {
                       order_id: ord.order_id,
                       waiter_name: ord.waiter_name,
                       waiter_id: ord.waiter_id,
@@ -277,7 +278,8 @@ export default function Cashier() {
                       items: ord.items,
                       total_amount: ord.total_amount,
                       timestamp: formatClockTime(new Date()),
-                    });
+                    };
+                    setReceipt(receiptData);
                     setShowReceipt(true);
 
                     // Mark table free if needed
@@ -341,17 +343,19 @@ export default function Cashier() {
       }
 
       // Generate receipt for cash
-      setReceipt({
+      const cashReceipt: Receipt = {
         order_id: order.order_id,
         waiter_name: order.waiter_name,
         waiter_id: order.waiter_id,
         order_type: order.order_type,
         table: order.table,
+        table_id: order.table_id,
         phone: order.phone,
         items: order.items,
         total_amount: order.total_amount,
         timestamp: formatClockTime(new Date()),
-      });
+      };
+      setReceipt(cashReceipt);
 
       setShowReceipt(true);
       setSelectedBill(null);
@@ -404,15 +408,17 @@ export default function Cashier() {
                 <p><strong>Time:</strong> ${receipt.timestamp}</p>
               </div>
               <div class="items">
-                ${receipt.items
+                ${(receipt.items ?? [])
                   .map(
-                    (item) =>
-                      `
+                    (item) => {
+                      const itemName = item?.item_name || item?.name || 'Item';
+                      return `
                   <div class="item">
-                    <span>${(item.item_name || item.name)} x${item.quantity}</span>
-                    <span>KES ${(item.subtotal || ((item.unit_price || item.price) * item.quantity)).toFixed(2)}</span>
+                    <span>${itemName} x${item?.quantity ?? 1}</span>
+                    <span>KES ${((item?.subtotal ?? ((item?.unit_price ?? item?.price ?? 0) * (item?.quantity ?? 1))) || 0).toFixed(2)}</span>
                   </div>
-                `
+                `;
+                    }
                   )
                   .join('')}
               </div>
