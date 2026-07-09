@@ -567,11 +567,11 @@ export default function Cashier() {
                           </div>
                         </div>
                         <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
-                          <div className="rounded-[1rem] border border-slate-800 bg-slate-950/70 p-2 min-w-0 overflow-x-auto sm:rounded-[1.5rem] sm:p-4">
+                          <div className="rounded-[1rem] border border-slate-800 bg-slate-950/70 p-2 min-w-0 overflow-hidden sm:rounded-[1.5rem] sm:p-4">
                             <p className="text-[0.55rem] uppercase tracking-[0.2em] text-slate-500 sm:text-[0.65rem] sm:tracking-[0.25em]">Server</p>
-                            <p className="mt-1 text-[0.72rem] font-semibold text-white whitespace-nowrap sm:mt-2 sm:text-sm">{bill.waiter_name?.trim() ? bill.waiter_name : 'Unassigned'}</p>
+                            <p className="mt-1 text-[0.72rem] font-semibold text-white truncate sm:mt-2 sm:text-sm">{bill.waiter_name?.trim() ? bill.waiter_name : 'Unassigned'}</p>
                             {bill.waiter_id && (
-                              <p className="mt-1 text-[0.65rem] text-slate-400 whitespace-nowrap sm:text-xs">ID: {bill.waiter_id}</p>
+                              <p className="mt-1 text-[0.65rem] text-slate-400 truncate sm:text-xs">ID: {bill.waiter_id}</p>
                             )}
                           </div>
                           <div className="min-w-0 flex justify-stretch sm:justify-end">
