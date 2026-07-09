@@ -278,7 +278,7 @@ const AdminKDS: React.FC = () => {
           );
         })}
       </div>
-      <div className="flex gap-3 overflow-x-auto pb-3 scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-slate-950">
+      <div className="grid grid-cols-3 md:grid-cols-4 gap-3 pb-3 overflow-y-auto scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-slate-950 max-h-[70vh]">
         {filteredQueue.length === 0 ? (
           <div className="min-w-full text-center text-slate-500 py-8">
             <p className="text-base">No active orders in the queue.</p>
@@ -286,44 +286,44 @@ const AdminKDS: React.FC = () => {
           </div>
         ) : (
           filteredQueue.map((order) => (
-            <div key={order.order_id} className="relative min-w-[300px] max-w-[360px] flex-shrink-0 overflow-hidden rounded-[1.5rem] border border-slate-800 bg-slate-950/95 shadow-[0_16px_50px_-32px_rgba(0,0,0,0.55)]">
+            <div key={order.order_id} className="relative overflow-hidden rounded-xl border border-slate-800 bg-slate-950/95 shadow-[0_12px_30px_-20px_rgba(0,0,0,0.55)] h-64">
               <div className="absolute inset-0 bg-gradient-to-b from-slate-900/90 via-transparent to-slate-950/95" />
-              <div className="relative p-3 sm:p-4 lg:p-5">
+              <div className="relative p-3">
                 <div className="mb-4 flex items-center justify-between gap-3">
                   <div className="min-w-0">
-                    <p className="text-[0.58rem] uppercase tracking-[0.35em] text-slate-500">Order</p>
-                    <h2 className="mt-1 text-xl font-semibold tracking-tight text-white">#{order.order_id.substring(0, 6).toUpperCase()}</h2>
+                    <p className="text-[0.6rem] uppercase tracking-[0.28em] text-slate-500">Order</p>
+                    <h2 className="mt-1 text-lg font-semibold tracking-tight text-white">#{order.order_id.substring(0, 6).toUpperCase()}</h2>
                   </div>
-                  <div className="flex-shrink-0 rounded-2xl border border-slate-800 bg-slate-900/90 px-3 py-2 text-right">
-                    <p className="text-[0.6rem] uppercase tracking-[0.2em] text-slate-500">Elapsed</p>
-                    <p className="mt-0.5 text-sm font-semibold text-amber-400">{formatElapsedTime(order.created_at)}</p>
+                  <div className="flex-shrink-0 rounded-2xl border border-slate-800 bg-slate-900/90 px-2 py-1 text-right">
+                    <p className="text-[0.6rem] uppercase tracking-[0.18em] text-slate-500">Elapsed</p>
+                    <p className="mt-0.5 text-xs font-semibold text-amber-400">{formatElapsedTime(order.created_at)}</p>
                   </div>
                 </div>
 
-                <div className="grid gap-2 sm:grid-cols-2 mb-3">
-                  <div className="rounded-3xl border border-slate-800 bg-slate-900/95 p-2.5">
-                    <p className="text-[0.55rem] uppercase tracking-[0.2em] text-slate-500">Table</p>
+                <div className="grid gap-2 grid-cols-2 mb-2">
+                  <div className="rounded-2xl border border-slate-800 bg-slate-900/95 p-2">
+                    <p className="text-[0.6rem] uppercase tracking-[0.18em] text-slate-500">Table</p>
                     <p className="mt-1 text-sm font-semibold text-slate-100">{order.table}</p>
                   </div>
-                  <div className="rounded-3xl border border-slate-800 bg-slate-900/95 p-2.5">
-                    <p className="text-[0.55rem] uppercase tracking-[0.2em] text-slate-500">Status</p>
+                  <div className="rounded-2xl border border-slate-800 bg-slate-900/95 p-2">
+                    <p className="text-[0.6rem] uppercase tracking-[0.18em] text-slate-500">Status</p>
                     <p className="mt-1 text-sm font-semibold uppercase text-slate-100">{order.status}</p>
                   </div>
                 </div>
 
-                <div className="rounded-[1.4rem] border border-slate-800 bg-slate-900/90 p-3 mb-3">
-                  <p className="text-[0.68rem] uppercase tracking-[0.25em] text-slate-500">Waiter</p>
-                  <p className="mt-2 text-sm font-semibold leading-tight text-white">{order.waiter_name?.trim() ? order.waiter_name : 'Unassigned'}</p>
+                <div className="rounded-2xl border border-slate-800 bg-slate-900/95 p-2 mb-2">
+                  <p className="text-[0.6rem] uppercase tracking-[0.18em] text-slate-500">Waiter</p>
+                  <p className="mt-1 text-sm font-semibold leading-tight text-white">{order.waiter_name?.trim() ? order.waiter_name : 'Unassigned'}</p>
                 </div>
 
-                <div className="rounded-[1.4rem] border border-slate-800 bg-slate-900/90 p-3 mb-4">
-                  <p className="text-[0.68rem] uppercase tracking-[0.25em] text-slate-500">Preparing</p>
-                  <p className="mt-2 text-xl font-semibold leading-tight text-white">{order.items.length}x {order.items[0]?.name || 'Item'}</p>
+                <div className="rounded-2xl border border-slate-800 bg-slate-900/95 p-2 mb-2">
+                  <p className="text-[0.6rem] uppercase tracking-[0.18em] text-slate-500">Preparing</p>
+                  <p className="mt-1 text-sm font-semibold leading-tight text-white">{order.items.length}x {order.items[0]?.name || 'Item'}</p>
                 </div>
 
-                <div className="space-y-2 text-slate-300 mb-4">
+                <div className="space-y-2 text-slate-300 mb-3">
                   {order.items.slice(0, 3).map((item, idx) => (
-                    <div key={idx} className="flex items-center justify-between gap-2 rounded-3xl border border-slate-800 bg-slate-900/95 px-2.5 py-1.5">
+                    <div key={idx} className="flex items-center justify-between gap-2 rounded-2xl border border-slate-800 bg-slate-900/95 px-2 py-1">
                       <div>
                         <p className="text-sm font-semibold text-white">{item.quantity}x {item.name}</p>
                         {(item.modifiers || []).length > 0 && (
@@ -340,18 +340,18 @@ const AdminKDS: React.FC = () => {
                   )}
                 </div>
 
-                <div className="grid gap-2 sm:grid-cols-2">
+                <div className="grid gap-2 grid-cols-2">
                   <button
                     onClick={() => claimOrder(order.order_id)}
                     disabled={Boolean(order.claimed_by_id && String(order.claimed_by_id) !== staffId)}
-                    className="rounded-full border border-slate-700 bg-slate-900/95 px-3.5 py-2 text-[0.85rem] font-semibold text-slate-100 transition hover:border-slate-600 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+                    className="rounded-full border border-slate-700 bg-slate-900/95 px-3 py-1.5 text-[0.8rem] font-semibold text-slate-100 transition hover:border-slate-600 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     {order.claimed_by_id ? (String(order.claimed_by_id) === staffId ? 'Claimed' : 'Claimed') : 'Claim'}
                   </button>
                   <button
                     onClick={() => updateOrderStatus(order.order_id, 'ready')}
                     disabled={Boolean(order.claimed_by_id && String(order.claimed_by_id) !== staffId)}
-                    className="rounded-full bg-amber-400 px-3.5 py-2 text-[0.85rem] font-semibold text-slate-950 transition hover:bg-amber-300 disabled:cursor-not-allowed disabled:opacity-50"
+                    className="rounded-full bg-amber-400 px-3 py-1.5 text-[0.8rem] font-semibold text-slate-950 transition hover:bg-amber-300 disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     Ready
                   </button>
