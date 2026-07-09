@@ -2853,15 +2853,11 @@ def _generate_staff_briefing():
     # 4. TODAY'S PERFORMANCE: Real-time metrics
     today_orders = Order.objects.filter(created_at__gte=today_start).count()
     today_completed = Order.objects.filter(created_at__gte=today_start, status='completed').count()
-    today_revenue = Order.objects.filter(
-        created_at__gte=today_start, 
-        status='completed'
-    ).aggregate(total=Sum('total_amount'))['total'] or 0
     active_orders = Order.objects.filter(status__in=['pending', 'preparing', 'ready']).count()
     total_staff = Employee.objects.count()
-    
+
     performance_msgs = [
-        f"📊 {today_completed} orders completed so far today with {_format_currency(today_revenue)} in revenue.",
+        f"📊 {today_completed} orders completed so far today.",
         f"📈 Currently processing {active_orders} active orders.",
         f"👥 {total_staff} team members on duty today.",
     ]
@@ -2872,16 +2868,13 @@ def _generate_staff_briefing():
         'metrics': {
             'total_orders_today': today_orders,
             'completed_orders_today': today_completed,
-            'revenue_today': float(today_revenue),
             'active_orders_now': active_orders,
             'staff_on_duty': total_staff,
         }
     })
-    
+
     # 5. FOCUS AREAS: Key things to focus on
     focus_areas = []
-    if today_revenue < 5000:
-        focus_areas.append("🎯 Today's revenue is lower than usual. Focus on upselling and driving orders.")
     if active_orders > 15:
         focus_areas.append("🎯 We're experiencing high volume. Prioritize speed and accuracy.")
     if len(low_stock) > 0:
@@ -5345,7 +5338,7 @@ def cashier_pending_bills(request):
         # Use lightweight format for list (not full serialization)
         bills = Order.objects.filter(
             status__in=pending_statuses
-        ).select_related('table', 'waiter').order_by('-created_at')[offset:offset + page_size]
+        ).select_related('table', 'waiter').order_by('created_at')[offset:offset + page_size]
         
         results = []
         for b in bills:
@@ -5630,6 +5623,7 @@ def kds_queue(request):
                 'split_count': o.split_count or 1,
                 'waiter_id': o.waiter_id,
                 'waiter_name': o.waiter_name,
+                'order_type': 'takeaway' if not o.table and not o.delivery_address else ('delivery' if o.delivery_address else 'dinein'),
                 'claimed_by_id': getattr(o.claimed_by, 'id', None) if getattr(o, 'claimed_by', None) else None,
                 'claimed_by_name': o.claimed_by_name or (o.claimed_by.name if getattr(o, 'claimed_by', None) else ''),
                 'claimed_at': o.claimed_at.isoformat() if o.claimed_at else None,

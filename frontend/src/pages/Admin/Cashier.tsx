@@ -52,11 +52,29 @@ export default function Cashier() {
   const navigate = useNavigate();
   const staffName = getStaffName();
 
+  const formatClockTime = (value?: string | Date | number) => {
+    if (!value) return 'No timestamp';
+
+    try {
+      const date = value instanceof Date ? value : new Date(value);
+      if (Number.isNaN(date.getTime())) return 'No timestamp';
+
+      return date.toLocaleTimeString('en-US', {
+        hour: 'numeric',
+        minute: '2-digit',
+        hour12: true,
+      });
+    } catch {
+      return 'No timestamp';
+    }
+  };
+
   const [bills, setBills] = useState<PendingBill[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedBill, setSelectedBill] = useState<PendingBill | null>(null);
   const [confirming, setConfirming] = useState(false);
+  const [ticketFilter, setTicketFilter] = useState<'all' | 'takeaway' | 'dinein'>('all');
   const [receipt, setReceipt] = useState<Receipt | null>(null);
   const [showReceipt, setShowReceipt] = useState(false);
   const [showPaymentMethod, setShowPaymentMethod] = useState(false);
@@ -72,6 +90,17 @@ export default function Cashier() {
   const getMpesaCheckoutId = (payload: any): string | null => {
     return payload?.checkout_request_id || payload?.mpesa?.CheckoutRequestID || null;
   };
+
+  const getOrderCategory = (orderType?: string) => {
+    const normalized = (orderType || '').toLowerCase();
+    if (normalized === 'takeaway' || normalized === 'delivery') return 'takeaway';
+    return 'dinein';
+  };
+
+  const filteredBills = bills.filter((bill) => {
+    if (ticketFilter === 'all') return true;
+    return getOrderCategory(bill.order_type) === ticketFilter;
+  });
 
   useEffect(() => {
     const staffToken = getStaffToken();
@@ -131,8 +160,13 @@ export default function Cashier() {
       }
 
       const data = await response.json();
-      const pendingBills = data.bills || [];
-      setBills(pendingBills);
+      const pendingBills = Array.isArray(data.bills) ? data.bills : [];
+      const sortedBills = [...pendingBills].sort((a: PendingBill, b: PendingBill) => {
+        const aTime = new Date(a.created_at || 0).getTime();
+        const bTime = new Date(b.created_at || 0).getTime();
+        return aTime - bTime;
+      });
+      setBills(sortedBills);
       setError(null);
     } catch (err: any) {
       setError(err.message || 'Failed to fetch pending bills')
@@ -242,7 +276,7 @@ export default function Cashier() {
                       phone: ord.phone,
                       items: ord.items,
                       total_amount: ord.total_amount,
-                      timestamp: new Date().toLocaleString(),
+                      timestamp: formatClockTime(new Date()),
                     });
                     setShowReceipt(true);
 
@@ -316,7 +350,7 @@ export default function Cashier() {
         phone: order.phone,
         items: order.items,
         total_amount: order.total_amount,
-        timestamp: new Date().toLocaleString(),
+        timestamp: formatClockTime(new Date()),
       });
 
       setShowReceipt(true);
@@ -412,34 +446,36 @@ export default function Cashier() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 p-6 md:p-10">
-      <div className="w-full space-y-8">
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => navigate('/staff')}
-              className="inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-slate-800 bg-slate-900 text-slate-100 hover:bg-slate-800 transition"
-              aria-label="Back to Cashier Dashboard"
-            >
-              <ArrowLeft size={18} />
-            </button>
-            <div>
-              <p className="text-sm uppercase tracking-[0.3em] text-slate-500">Cashier Dashboard</p>
-              <h1 className="text-4xl font-display font-bold text-white mt-2">Cashier Workstation</h1>
-              <p className="mt-2 text-slate-400 max-w-2xl">
-                Manage open tickets, confirm payments, and print receipts from a unified cashier interface.
+    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-950 to-slate-900 text-slate-100 font-body p-6 md:p-10">
+      <div className="mx-auto max-w-7xl space-y-8">
+        <div className="rounded-[2rem] border border-slate-800/70 bg-slate-900/85 p-8 shadow-2xl shadow-slate-950/40 backdrop-blur-xl">
+          <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
+            <div className="space-y-3">
+              <p className="text-xs uppercase tracking-[0.35em] text-slate-500">Cashier Dashboard</p>
+              <h1 className="text-4xl sm:text-5xl font-display font-bold text-white">Cashier Workstation</h1>
+              <p className="max-w-2xl text-base leading-7 text-slate-400">
+                Manage open tickets, confirm payments, and print receipts with precision from a polished, professional cashier workspace.
               </p>
             </div>
+            <div className="flex flex-wrap items-center gap-3">
+              <button
+                onClick={() => navigate('/staff')}
+                className="inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-slate-700 bg-slate-950 text-slate-100 hover:bg-slate-900 transition"
+                aria-label="Back to Cashier Dashboard"
+              >
+                <ArrowLeft size={18} />
+              </button>
+              <Button
+                onClick={() => {
+                  clearStaffSession();
+                  navigate('/staff/login');
+                }}
+                className="rounded-full bg-gradient-to-r from-orange-500 to-amber-400 px-5 py-3 text-sm font-semibold text-slate-950 shadow-lg shadow-orange-500/20 hover:from-orange-400 hover:to-amber-300"
+              >
+                Log out
+              </Button>
+            </div>
           </div>
-          <Button
-            onClick={() => {
-              clearStaffSession();
-              navigate('/staff/login');
-            }}
-            className="bg-orange-500 text-slate-950 hover:bg-orange-400 shadow-lg shadow-orange-500/20"
-          >
-            Log out
-          </Button>
         </div>
 
         {error && (
@@ -454,69 +490,99 @@ export default function Cashier() {
           </div>
         )}
 
-        <section className="rounded-3xl border border-slate-800 bg-slate-900 p-6 shadow-xl shadow-slate-950/40">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
-            <div>
-              <h2 className="text-2xl font-bold text-white">Open Tickets</h2>
-              <p className="text-slate-400 mt-1">Review pending bills and complete payments quickly.</p>
+        <section className="rounded-[2rem] border border-slate-800/70 bg-slate-900/90 p-6 shadow-2xl shadow-slate-950/40 overflow-hidden">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-6">
+            <div className="space-y-2">
+              <h2 className="text-3xl font-bold text-white">Open Tickets</h2>
+              <p className="text-slate-400 max-w-2xl">Review pending bills, confirm payments, and keep the cashier workflow efficient and organized.</p>
             </div>
-            <div className="text-sm text-slate-500">
-              Updated every few seconds for real-time cashier processing.
-            </div>
+            <div className="text-sm text-slate-500">Updated every few seconds for real-time cashier processing.</div>
+          </div>
+
+          <div className="mb-6 flex flex-wrap gap-3">
+            {(['all', 'takeaway', 'dinein'] as const).map((filter) => {
+              const isActive = ticketFilter === filter;
+              const label = filter === 'all' ? 'All' : filter === 'takeaway' ? 'Takeaway' : 'Dine-in';
+              return (
+                <button
+                  key={filter}
+                  onClick={() => setTicketFilter(filter)}
+                  className={`rounded-full border px-4 py-2 text-sm font-semibold transition duration-200 ${isActive ? 'border-orange-400 bg-orange-400 text-slate-950 shadow-sm shadow-orange-500/20' : 'border-slate-700 bg-slate-950 text-slate-300 hover:border-slate-500 hover:bg-slate-900 hover:text-white'}`}
+                >
+                  {label}
+                </button>
+              );
+            })}
           </div>
 
           {loading ? (
             <div className="flex justify-center items-center py-20">
               <Loader className="animate-spin text-slate-400" size={44} />
             </div>
-          ) : bills.length === 0 ? (
+          ) : filteredBills.length === 0 ? (
             <div className="rounded-3xl border border-slate-800 bg-slate-950 p-8 text-center text-slate-400">
               No pending bills at this time.
             </div>
           ) : (
-            <div className="grid grid-cols-1 gap-5 lg:grid-cols-2 xl:grid-cols-3">
-              {bills.map((bill) => {
+            <div className="grid grid-cols-3 gap-2 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 auto-rows:minmax(0, auto) items-start">
+              {filteredBills.map((bill) => {
                 const safeItems = Array.isArray(bill.items) ? bill.items : [];
                 const orderTypeLabel = bill.order_type === 'table' ? 'Dine-in' : (bill.order_type === 'delivery' ? 'Delivery' : 'Takeaway');
                 const firstItem = safeItems[0];
                 const moreItems = safeItems.length > 1 ? `+${safeItems.length - 1} more` : '';
                 return (
-                <div key={bill.order_id} className="min-w-[280px] max-w-[320px] rounded-[1.75rem] border border-slate-800 bg-slate-950 p-4 shadow-xl shadow-slate-950/20 hover:border-slate-700 transition-all">
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="text-[0.65rem] uppercase tracking-[0.3em] text-slate-500 truncate">Order #{bill.order_id.toString().slice(0, 4).toUpperCase()}</p>
-                      <p className="mt-2 text-sm text-slate-400">{bill.created_at ? new Date(bill.created_at).toLocaleString() : 'No timestamp'}</p>
-                      <p className="mt-2 text-lg font-semibold text-white truncate">{firstItem?.item_name || firstItem?.name || 'Order item'}</p>
-                    </div>
-                    <span className={`shrink-0 rounded-full border border-slate-800 px-3 py-1 text-[0.65rem] font-semibold uppercase tracking-[0.2em] ${
-                      bill.order_type === 'table' ? 'bg-sky-500/10 text-sky-300 border-sky-500/20' : 'bg-orange-500/10 text-orange-300 border-orange-500/20'
-                    }`}>
-                      {orderTypeLabel}
-                    </span>
-                  </div>
-
-                  <div className="mt-4 border-t border-slate-800 pt-4">
-                    <p className="text-[0.65rem] uppercase tracking-[0.25em] text-slate-500">Item</p>
-                    <p className="mt-2 text-2xl font-semibold text-white truncate">{firstItem?.item_name || firstItem?.name || 'Item'}</p>
-                    <p className="mt-1 text-sm text-slate-400">x{firstItem?.quantity || 1} {moreItems}</p>
-                  </div>
-
-                  <div className="mt-4 border-t border-slate-800 pt-4">
-                    <div className="flex items-center justify-between gap-3">
-                      <div>
-                        <p className="text-[0.65rem] uppercase tracking-[0.2em] text-slate-500">KES</p>
-                        <p className="text-2xl font-semibold text-amber-300">{bill.total_amount.toFixed(2)}</p>
+                <div key={bill.order_id} className="relative min-w-0 w-full rounded-[1.2rem] border border-slate-700/50 bg-slate-950/95 p-2 shadow-2xl shadow-slate-950/20 transition-all hover:-translate-y-0.5 hover:shadow-[0_25px_80px_-35px_rgba(0,0,0,0.75)] sm:rounded-[2rem] sm:p-5">
+                  <div className="absolute inset-x-0 top-0 h-24 bg-gradient-to-r from-orange-500/10 via-slate-950/0 to-sky-500/10"></div>
+                  <div className="relative space-y-5">
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="min-w-0">
+                        <p className="text-[0.55rem] uppercase tracking-[0.2em] text-slate-500 truncate sm:text-[0.65rem] sm:tracking-[0.3em]">Order #{bill.order_id.toString().slice(0, 4).toUpperCase()}</p>
+                        <p className="mt-1 text-[0.7rem] text-slate-400 sm:mt-3 sm:text-sm">{bill.created_at ? formatClockTime(bill.created_at) : 'No timestamp'}</p>
+                        <p className="mt-2 text-[0.8rem] font-semibold text-white truncate sm:mt-4 sm:text-xl">{firstItem?.item_name || firstItem?.name || 'Order item'}</p>
                       </div>
-                      <Button
-                        onClick={() => handleConfirmPayment(bill)}
-                        disabled={processingPayment && selectedBill?.order_id === bill.order_id}
-                        className="w-full rounded-full bg-orange-500 px-4 py-3 text-sm font-semibold text-white hover:bg-orange-400 disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        {processingPayment && selectedBill?.order_id === bill.order_id ? (
-                          <Loader className="animate-spin mr-2" size={16} />
-                        ) : null}
-                        Confirm Payment
-                      </Button>
+                      <span className={`shrink-0 rounded-full border px-2 py-1 text-[0.5rem] font-semibold uppercase tracking-[0.18em] sm:px-3 sm:py-1.5 sm:text-[0.65rem] sm:tracking-[0.22em] ${
+                        bill.order_type === 'table' ? 'border-sky-500/20 bg-sky-500/10 text-sky-300' : 'border-orange-500/20 bg-orange-500/10 text-orange-300'
+                      }`}>
+                        {orderTypeLabel}
+                      </span>
+                    </div>
+
+                    <div className="rounded-[1rem] border border-slate-800/70 bg-slate-900/90 p-2 overflow-hidden sm:rounded-[1.75rem] sm:p-4">
+                      <div className="grid gap-4">
+                        <div className="grid grid-cols-1 gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+                          <div className="min-w-0">
+                            <p className="text-[0.55rem] uppercase tracking-[0.2em] text-slate-500 sm:text-[0.65rem] sm:tracking-[0.25em]">Item</p>
+                            <p className="mt-1 text-[0.75rem] font-semibold text-white truncate sm:mt-2 sm:text-lg">{firstItem?.item_name || firstItem?.name || 'Item'}</p>
+                            <p className="mt-1 text-[0.7rem] text-slate-400 sm:text-sm">x{firstItem?.quantity || 1} {moreItems}</p>
+                          </div>
+                          <div className="min-w-0 text-right">
+                            <p className="text-[0.55rem] uppercase tracking-[0.2em] text-slate-500 sm:text-[0.65rem] sm:tracking-[0.22em]">Total</p>
+                            <p className="mt-1 text-[0.8rem] font-semibold text-amber-300 leading-tight truncate whitespace-nowrap sm:mt-2 sm:text-xl md:text-2xl">KES {bill.total_amount.toFixed(2)}</p>
+                          </div>
+                        </div>
+                        <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+                          <div className="rounded-[1rem] border border-slate-800 bg-slate-950/70 p-2 min-w-0 overflow-x-auto sm:rounded-[1.5rem] sm:p-4">
+                            <p className="text-[0.55rem] uppercase tracking-[0.2em] text-slate-500 sm:text-[0.65rem] sm:tracking-[0.25em]">Server</p>
+                            <p className="mt-1 text-[0.72rem] font-semibold text-white whitespace-nowrap sm:mt-2 sm:text-sm">{bill.waiter_name?.trim() ? bill.waiter_name : 'Unassigned'}</p>
+                            {bill.waiter_id && (
+                              <p className="mt-1 text-[0.65rem] text-slate-400 whitespace-nowrap sm:text-xs">ID: {bill.waiter_id}</p>
+                            )}
+                          </div>
+                          <div className="min-w-0 flex justify-stretch sm:justify-end">
+                            <Button
+                              onClick={() => handleConfirmPayment(bill)}
+                              disabled={processingPayment && selectedBill?.order_id === bill.order_id}
+                              className="w-full rounded-full bg-gradient-to-r from-orange-500 to-orange-400 px-3 py-2.5 text-[9px] font-semibold leading-none tracking-[0.01em] text-slate-950 shadow-lg shadow-orange-500/20 hover:from-orange-400 hover:to-orange-300 disabled:opacity-50 disabled:cursor-not-allowed sm:max-w-[160px] sm:px-3 sm:py-2.5 sm:text-[13px] sm:w-auto"
+                            >
+                              {processingPayment && selectedBill?.order_id === bill.order_id ? (
+                                <Loader className="animate-spin mr-2" size={16} />
+                              ) : null}
+                              <span className="sm:hidden">Confirm</span>
+                              <span className="hidden sm:inline">Confirm Payment</span>
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -621,7 +687,7 @@ export default function Cashier() {
               <div className="space-y-4">
                 <div className="rounded-3xl border border-slate-800 bg-slate-900 p-4 space-y-2 font-mono text-sm text-slate-200">
                   <p><strong>Order ID:</strong> {receipt.order_id}</p>
-                  <p><strong>Waiter:</strong> {receipt.waiter_name}</p>
+                  <p><strong>Waiter:</strong> {receipt.waiter_name?.trim() ? receipt.waiter_name : 'Unassigned'}</p>
                   {receipt.waiter_id && <p><strong>Waiter ID:</strong> {receipt.waiter_id}</p>}
                   <p><strong>Type:</strong> {receipt.order_type}</p>
                   {receipt.phone && <p><strong>Phone:</strong> {receipt.phone}</p>}

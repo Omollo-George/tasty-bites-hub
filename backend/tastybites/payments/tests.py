@@ -91,6 +91,40 @@ class AdminSigninSchemaTests(SchemaCleanupMixin, TestCase):
         self.assertEqual(payload['status'], 'sent_kitchen')
         self.assertEqual(payload['waiter_name'], employee.name)
 
+    def test_cashier_pending_bills_orders_oldest_first(self):
+        older_order = Order.objects.create(
+            status='pending',
+            total_amount=Decimal('100.00'),
+            created_at=timezone.now() - timedelta(minutes=10),
+        )
+        newer_order = Order.objects.create(
+            status='pending',
+            total_amount=Decimal('200.00'),
+            created_at=timezone.now() - timedelta(minutes=2),
+        )
+
+        request = self.factory.get('/api/payments/cashier/pending-bills/')
+
+        with patch('payments.views._is_staff', return_value=True):
+            response = cashier_pending_bills(request)
+
+        self.assertEqual(response.status_code, 200)
+        payload = json.loads(response.content.decode('utf-8'))
+        order_ids = [bill['order_id'] for bill in payload['bills']]
+        self.assertEqual(order_ids, [older_order.order_id, newer_order.order_id])
+
+    def test_kds_queue_includes_order_type(self):
+        Order.objects.create(status='sent_kitchen', total_amount=Decimal('100.00'))
+
+        request = self.factory.get('/api/payments/kds/queue/')
+
+        with patch('payments.views._is_staff', return_value=True):
+            response = kds_queue(request)
+
+        self.assertEqual(response.status_code, 200)
+        payload = json.loads(response.content.decode('utf-8'))
+        self.assertEqual(payload['queue'][0]['order_type'], 'takeaway')
+
     def test_report_summary_returns_empty_payload_when_report_tables_are_broken(self):
         self.drop_table_if_exists('payments_orderitem')
         with connection.cursor() as cursor:

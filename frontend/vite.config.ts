@@ -28,7 +28,7 @@ export default defineConfig({
   server: {
     host: '127.0.0.1',
     port: 5173,
-    strictPort: true,
+    strictPort: false,
     https: false,
     proxy: {
       // SSE endpoint needs a dedicated proxy entry to avoid ECONNRESET

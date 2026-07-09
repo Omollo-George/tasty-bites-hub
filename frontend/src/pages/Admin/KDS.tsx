@@ -27,6 +27,7 @@ interface Order {
   split_count: number;
   waiter_name?: string;
   waiter_id?: string | number;
+  order_type?: string;
   claimed_by_id?: string | number | null;
   claimed_by_name?: string;
   claimed_at?: string | null;
@@ -35,6 +36,7 @@ interface Order {
 const AdminKDS: React.FC = () => {
   const [queue, setQueue] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
+  const [ticketFilter, setTicketFilter] = useState<'all' | 'takeaway' | 'dinein'>('all');
   const { toast } = useToast();
   const adminToken = getAdminToken();
   const isAdmin = adminToken && isAdminSessionValid(); // Check if admin is logged in
@@ -45,12 +47,29 @@ const AdminKDS: React.FC = () => {
   const staffId = getStaffId();
   const canAccess = isAdmin || ['chef', 'manager', 'cook', 'kitchen'].includes(staffRole);
 
+  const getOrderCategory = (orderType?: string) => {
+    const normalized = (orderType || '').toLowerCase();
+    if (normalized === 'takeaway' || normalized === 'delivery') return 'takeaway';
+    return 'dinein';
+  };
+
+  const filteredQueue = queue.filter((order) => {
+    if (ticketFilter === 'all') return true;
+    return getOrderCategory(order.order_type) === ticketFilter;
+  });
+
   const formatElapsedTime = (createdAt: string) => {
     try {
-      const diffMs = Date.now() - new Date(createdAt).getTime();
-      const minutes = Math.floor(diffMs / 60000);
-      const seconds = Math.floor((diffMs % 60000) / 1000);
-      return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+      const createdDate = new Date(createdAt);
+      if (Number.isNaN(createdDate.getTime())) {
+        return '--:--';
+      }
+
+      return createdDate.toLocaleTimeString('en-US', {
+        hour: 'numeric',
+        minute: '2-digit',
+        hour12: true,
+      });
     } catch {
       return '--:--';
     }
@@ -87,7 +106,12 @@ const AdminKDS: React.FC = () => {
       }
       const data = await res.json();
       const queueItems = Array.isArray(data.queue) ? data.queue : [];
-      setQueue(queueItems.map((order: any) => ({
+      const sortedQueueItems = [...queueItems].sort((a: any, b: any) => {
+        const aTime = new Date(a?.created_at || 0).getTime();
+        const bTime = new Date(b?.created_at || 0).getTime();
+        return aTime - bTime;
+      });
+      setQueue(sortedQueueItems.map((order: any) => ({
         items: Array.isArray(order.items) ? order.items : [],
         ...order,
       })));
@@ -239,25 +263,40 @@ const AdminKDS: React.FC = () => {
           <h1 className="font-display text-3xl text-slate-100">Kitchen Display System</h1>
         </div>
       </div>
+      <div className="mb-4 flex flex-wrap gap-2">
+        {(['all', 'takeaway', 'dinein'] as const).map((filter) => {
+          const isActive = ticketFilter === filter;
+          const label = filter === 'all' ? 'All' : filter === 'takeaway' ? 'Takeaway' : 'Dine-in';
+          return (
+            <button
+              key={filter}
+              onClick={() => setTicketFilter(filter)}
+              className={`rounded-full border px-3 py-2 text-sm font-semibold transition ${isActive ? 'border-amber-400 bg-amber-400 text-slate-950' : 'border-slate-700 bg-slate-900 text-slate-300 hover:border-slate-500 hover:text-white'}`}
+            >
+              {label}
+            </button>
+          );
+        })}
+      </div>
       <div className="flex gap-3 overflow-x-auto pb-3 scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-slate-950">
-        {queue.length === 0 ? (
+        {filteredQueue.length === 0 ? (
           <div className="min-w-full text-center text-slate-500 py-8">
             <p className="text-base">No active orders in the queue.</p>
             <p className="text-xs">Time to relax, chef!</p>
           </div>
         ) : (
-          queue.map((order) => (
+          filteredQueue.map((order) => (
             <div key={order.order_id} className="relative min-w-[300px] max-w-[360px] flex-shrink-0 overflow-hidden rounded-[1.5rem] border border-slate-800 bg-slate-950/95 shadow-[0_16px_50px_-32px_rgba(0,0,0,0.55)]">
               <div className="absolute inset-0 bg-gradient-to-b from-slate-900/90 via-transparent to-slate-950/95" />
               <div className="relative p-3 sm:p-4 lg:p-5">
-                <div className="flex items-start justify-between gap-2 mb-4">
-                  <div>
+                <div className="mb-4 flex items-center justify-between gap-3">
+                  <div className="min-w-0">
                     <p className="text-[0.58rem] uppercase tracking-[0.35em] text-slate-500">Order</p>
                     <h2 className="mt-1 text-xl font-semibold tracking-tight text-white">#{order.order_id.substring(0, 6).toUpperCase()}</h2>
                   </div>
-                  <div className="rounded-3xl border border-slate-800 bg-slate-900/90 px-2.5 py-1.5 text-right">
-                    <p className="text-[0.65rem] uppercase tracking-[0.2em] text-slate-500">Time</p>
-                    <p className="mt-0.5 text-xs font-semibold text-amber-400">{formatElapsedTime(order.created_at)}</p>
+                  <div className="flex-shrink-0 rounded-2xl border border-slate-800 bg-slate-900/90 px-3 py-2 text-right">
+                    <p className="text-[0.6rem] uppercase tracking-[0.2em] text-slate-500">Elapsed</p>
+                    <p className="mt-0.5 text-sm font-semibold text-amber-400">{formatElapsedTime(order.created_at)}</p>
                   </div>
                 </div>
 
@@ -270,6 +309,11 @@ const AdminKDS: React.FC = () => {
                     <p className="text-[0.55rem] uppercase tracking-[0.2em] text-slate-500">Status</p>
                     <p className="mt-1 text-sm font-semibold uppercase text-slate-100">{order.status}</p>
                   </div>
+                </div>
+
+                <div className="rounded-[1.4rem] border border-slate-800 bg-slate-900/90 p-3 mb-3">
+                  <p className="text-[0.68rem] uppercase tracking-[0.25em] text-slate-500">Waiter</p>
+                  <p className="mt-2 text-sm font-semibold leading-tight text-white">{order.waiter_name?.trim() ? order.waiter_name : 'Unassigned'}</p>
                 </div>
 
                 <div className="rounded-[1.4rem] border border-slate-800 bg-slate-900/90 p-3 mb-4">
