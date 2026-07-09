@@ -278,7 +278,7 @@ const AdminKDS: React.FC = () => {
           );
         })}
       </div>
-      <div className="grid grid-cols-3 md:grid-cols-4 gap-3 pb-3 overflow-y-auto scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-slate-950 max-h-[70vh] auto-rows-min items-start">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 pb-3 overflow-y-auto scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-slate-950 max-h-[70vh] auto-rows-min items-start">
         {filteredQueue.length === 0 ? (
           <div className="min-w-full text-center text-slate-500 py-8">
             <p className="text-base">No active orders in the queue.</p>
