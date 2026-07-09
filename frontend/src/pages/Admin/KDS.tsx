@@ -278,7 +278,7 @@ const AdminKDS: React.FC = () => {
           );
         })}
       </div>
-      <div className="grid grid-cols-3 md:grid-cols-4 gap-3 pb-3 overflow-y-auto scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-slate-950 max-h-[70vh]">
+      <div className="grid grid-cols-3 md:grid-cols-4 gap-3 pb-3 overflow-y-auto scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-slate-950 max-h-[70vh] auto-rows-min items-start">
         {filteredQueue.length === 0 ? (
           <div className="min-w-full text-center text-slate-500 py-8">
             <p className="text-base">No active orders in the queue.</p>
@@ -286,9 +286,9 @@ const AdminKDS: React.FC = () => {
           </div>
         ) : (
           filteredQueue.map((order) => (
-            <div key={order.order_id} className="relative overflow-visible rounded-xl border border-slate-800 bg-slate-950/95 shadow-[0_12px_30px_-20px_rgba(0,0,0,0.55)] aspect-square md:aspect-auto md:min-h-[12rem]">
+            <div key={order.order_id} className="relative overflow-hidden rounded-xl border border-slate-800 bg-slate-950/95 shadow-[0_12px_30px_-20px_rgba(0,0,0,0.55)] min-h-[12rem]">
               <div className="absolute inset-0 bg-gradient-to-b from-slate-900/90 via-transparent to-slate-950/95" />
-              <div className="relative p-3 flex flex-col justify-between h-full">
+              <div className="relative p-3 flex flex-col justify-between">
                 <div className="mb-4 flex items-center justify-between gap-3">
                   <div className="min-w-0">
                     <p className="text-[0.6rem] uppercase tracking-[0.28em] text-slate-500">Order</p>
