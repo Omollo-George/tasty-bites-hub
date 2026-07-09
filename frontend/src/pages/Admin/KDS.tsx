@@ -286,7 +286,7 @@ const AdminKDS: React.FC = () => {
           </div>
         ) : (
           filteredQueue.map((order) => (
-            <div key={order.order_id} className="relative overflow-hidden rounded-xl border border-slate-800 bg-slate-950/95 shadow-[0_12px_30px_-20px_rgba(0,0,0,0.55)] h-64">
+            <div key={order.order_id} className="relative overflow-visible rounded-xl border border-slate-800 bg-slate-950/95 shadow-[0_12px_30px_-20px_rgba(0,0,0,0.55)] min-h-[12rem]">
               <div className="absolute inset-0 bg-gradient-to-b from-slate-900/90 via-transparent to-slate-950/95" />
               <div className="relative p-3">
                 <div className="mb-4 flex items-center justify-between gap-3">
