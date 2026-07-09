@@ -1,18 +1,6 @@
-import React, { useEffect, useMemo, useState } from 'react'
-import {
-  ResponsiveContainer,
-  AreaChart,
-  ComposedChart,
-  XAxis,
-  YAxis,
-  Tooltip,
-  CartesianGrid,
-  Bar,
-  Line,
-  Legend,
-  Area,
-} from 'recharts'
-import { getApiUrl } from '@/lib/api'
+import React, { Suspense, useEffect, useMemo, useState } from 'react'
+const ReportsCharts = React.lazy(() => import('@/components/ReportsCharts'))
+import { getApiUrl, getSseUrl } from '@/lib/api'
 import { getAdminToken } from '@/lib/admin-session'
 import { getCachedReports, clearReportsCache, preloadReportsData } from '@/lib/admin-data-cache'
 
@@ -618,18 +606,9 @@ const Reports: React.FC = () => {
           ) : (
             <div className="space-y-6">
               <div className="w-full" style={{ minHeight: 320 }}>
-                <ResponsiveContainer width="100%" height={320} minWidth={0} minHeight={0}>
-                  <ComposedChart data={hourlyData} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#475569" /> {/* Changed stroke color */}
-                    <XAxis dataKey="label" tick={{ fontSize: 11, fill: '#cbd5e1' }} interval={2} minTickGap={10} /> {/* Added fill color */}
-                    <YAxis yAxisId="left" orientation="left" tick={{ fontSize: 11, fill: '#cbd5e1' }} /> {/* Added fill color */}
-                    <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 11, fill: '#cbd5e1' }} /> {/* Added fill color */}
-                    <Tooltip formatter={(value: any) => typeof value === 'number' ? new Intl.NumberFormat('en-KE', { style: 'currency', currency: 'KES' }).format(value) : value} />
-                    <Legend />
-                    <Bar yAxisId="left" dataKey="revenue" name="Revenue" fill="#fb923c" radius={[6, 6, 0, 0]} />
-                    <Line yAxisId="right" type="monotone" dataKey="orders" name="Orders" stroke="#2563eb" strokeWidth={3} dot={{ r: 3 }} />
-                  </ComposedChart>
-                </ResponsiveContainer>
+                <Suspense fallback={<div className="w-full" style={{ minHeight: 320 }}>Loading chart…</div>}>
+                  <ReportsCharts hourlyData={hourlyData} />
+                </Suspense>
               </div>
               <div className="grid grid-cols-1 gap-3">
                 {hourlyData.slice(0, 24).map((row) => (

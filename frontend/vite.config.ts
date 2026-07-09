@@ -24,6 +24,20 @@ export default defineConfig({
     outDir: 'dist',
     emptyOutDir: true,
     chunkSizeWarningLimit: 1000,
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes('node_modules')) {
+            if (id.includes('recharts')) return 'recharts';
+            if (id.includes('react-day-picker')) return 'date-picker';
+            if (id.includes('three') || id.includes('@react-three')) return 'three-vendor';
+            if (id.includes('@radix-ui') || id.includes('lucide-react') || id.includes('next-themes')) return 'ui-vendor';
+            if (id.includes('react-router-dom') || id.includes('react-dom') || id.includes('react') || id.includes('@tanstack/react-query')) return 'react-vendor';
+            return 'vendor';
+          }
+        },
+      },
+    },
   },
   server: {
     host: '127.0.0.1',

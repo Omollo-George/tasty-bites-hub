@@ -24,12 +24,20 @@ const AdminSidebar: React.FC = () => {
   const handleNavItemHover = (path: string) => {
     preloadAdminRoute(path)
     // Preload data for specific routes
+    // Schedule data preloads, but avoid blocking the main thread for heavy endpoints
+    const schedule = (fn: () => void) => {
+      if (typeof window === 'undefined') return
+      const ric = (window as any).requestIdleCallback || function (cb: any) { return setTimeout(cb, 500) }
+      try { ric(() => fn()) } catch { setTimeout(() => fn(), 500) }
+    }
+
     if (path === '/admin/employees') {
-      preloadEmployeesData()
+      schedule(preloadEmployeesData)
     } else if (path === '/admin/reports') {
-      preloadReportsData()
+      // reports can be heavy; schedule when the browser is idle
+      schedule(preloadReportsData)
     } else if (path === '/admin/stock') {
-      preloadStockData()
+      schedule(preloadStockData)
     }
   }
 

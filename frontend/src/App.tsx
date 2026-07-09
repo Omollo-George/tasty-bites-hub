@@ -1,4 +1,4 @@
-import { lazy, Suspense } from "react";
+import { Suspense, useEffect } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -44,7 +44,31 @@ import CentralizedControl from "./pages/Why/CentralizedControl";
 
 const queryClient = new QueryClient();
 
-const App = () => (
+const App = () => {
+  useEffect(() => {
+    const preloads = [
+      AdminHome.preload,
+      AdminOrders.preload,
+      AdminMenu.preload,
+      AdminSettings.preload,
+      AdminEmployees.preload,
+      AdminReports.preload,
+      AdminStock.preload,
+      AdminAutomation.preload,
+      EmployeeTable.preload,
+      AdminKDS.preload,
+      Cashier.preload,
+      StaffPage.preload,
+    ];
+
+    const timer = window.setTimeout(() => {
+      preloads.forEach((preload) => preload?.().catch(() => {}));
+    }, 150);
+
+    return () => window.clearTimeout(timer);
+  }, []);
+
+  return (
   <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
@@ -165,6 +189,7 @@ const App = () => (
       </TooltipProvider>
     </QueryClientProvider>
   </ThemeProvider>
-);
+  );
+};
 
 export default App;
