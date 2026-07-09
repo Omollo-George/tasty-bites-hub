@@ -31,6 +31,8 @@ const AdminSettings: React.FC = () => {
   const [sessionClearPassword, setSessionClearPassword] = useState('')
   const [sessionClearMessage, setSessionClearMessage] = useState('')
   const [sessionClearLoading, setSessionClearLoading] = useState(false)
+  const [clearCashierLoading, setClearCashierLoading] = useState(false)
+  const [clearCashierMessage, setClearCashierMessage] = useState('')
   const passwordRequirements = [
     {
       label: 'At least 8 characters',
@@ -319,6 +321,39 @@ const AdminSettings: React.FC = () => {
               )
             })}
           </div>
+        <div className="mt-6">
+          <h3 className="font-semibold text-lg text-slate-100 mb-2">Operational Actions</h3>
+          <div className="flex flex-col sm:flex-row gap-3">
+            <button
+              onClick={async () => {
+                if (!window.confirm('Clear cashier activity (payments, recent transactions) from the system? This cannot be undone.')) return
+                const token = getAdminToken()
+                if (!token) {
+                  navigate('/admin/login')
+                  return
+                }
+                setClearCashierMessage('')
+                setClearCashierLoading(true)
+                try {
+                  const data: any = await apiFetch('/payments/admin/clear-cashier-activity/', {
+                    method: 'POST',
+                    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+                  })
+                  setClearCashierMessage(data?.message || 'Cashier activity cleared successfully.')
+                } catch (err: any) {
+                  setClearCashierMessage(err?.body || err?.message || 'Failed to clear cashier activity')
+                } finally {
+                  setClearCashierLoading(false)
+                }
+              }}
+              disabled={clearCashierLoading}
+              className="rounded-full bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-500 disabled:opacity-50"
+            >
+              {clearCashierLoading ? 'Clearing…' : 'Clear Cashier Activity'}
+            </button>
+            {clearCashierMessage ? <p className="text-sm text-slate-300 mt-2 sm:mt-0">{clearCashierMessage}</p> : null}
+          </div>
+        </div>
           <button
             type="button"
             onClick={addUser}
