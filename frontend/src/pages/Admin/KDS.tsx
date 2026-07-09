@@ -286,9 +286,9 @@ const AdminKDS: React.FC = () => {
           </div>
         ) : (
           filteredQueue.map((order) => (
-            <div key={order.order_id} className="relative overflow-visible rounded-xl border border-slate-800 bg-slate-950/95 shadow-[0_12px_30px_-20px_rgba(0,0,0,0.55)] min-h-[12rem]">
+            <div key={order.order_id} className="relative overflow-visible rounded-xl border border-slate-800 bg-slate-950/95 shadow-[0_12px_30px_-20px_rgba(0,0,0,0.55)] aspect-square md:aspect-auto md:min-h-[12rem]">
               <div className="absolute inset-0 bg-gradient-to-b from-slate-900/90 via-transparent to-slate-950/95" />
-              <div className="relative p-3">
+              <div className="relative p-3 flex flex-col justify-between h-full">
                 <div className="mb-4 flex items-center justify-between gap-3">
                   <div className="min-w-0">
                     <p className="text-[0.6rem] uppercase tracking-[0.28em] text-slate-500">Order</p>
@@ -340,18 +340,18 @@ const AdminKDS: React.FC = () => {
                   )}
                 </div>
 
-                <div className="grid gap-2 grid-cols-2">
+                <div className="grid gap-2 grid-cols-1 sm:grid-cols-2">
                   <button
                     onClick={() => claimOrder(order.order_id)}
                     disabled={Boolean(order.claimed_by_id && String(order.claimed_by_id) !== staffId)}
-                    className="rounded-full border border-slate-700 bg-slate-900/95 px-3 py-1.5 text-[0.8rem] font-semibold text-slate-100 transition hover:border-slate-600 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+                    className="w-full rounded-lg border border-slate-700 bg-slate-900/95 px-2 py-2 text-[0.78rem] font-semibold text-slate-100 transition hover:border-slate-600 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     {order.claimed_by_id ? (String(order.claimed_by_id) === staffId ? 'Claimed' : 'Claimed') : 'Claim'}
                   </button>
                   <button
                     onClick={() => updateOrderStatus(order.order_id, 'ready')}
                     disabled={Boolean(order.claimed_by_id && String(order.claimed_by_id) !== staffId)}
-                    className="rounded-full bg-amber-400 px-3 py-1.5 text-[0.8rem] font-semibold text-slate-950 transition hover:bg-amber-300 disabled:cursor-not-allowed disabled:opacity-50"
+                    className="w-full rounded-lg bg-amber-400 px-2 py-2 text-[0.78rem] font-semibold text-slate-950 transition hover:bg-amber-300 disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     Ready
                   </button>
