@@ -292,7 +292,7 @@ const AdminKDS: React.FC = () => {
                 <div className="mb-4 flex items-center justify-between gap-3">
                   <div className="min-w-0">
                     <p className="text-[0.6rem] uppercase tracking-[0.28em] text-slate-500">Order</p>
-                    <h2 className="mt-1 text-lg font-semibold tracking-tight text-white">#{order.order_id.substring(0, 6).toUpperCase()}</h2>
+                    <h2 className="mt-1 text-lg font-semibold tracking-tight text-white truncate">#{order.order_id.substring(0, 6).toUpperCase()}</h2>
                   </div>
                   <div className="flex-shrink-0 rounded-2xl border border-slate-800 bg-slate-900/90 px-2 py-1 text-right">
                     <p className="text-[0.6rem] uppercase tracking-[0.18em] text-slate-500">Elapsed</p>
@@ -303,31 +303,31 @@ const AdminKDS: React.FC = () => {
                 <div className="grid gap-2 grid-cols-2 mb-2">
                   <div className="rounded-2xl border border-slate-800 bg-slate-900/95 p-2">
                     <p className="text-[0.6rem] uppercase tracking-[0.18em] text-slate-500">Table</p>
-                    <p className="mt-1 text-sm font-semibold text-slate-100">{order.table}</p>
+                    <p className="mt-1 text-sm font-semibold text-slate-100 truncate">{order.table}</p>
                   </div>
                   <div className="rounded-2xl border border-slate-800 bg-slate-900/95 p-2">
                     <p className="text-[0.6rem] uppercase tracking-[0.18em] text-slate-500">Status</p>
-                    <p className="mt-1 text-sm font-semibold uppercase text-slate-100">{order.status}</p>
+                    <p className="mt-1 text-sm font-semibold uppercase text-slate-100 truncate">{order.status}</p>
                   </div>
                 </div>
 
                 <div className="rounded-2xl border border-slate-800 bg-slate-900/95 p-2 mb-2">
                   <p className="text-[0.6rem] uppercase tracking-[0.18em] text-slate-500">Waiter</p>
-                  <p className="mt-1 text-sm font-semibold leading-tight text-white">{order.waiter_name?.trim() ? order.waiter_name : 'Unassigned'}</p>
+                  <p className="mt-1 text-sm font-semibold leading-tight text-white truncate">{order.waiter_name?.trim() ? order.waiter_name : 'Unassigned'}</p>
                 </div>
 
                 <div className="rounded-2xl border border-slate-800 bg-slate-900/95 p-2 mb-2">
                   <p className="text-[0.6rem] uppercase tracking-[0.18em] text-slate-500">Preparing</p>
-                  <p className="mt-1 text-sm font-semibold leading-tight text-white">{order.items.length}x {order.items[0]?.name || 'Item'}</p>
+                  <p className="mt-1 text-sm font-semibold leading-tight text-white truncate">{order.items.length}x {order.items[0]?.name || 'Item'}</p>
                 </div>
 
-                <div className="space-y-2 text-slate-300 mb-3">
+                <div className="space-y-2 text-slate-300 mb-3 max-h-28 overflow-auto">
                   {order.items.slice(0, 3).map((item, idx) => (
-                    <div key={idx} className="flex items-center justify-between gap-2 rounded-2xl border border-slate-800 bg-slate-900/95 px-2 py-1">
+                    <div key={idx} className="flex items-center justify-between gap-2 rounded-2xl border border-slate-800 bg-slate-900/95 px-2 py-1 min-w-0">
                       <div>
-                        <p className="text-sm font-semibold text-white">{item.quantity}x {item.name}</p>
+                        <p className="text-sm font-semibold text-white truncate">{item.quantity}x {item.name}</p>
                         {(item.modifiers || []).length > 0 && (
-                          <p className="mt-0.5 text-[0.68rem] text-slate-500">{item.modifiers.join(', ')}</p>
+                          <p className="mt-0.5 text-[0.68rem] text-slate-500 truncate">{item.modifiers.join(', ')}</p>
                         )}
                       </div>
                       {item.is_served ? (
