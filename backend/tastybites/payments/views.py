@@ -3295,13 +3295,23 @@ def send_employee_email(request, employee_id: int):
             return JsonResponse({'error': 'Message body is required'}, status=400)
 
         sender = getattr(settings, 'EMAIL_HOST_USER', getattr(settings, 'DEFAULT_FROM_EMAIL', 'admin@tastybites.com'))
-        send_mail(
-            subject,
-            message,
-            sender,
-            [emp.email],
-            fail_silently=False,
-        )
+        from django.core.mail import get_connection
+        conn = get_connection()
+        try:
+            conn.open()
+            send_mail(
+                subject,
+                message,
+                sender,
+                [emp.email],
+                fail_silently=False,
+                connection=conn,
+            )
+        finally:
+            try:
+                conn.close()
+            except Exception:
+                pass
         return JsonResponse({'ok': True})
     except Exception as e:
         return JsonResponse({'error': f"Failed to send email: {str(e)}"}, status=500)
@@ -3380,6 +3390,7 @@ def send_bulk_employee_email(request):
                     sender,
                     [emp.email],
                     fail_silently=False,
+                    connection=conn,
                 )
                 count += 1
             except Exception as e:

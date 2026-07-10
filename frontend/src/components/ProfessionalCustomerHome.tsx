@@ -346,10 +346,43 @@ const ProfessionalCustomerHome = () => {
     }
   };
 
+  const handleFindFood = () => {
+    const query = searchQuery.trim().toLowerCase();
+    if (!data || !data.categories.length) {
+      return;
+    }
+
+    if (!query) {
+      scrollToCategory(data.categories[0]);
+      return;
+    }
+
+    const matched = allMenuItems.filter((it: any) =>
+      it.name.toLowerCase().includes(query) ||
+      it.description.toLowerCase().includes(query)
+    );
+
+    if (matched.length > 0) {
+      scrollToCategory('search-results');
+      return;
+    }
+
+    scrollToCategory(data.categories[0]);
+  };
+
   const allMenuItems = useMemo(() => {
     if (!data) return [];
     return Object.values(data.menu_by_category).flat();
   }, [data]);
+
+  const filteredFeatured = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!data || q.length === 0) return data?.featured || [];
+    return (data.featured || []).filter((item) =>
+      item.name.toLowerCase().includes(q) ||
+      item.description.toLowerCase().includes(q)
+    );
+  }, [data, searchQuery]);
 
   useEffect(() => {
     const q = searchQuery.trim().toLowerCase();
@@ -360,7 +393,10 @@ const ProfessionalCustomerHome = () => {
     }
 
     const matches = allMenuItems
-      .filter((it: any) => it.name.toLowerCase().includes(q) || it.description.toLowerCase().includes(q))
+      .filter((it: any) =>
+        it.name.toLowerCase().includes(q) ||
+        it.description.toLowerCase().includes(q)
+      )
       .slice(0, 8);
 
     setSuggestions(matches);
@@ -746,14 +782,8 @@ const ProfessionalCustomerHome = () => {
 
       {/* Glassmorphic Navbar */}
       <nav className={`fixed top-0 w-full z-50 transition-all duration-500 ${scrolled ? 'py-4 bg-black/60 backdrop-blur-xl border-b border-white/10' : 'py-6 bg-transparent'} ${showCartModal || lastOrder ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
-        <div className="max-w-7xl mx-auto px-6 flex items-center justify-between">
-          <h2 
-            onClick={scrollToTop}
-            className="text-2xl font-black tracking-tighter bg-gradient-to-r from-white to-gray-500 bg-clip-text text-transparent italic cursor-pointer transition-opacity hover:opacity-80"
-          >
-            TASTY BITES<span className="text-orange-500 text-sm not-italic ml-1">PRO</span>
-          </h2>
-          <div className="hidden md:flex items-center gap-3">
+        <div className="max-w-7xl mx-auto px-6 flex flex-col gap-3">
+          <div className="flex flex-wrap items-center justify-end gap-3">
             <button 
               onClick={() => data && scrollToCategory(data.categories[0])}
               className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-white hover:bg-white/10 transition"
@@ -774,6 +804,14 @@ const ProfessionalCustomerHome = () => {
               Cart ({cartTotalItems})
             </button>
           </div>
+          <div className="flex items-center justify-between">
+            <h2 
+              onClick={scrollToTop}
+              className="text-2xl font-black tracking-tighter bg-gradient-to-r from-white to-gray-500 bg-clip-text text-transparent italic cursor-pointer transition-opacity hover:opacity-80"
+            >
+              TASTY BITES<span className="text-orange-500 text-sm not-italic ml-1">PRO</span>
+            </h2>
+          </div>
         </div>
       </nav>
 
@@ -786,7 +824,7 @@ const ProfessionalCustomerHome = () => {
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,_rgba(249,115,22,0.16),_transparent_20%),radial-gradient(circle_at_bottom_right,_rgba(255,255,255,0.08),_transparent_18%)] pointer-events-none" />
 
         <div className="relative z-10 w-full px-4 sm:px-6 lg:px-8">
-          <div className="mx-auto flex max-w-6xl flex-col items-center text-center gap-9 py-16">
+          <div className="mx-auto flex max-w-6xl flex-col items-center text-center gap-9 py-16 mt-[60px]">
             <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-slate-950/40 px-5 py-3 text-xs uppercase tracking-[0.35em] text-orange-300 shadow-lg shadow-orange-500/10 backdrop-blur-xl">
               <MapPin size={14} /> Now Delivering to your Location
             </div>
@@ -846,7 +884,7 @@ const ProfessionalCustomerHome = () => {
                     )}
                 </div>
                 <button
-                  onClick={() => scrollToCategory(data.categories[0])}
+                  onClick={handleFindFood}
                   className="inline-flex items-center justify-center rounded-3xl bg-orange-500 px-8 py-4 text-sm font-semibold text-white shadow-lg shadow-orange-500/20 transition hover:bg-orange-400"
                 >
                   Find Food
@@ -888,7 +926,7 @@ const ProfessionalCustomerHome = () => {
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-4">
-            {data.featured.map(item => (
+            {filteredFeatured.map(item => (
               <ProItemCard key={item.id} item={item} currency={data.config.currency} compact onAdd={() => handleAddToCart(item)} formatImageUrl={formatImageUrl} />
             ))}
           </div>
@@ -914,30 +952,24 @@ const ProfessionalCustomerHome = () => {
             }
 
             if (matched.length > 0) {
-              // determine most common category among matches
-              const counts: Record<string, number> = {};
-              for (const m of matched) counts[m.category] = (counts[m.category] || 0) + 1;
-              const primaryCategory = Object.keys(counts).sort((a, b) => counts[b] - counts[a])[0];
-
-              // render only that category (show full category list)
-              const items = data.menu_by_category[primaryCategory] || [];
               return (
-                <section key={primaryCategory} className="mb-20">
-                  <div id={`category-${primaryCategory}`} className="flex items-center gap-4 mb-10">
-                    <h4 className="text-4xl font-black tracking-tight italic uppercase">{primaryCategory}</h4>
+                <section id="category-search-results" key="search-results" className="mb-20">
+                  <div className="flex items-center gap-4 mb-10">
+                    <h4 className="text-4xl font-black tracking-tight italic uppercase">Search Results</h4>
+                    <span className="text-sm text-slate-400">{matched.length} item{matched.length === 1 ? '' : 's'} found</span>
                     <div className="h-[2px] flex-1 bg-gradient-to-r from-white/20 to-transparent" />
                   </div>
                   <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-4">
-                    {items.map((item, index) => (
-                        <ProItemCard
-                          key={`${primaryCategory}-${item.id}-${index}`}
-                          item={item}
-                          currency={data.config.currency}
-                          compact
-                          onAdd={() => handleAddToCart(item)}
-                          formatImageUrl={formatImageUrl}
-                        />
-                      ))}
+                    {matched.map((item, index) => (
+                      <ProItemCard
+                        key={`search-${item.id}-${index}`}
+                        item={item}
+                        currency={data.config.currency}
+                        compact
+                        onAdd={() => handleAddToCart(item)}
+                        formatImageUrl={formatImageUrl}
+                      />
+                    ))}
                   </div>
                 </section>
               );
@@ -950,8 +982,7 @@ const ProfessionalCustomerHome = () => {
               const items = data.menu_by_category[category] || [];
               const filteredItems = items.filter((i) =>
                 i.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                i.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                i.category.toLowerCase().includes(searchQuery.toLowerCase())
+                i.description.toLowerCase().includes(searchQuery.toLowerCase())
               );
               return { category, items: filteredItems };
             })
