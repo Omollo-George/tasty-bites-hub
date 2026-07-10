@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useMemo, useRef } from 'react';
-import { Flame, ShoppingCart, Star, Search, MapPin } from 'lucide-react';
+import { Flame, ShoppingCart, Star, Search, MapPin, Clock, Truck, ShieldCheck, Heart } from 'lucide-react';
 import { getApiUrl } from '@/lib/api';
 import { useNavigate, Link } from 'react-router-dom';
 import { toast } from 'sonner';
@@ -9,7 +9,6 @@ import CartModal from './CartModal';
 import { formatCurrency } from './utils'; 
 import Receipt from './Receipt';
 import heroImage from "@/assets/hero-food.jpg";
-import Footer from './Footer';
 import ContactDrawer from './ContactDrawer';
 
 interface RawMenuItem { // Fixed: Renamed from MenuItem to RawMenuItem
@@ -436,10 +435,6 @@ const ProfessionalCustomerHome = () => {
 
   const cartTotalItems = useMemo(() => cart.reduce((total, item) => total + item.quantity, 0), [cart]);
   const cartTotalPrice = useMemo(() => cart.reduce((total, item) => total + (item.price * item.quantity), 0), [cart]);
-  const featuredIds = useMemo(
-    () => new Set(data?.featured.map((item) => item.id) ?? []),
-    [data],
-  );
 
   const handleRedeemPoints = () => {
     if (points < 100) {
@@ -758,23 +753,27 @@ const ProfessionalCustomerHome = () => {
           >
             TASTY BITES<span className="text-orange-500 text-sm not-italic ml-1">PRO</span>
           </h2>
-          <div className="hidden md:flex items-center gap-4 text-sm font-medium text-gray-400">
+          <div className="hidden md:flex items-center gap-3">
             <button 
               onClick={() => data && scrollToCategory(data.categories[0])}
-              className="hover:text-white transition-colors"
+              className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-white hover:bg-white/10 transition"
             >
               Menu
             </button>
-            <button onClick={handleRewardsClick} className="hover:text-white transition-colors">Rewards</button>
+            <button
+              onClick={handleRewardsClick}
+              className="rounded-full border border-orange-500 bg-orange-500/10 px-4 py-2 text-sm font-semibold text-orange-300 hover:bg-orange-500/20 transition"
+            >
+              Rewards
+            </button>
+            <button
+              onClick={() => setShowCartModal(true)}
+              className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-white hover:bg-white/10 transition flex items-center gap-2"
+            >
+              <ShoppingCart size={16} />
+              Cart ({cartTotalItems})
+            </button>
           </div>
-          <button onClick={() => setShowCartModal(true)} className="p-3 rounded-full bg-white/5 border border-white/10 backdrop-blur-md hover:bg-orange-500 transition-all group relative">
-            <ShoppingCart size={20} className="group-hover:scale-110 transition-transform" />
-            {cartTotalItems > 0 && (
-              <span className="absolute -top-2 -right-2 bg-orange-500 text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center">
-                {cartTotalItems}
-              </span>
-            )}
-          </button>
         </div>
       </nav>
 
@@ -797,6 +796,7 @@ const ProfessionalCustomerHome = () => {
               <h1 className="text-5xl sm:text-6xl md:text-7xl font-extrabold tracking-tight text-white leading-tight font-hero">{data.hero.title}</h1>
               <p className="mx-auto max-w-3xl text-base sm:text-lg md:text-xl text-slate-300 leading-relaxed font-hero-sub">{data.hero.tagline} Discover a polished ordering experience tailored for modern restaurants and professional service.</p>
             </div>
+
 
             <div className="w-full max-w-3xl rounded-[2.5rem] border border-white/10 bg-slate-950/50 p-5 shadow-2xl shadow-black/40 backdrop-blur-xl">
               <div className="grid gap-4 sm:grid-cols-[1fr_auto] items-center">
@@ -854,7 +854,6 @@ const ProfessionalCustomerHome = () => {
               </div>
               <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
                 <button type="button" onClick={() => scrollToCategory(data.categories[0])} className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-white transition hover:bg-white/10">Browse Menu</button>
-                <button type="button" onClick={handleRewardsClick} className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-white transition hover:bg-white/10">Rewards</button>
                 <Link to="/track" className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-white transition hover:bg-white/10">My Orders</Link>
               </div>
               <div className="mt-4 overflow-x-auto no-scrollbar">
@@ -880,15 +879,17 @@ const ProfessionalCustomerHome = () => {
       }`}>
 
         {/* Featured Section */}
-        <section className="mb-20">
-          <div className="flex items-center justify-between mb-8">
-            <h3 className="text-3xl font-black flex items-center gap-3 tracking-tight">
-              <Flame className="text-orange-500 fill-orange-500" /> Trending Now
-            </h3>
+        <section className="mt-6 mb-20">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-8">
+            <div>
+              <h3 className="text-3xl font-black flex items-center gap-3 tracking-tight">
+                <Flame className="text-orange-500 fill-orange-500" /> Trending Now
+              </h3>
+            </div>
           </div>
-      <div className="grid grid-cols-3 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-            {data.featured.map(item => ( // Pass onAdd to ProItemCard
-              <ProItemCard key={item.id} item={item} currency={data.config.currency} onAdd={() => handleAddToCart(item)} formatImageUrl={formatImageUrl} />
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-4">
+            {data.featured.map(item => (
+              <ProItemCard key={item.id} item={item} currency={data.config.currency} compact onAdd={() => handleAddToCart(item)} formatImageUrl={formatImageUrl} />
             ))}
           </div>
         </section>
@@ -926,10 +927,8 @@ const ProfessionalCustomerHome = () => {
                     <h4 className="text-4xl font-black tracking-tight italic uppercase">{primaryCategory}</h4>
                     <div className="h-[2px] flex-1 bg-gradient-to-r from-white/20 to-transparent" />
                   </div>
-                  <div className="grid grid-cols-3 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-                    {items
-                      .filter((i) => !featuredIds.has(i.id))
-                      .map((item, index) => (
+                  <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-4">
+                    {items.map((item, index) => (
                         <ProItemCard
                           key={`${primaryCategory}-${item.id}-${index}`}
                           item={item}
@@ -946,42 +945,41 @@ const ProfessionalCustomerHome = () => {
           }
 
           // default: render all categories with item-level filtering
-          return data.categories.map((category) => {
-            const items = data.menu_by_category[category] || [];
-            return (
-              <section key={category} className="mb-20">
-                <div id={`category-${category}`} className="flex items-center gap-4 mb-10">
-                  <h4 className="text-4xl font-black tracking-tight italic uppercase">{category}</h4>
-                  <div className="h-[2px] flex-1 bg-gradient-to-r from-white/20 to-transparent" />
-                </div>
-                <div className="grid grid-cols-3 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-                  {items
-                    .filter((i) => !featuredIds.has(i.id))
-                    .filter((i) =>
-                      i.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                      i.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                      i.category.toLowerCase().includes(searchQuery.toLowerCase())
-                    )
-                    .map((item, index) => (
-                      <ProItemCard
-                        key={`${category}-${item.id}-${index}`}
-                        item={item}
-                        currency={data.config.currency}
-                        compact
-                        onAdd={() => handleAddToCart(item)}
-                        formatImageUrl={formatImageUrl}
-                      />
-                    ))}
-                </div>
-              </section>
-            );
-          });
+          const visibleCategories = data.categories
+            .map((category) => {
+              const items = data.menu_by_category[category] || [];
+              const filteredItems = items.filter((i) =>
+                i.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                i.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                i.category.toLowerCase().includes(searchQuery.toLowerCase())
+              );
+              return { category, items: filteredItems };
+            })
+            .filter((entry) => entry.items.length > 0);
+
+          return visibleCategories.map(({ category, items }) => (
+            <section key={category} className="mb-20">
+              <div id={`category-${category}`} className="flex items-center gap-4 mb-10">
+                <h4 className="text-4xl font-black tracking-tight italic uppercase">{category}</h4>
+                <div className="h-[2px] flex-1 bg-gradient-to-r from-white/20 to-transparent" />
+              </div>
+              <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-4">
+                {items.map((item, index) => (
+                  <ProItemCard
+                    key={`${category}-${item.id}-${index}`}
+                    item={item}
+                    currency={data.config.currency}
+                    compact
+                    onAdd={() => handleAddToCart(item)}
+                    formatImageUrl={formatImageUrl}
+                  />
+                ))}
+              </div>
+            </section>
+          ));
         })()}
       </main>
 
-      <div className={`transition-opacity duration-500 ${showCartModal || lastOrder ? 'opacity-20 pointer-events-none' : 'opacity-100'}`}>
-        <Footer />
-      </div>
     </div>
   );
 };
@@ -1003,7 +1001,7 @@ const ProItemCard = ({
   const imageSrc = getItemImageSrc(item, formatImageUrl);
 
   return (
-    <div className="group relative bg-white/10 border border-white/10 backdrop-blur-xl rounded-[2rem] overflow-hidden shadow-2xl shadow-black/25 transition-all duration-300 hover:-translate-y-0.5 hover:border-white/20 hover:bg-white/15">
+    <div className="group relative w-full min-w-0 bg-white/10 border border-white/10 backdrop-blur-xl rounded-[2rem] overflow-hidden shadow-2xl shadow-black/25 transition-all duration-300 hover:-translate-y-0.5 hover:border-white/20 hover:bg-white/15">
       <div className={`relative ${compact ? 'h-24' : 'h-32 sm:h-36'} overflow-hidden`}>
         <img 
           src={imageSrc}
