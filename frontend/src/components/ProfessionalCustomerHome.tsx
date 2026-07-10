@@ -1032,34 +1032,35 @@ const ProItemCard = ({
   const imageSrc = getItemImageSrc(item, formatImageUrl);
 
   return (
-    <div className="group relative w-full min-w-0 bg-white/10 border border-white/10 backdrop-blur-xl rounded-[2rem] overflow-hidden shadow-2xl shadow-black/25 transition-all duration-300 hover:-translate-y-0.5 hover:border-white/20 hover:bg-white/15">
-      <div className={`relative ${compact ? 'h-24' : 'h-32 sm:h-36'} overflow-hidden`}>
+    <div className="group relative w-full min-w-0 overflow-hidden rounded-[1.75rem] border border-white/10 bg-slate-950/70 text-left backdrop-blur-xl shadow-[0_20px_60px_-30px_rgba(2,6,23,0.8)] transition hover:border-orange-500/50 hover:shadow-[0_20px_60px_-30px_rgba(251,146,60,0.55)]">
+      <div className={`relative ${compact ? 'h-28 sm:h-32' : 'h-32 sm:h-36'} overflow-hidden bg-slate-900`}>
         <img 
           src={imageSrc}
           onError={(event) => { event.currentTarget.src = fallbackImage }}
-          className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" 
+          className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-105" 
           alt={item.name} 
         />
         <div className="absolute top-3 left-3 flex flex-wrap gap-1">
-          {item.popular && <span className="rounded-full bg-orange-500/15 text-[10px] font-bold uppercase tracking-[0.24em] text-orange-200 border border-orange-500/30 px-2 py-1">Pop</span>}
-          {item.spicy && <span className="rounded-full bg-red-500/15 text-[10px] font-bold uppercase tracking-[0.24em] text-red-200 border border-red-500/30 px-2 py-1">Hot</span>}
+          {item.popular && <span className="rounded-full border border-orange-500/30 bg-orange-500/15 px-2 py-1 text-[10px] font-bold uppercase tracking-[0.24em] text-orange-200">Pop</span>}
+          {item.spicy && <span className="rounded-full border border-red-500/30 bg-red-500/15 px-2 py-1 text-[10px] font-bold uppercase tracking-[0.24em] text-red-200">Hot</span>}
+        </div>
+        <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-slate-950/90 to-transparent p-4">
+          <p className="text-[10px] uppercase tracking-[0.3em] text-slate-400">{item.category}</p>
+          <p className="mt-2 truncate text-lg font-semibold text-white">{item.name}</p>
         </div>
       </div>
     
-      <div className="p-3 space-y-2 min-h-[128px] flex flex-col justify-between">
+      <div className="flex min-h-[126px] flex-col justify-between space-y-2 p-4">
         <div className="space-y-1">
-          <h5 className="text-sm sm:text-sm font-semibold text-white group-hover:text-orange-300 transition-colors line-clamp-1">{item.name}</h5>
           <p className="text-sm font-bold text-orange-400">{formatCurrency(item.price, currency)}</p>
+          <p className="text-[11px] leading-snug text-slate-300 line-clamp-2">{item.description}</p>
         </div>
-        <div className="space-y-2">
-          <p className="text-slate-300 text-[11px] leading-snug line-clamp-2">{item.description}</p>
-          <button 
-            onClick={(e) => { e.stopPropagation(); onAdd(); }}
-            className="w-full rounded-2xl bg-slate-900/95 text-white font-semibold text-[11px] py-2 flex items-center justify-center gap-2 transition-all duration-200 hover:bg-orange-500 hover:text-white"
-          >
-            <ShoppingCart size={14} /> Add
-          </button>
-        </div>
+        <button 
+          onClick={(e) => { e.stopPropagation(); onAdd(); }}
+          className="flex w-full items-center justify-center gap-2 rounded-2xl bg-slate-900/80 py-2 text-[11px] font-semibold text-white transition-all duration-200 hover:bg-orange-500 hover:text-white"
+        >
+          <ShoppingCart size={14} /> Add
+        </button>
       </div>
     </div>
   );
