@@ -955,7 +955,7 @@ def customer_home(request):
         'hero': {
             'title': 'TASTY BITES HUB',
             'tagline': 'CRAFTED WITH PASSION, DELIVERED WITH PRECISION.',
-            'image_url': 'https://images.unsplash.com/photo-1514356015730-0739d598061f?q=80&w=1600',
+            'image_url': 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=1600&q=80',
             'accent_color': '#f97316'
         },
         'categories': categories,

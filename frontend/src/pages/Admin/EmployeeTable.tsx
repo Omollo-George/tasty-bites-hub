@@ -526,8 +526,8 @@ const EmployeeTable: React.FC = () => {
               <div className="inline-flex items-center gap-2 rounded-full border border-orange-500/20 bg-orange-500/10 px-4 py-2 text-sm font-semibold text-orange-200 shadow-sm shadow-orange-500/10">
                 <Sparkles size={18} /> Waiter POS
               </div>
-              <h1 className="text-4xl md:text-5xl font-display font-bold tracking-tight text-white">Supercharged Waiter Workstation</h1>
-              <p className="max-w-2xl text-slate-400 text-base leading-8">
+              <h1 className="text-4xl md:text-5xl font-serif font-semibold tracking-tight text-white">Supercharged Waiter Workstation</h1>
+              <p className="max-w-2xl text-slate-300 text-lg leading-9 font-medium">
                 Quickly build orders, send tickets to the kitchen, and manage table assignments with a modern waiter-first interface designed for speed and clarity.
               </p>
             </div>
@@ -575,7 +575,7 @@ const EmployeeTable: React.FC = () => {
               <button onClick={() => setSearchQuery('')} className="rounded-2xl bg-orange-500 px-4 py-3 text-sm font-semibold text-slate-950 hover:bg-orange-400 transition">Clear</button>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-5 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+            <div className="flex-1 overflow-y-auto p-5 grid grid-cols-2 sm:grid-cols-2 xl:grid-cols-3 gap-4">
               {filteredMenu.map(item => (
                 <button 
                   key={item.id}

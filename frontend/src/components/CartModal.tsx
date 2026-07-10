@@ -122,12 +122,10 @@ const CartModal: React.FC<CartModalProps> = ({
   }, [isDragging, onClose]);
 
   const onDragStart = (e: React.MouseEvent | React.TouchEvent) => {
-    // Only prevent default if the event target is one of the designated draggable areas
     const target = e.target as HTMLElement;
     const isDraggableArea = target.classList.contains('cursor-grab') || target.closest('.cursor-grab');
 
     if (isDraggableArea) {
-      e.preventDefault(); // Prevent default touch/mouse behavior (like scrolling the page)
       setIsDragging(true);
       const clientY = 'touches' in e ? e.touches[0].clientY : (e as React.MouseEvent).clientY;
       startY.current = clientY;

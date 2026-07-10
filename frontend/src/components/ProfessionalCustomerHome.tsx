@@ -220,7 +220,7 @@ const buildDefaultHomeData = (): HomeData => {
     hero: {
       title: 'TASTY BITES HUB',
       tagline: 'CRAFTED WITH PASSION, DELIVERED WITH PRECISION.',
-      image_url: 'https://images.unsplash.com/photo-1514356015730-0739d598061f?q=80&w=1600',
+      image_url: 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=1600&q=80',
     },
     categories: DEFAULT_CATEGORIES,
     featured: DEFAULT_MENU_ITEMS.filter((item) => item.popular).slice(0, 5),
@@ -254,7 +254,18 @@ const ProfessionalCustomerHome = () => {
   const [points, setPoints] = useState<number>(() => parseInt(localStorage.getItem('loyaltyPoints') || '0'));
   const [orderType, setOrderType] = useState<'takeaway' | 'delivery'>('takeaway');
   const [deliveryAddress, setDeliveryAddress] = useState('');
+  const [activeHeroIndex, setActiveHeroIndex] = useState(0);
   const navigate = useNavigate();
+
+  const FALLBACK_HERO_IMAGE = 'https://images.unsplash.com/photo-1610614819513-58e34989848b?w=1600&q=80';
+  const heroImages = [heroImage, FALLBACK_HERO_IMAGE];
+
+  useEffect(() => {
+    heroImages.forEach((src) => {
+      const img = new Image();
+      img.src = src;
+    });
+  }, []);
 
   const getMpesaCheckoutId = (payload: any): string | null => {
     return payload?.stk_response?.CheckoutRequestID || payload?.checkout_request_id || payload?.mpesa?.CheckoutRequestID || null;
@@ -315,6 +326,24 @@ const ProfessionalCustomerHome = () => {
       document.body.style.overflow = '';
     };
   }, [showCartModal, lastOrder]);
+
+  useEffect(() => {
+    if (heroImages.length <= 1) return;
+
+    setActiveHeroIndex(0);
+    const initialTimeout = window.setTimeout(() => {
+      setActiveHeroIndex(1);
+    }, 1800);
+
+    const interval = window.setInterval(() => {
+      setActiveHeroIndex((prev) => (prev + 1) % heroImages.length);
+    }, 5000);
+
+    return () => {
+      window.clearTimeout(initialTimeout);
+      window.clearInterval(interval);
+    };
+  }, [heroImages.length]);
 
   const scrollToTop = () => {
     window.scrollTo({
@@ -816,10 +845,24 @@ const ProfessionalCustomerHome = () => {
       </nav>
 
       {/* Hero Section with Premium Brand Presentation */}
-      <header id="home" className={`relative min-h-[85vh] flex items-center justify-center overflow-hidden transition-opacity duration-500 ${
+      <header id="home" className={`relative min-h-[70vh] sm:min-h-[85vh] flex items-center justify-center overflow-hidden transition-opacity duration-500 ${
         showCartModal || lastOrder ? 'opacity-20 pointer-events-none' : 'opacity-100'
       }`}>
-        <img src={heroImage || data.hero.image_url} className="absolute inset-0 w-full h-full object-cover object-center scale-[1.08] transition-transform duration-1000" alt="Hero" />
+        <div className="absolute inset-0 overflow-hidden">
+          {heroImages.map((src, index) => (
+            <img
+              key={`${src}-${index}`}
+              src={src}
+              alt="Hero"
+              className="absolute inset-0 w-full h-full pointer-events-none object-center object-contain sm:object-cover"
+              style={{
+                opacity: index === activeHeroIndex ? 1 : 0,
+                zIndex: index === activeHeroIndex ? 2 : 1,
+                transition: 'opacity 1s ease-in-out',
+              }}
+            />
+          ))}
+        </div>
         <div className="absolute inset-0 bg-gradient-to-br from-slate-950/85 via-black/50 to-slate-950/95" />
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,_rgba(249,115,22,0.16),_transparent_20%),radial-gradient(circle_at_bottom_right,_rgba(255,255,255,0.08),_transparent_18%)] pointer-events-none" />
 
@@ -1032,7 +1075,7 @@ const ProItemCard = ({
   const imageSrc = getItemImageSrc(item, formatImageUrl);
 
   return (
-    <div className="group relative w-full min-w-0 overflow-hidden rounded-[1.75rem] border border-white/10 bg-slate-950/70 text-left backdrop-blur-xl shadow-[0_20px_60px_-30px_rgba(2,6,23,0.8)] transition hover:border-orange-500/50 hover:shadow-[0_20px_60px_-30px_rgba(251,146,60,0.55)]">
+    <div className="group relative w-full min-w-0 overflow-hidden rounded-[1.75rem] border border-white/10 bg-slate-950/70 text-left backdrop-blur-xl shadow-[0_20px_60px_-30px_rgba(2,6,23,0.8)] transition-all duration-300 will-change-transform hover:-translate-y-1 hover:scale-[1.02] hover:border-orange-500/50 hover:shadow-[0_20px_60px_-30px_rgba(251,146,60,0.55)] active:scale-[0.98]">
       <div className={`relative ${compact ? 'h-28 sm:h-32' : 'h-32 sm:h-36'} overflow-hidden bg-slate-900`}>
         <img 
           src={imageSrc}
