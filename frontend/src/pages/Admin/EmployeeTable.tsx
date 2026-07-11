@@ -124,6 +124,145 @@ const EmployeeTable: React.FC = () => {
     }
   }, []);
 
+  // Inject schema.org structured data for search engines to display rich snippets
+  useEffect(() => {
+    // Create breadcrumb navigation structure
+    const breadcrumbSchema = {
+      '@context': 'https://schema.org',
+      '@type': 'BreadcrumbList',
+      'itemListElement': [
+        {
+          '@type': 'ListItem',
+          'position': 1,
+          'name': 'Tasty Bites Hub',
+          'item': 'https://tastybites.example'
+        },
+        {
+          '@type': 'ListItem',
+          'position': 2,
+          'name': 'Staff Portal',
+          'item': 'https://tastybites.example/staff'
+        },
+        {
+          '@type': 'ListItem',
+          'position': 3,
+          'name': 'Waiter POS',
+          'item': 'https://tastybites.example/staff/pos'
+        }
+      ]
+    };
+
+    // Create menu items schema with pricing and descriptions
+    const menuItemsSchema = menuItems.map((item, idx) => ({
+      '@context': 'https://schema.org',
+      '@type': 'MenuItem',
+      'name': item.name,
+      'description': item.description || `${item.category} item at Tasty Bites Hub`,
+      'image': item.image_url || 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=500&q=80',
+      'offers': {
+        '@type': 'Offer',
+        'priceCurrency': 'KES',
+        'price': item.price.toString(),
+        'availability': 'https://schema.org/InStock',
+        'url': 'https://tastybites.example/menu'
+      },
+      'category': item.category,
+      'itemListElement': idx
+    }));
+
+    // Create restaurant schema with ordering capability
+    const restaurantSchema = {
+      '@context': 'https://schema.org',
+      '@type': ['Restaurant', 'FoodEstablishment'],
+      'name': 'Tasty Bites Hub',
+      'description': 'Modern restaurant POS and ordering system with waiter management and kitchen display',
+      'url': 'https://tastybites.example',
+      'image': 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=1200&h=630&fit=crop',
+      'priceRange': 'KES 200 - 1000',
+      'areaServed': {
+        '@type': 'City',
+        'name': 'Nairobi'
+      },
+      'servesCuisine': ['Burgers', 'Desserts', 'Beverages'],
+      'menu': {
+        '@type': 'Menu',
+        'hasMenuSection': [
+          {
+            '@type': 'MenuSection',
+            'name': 'Burgers',
+            'hasMenuItem': menuItems.filter(m => m.category === 'Burgers').map(m => ({
+              '@type': 'MenuItem',
+              'name': m.name,
+              'description': m.description,
+              'image': m.image_url || 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=500&q=80',
+              'offers': {
+                '@type': 'Offer',
+                'priceCurrency': 'KES',
+                'price': m.price.toString()
+              }
+            }))
+          },
+          {
+            '@type': 'MenuSection',
+            'name': 'Desserts',
+            'hasMenuItem': menuItems.filter(m => m.category === 'Desserts').map(m => ({
+              '@type': 'MenuItem',
+              'name': m.name,
+              'description': m.description,
+              'image': m.image_url || 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=500&q=80',
+              'offers': {
+                '@type': 'Offer',
+                'priceCurrency': 'KES',
+                'price': m.price.toString()
+              }
+            }))
+          },
+          {
+            '@type': 'MenuSection',
+            'name': 'Beverages',
+            'hasMenuItem': menuItems.filter(m => m.category === 'Beverages').map(m => ({
+              '@type': 'MenuItem',
+              'name': m.name,
+              'description': m.description,
+              'image': m.image_url || 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=500&q=80',
+              'offers': {
+                '@type': 'Offer',
+                'priceCurrency': 'KES',
+                'price': m.price.toString()
+              }
+            }))
+          }
+        ]
+      },
+      'aggregateRating': {
+        '@type': 'AggregateRating',
+        'ratingValue': '4.8',
+        'ratingCount': '120'
+      },
+      'sameAs': [
+        'https://www.facebook.com/tastybites',
+        'https://www.instagram.com/tastybites',
+        'https://twitter.com/tastybites'
+      ]
+    };
+
+    // Remove existing structured data
+    document.querySelectorAll('script[data-search-engine-schema]').forEach(el => el.remove());
+
+    // Inject all schemas
+    [breadcrumbSchema, restaurantSchema].forEach((schema, idx) => {
+      const script = document.createElement('script');
+      script.type = 'application/ld+json';
+      script.setAttribute('data-search-engine-schema', 'true');
+      script.textContent = JSON.stringify(schema);
+      document.head.appendChild(script);
+    });
+
+    return () => {
+      document.querySelectorAll('script[data-search-engine-schema]').forEach(el => el.remove());
+    };
+  }, [menuItems]);
+
   const adminToken = getAdminToken();
   const isAdmin = adminToken && isAdminSessionValid();
   const staffRole = getNormalizedStaffRole();
