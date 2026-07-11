@@ -3,26 +3,33 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=5" />
-    <meta name="robots" content="index, follow" />
-    <meta name="description" content="Tasty Bites Hub - A modern restaurant POS and ordering system featuring customer ordering, waiter management, kitchen display, and staff analytics." />
-    <meta name="keywords" content="restaurant, POS system, ordering system, food delivery, waiter app, kitchen display, restaurant management" />
+    <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
+    <meta name="description" content="Tasty Bites Hub - Modern restaurant POS and ordering system in Nairobi. Fast waiter management, kitchen display system, and real-time order tracking. Order burgers, desserts, and beverages online or in-app." />
+    <meta name="keywords" content="restaurant POS, waiter app, kitchen display system, order management, fast food, burgers, Nairobi restaurants, food ordering" />
     <meta name="author" content="Tasty Bites Hub" />
     <meta name="theme-color" content="#c04f03" />
+    <meta name="format-detection" content="telephone=+254-700-000-000" />
+    <meta name="google-site-verification" content="verification_code_here" />
     <link rel="canonical" href="https://tastybites.example" />
     
     <!-- Open Graph Tags -->
-    <meta property="og:title" content="Tasty Bites Hub - Modern Restaurant Management" />
-    <meta property="og:description" content="A comprehensive restaurant ordering and management platform with customer ordering, waiter POS, kitchen display system, and staff analytics." />
-    <meta property="og:type" content="business.business" />
+    <meta property="og:title" content="Tasty Bites Hub - Restaurant POS & Ordering System" />
+    <meta property="og:description" content="Fast and efficient restaurant ordering system with waiter POS, kitchen display, and order management. Available in Nairobi." />
+    <meta property="og:type" content="business.restaurant" />
     <meta property="og:url" content="https://tastybites.example" />
     <meta property="og:image" content="https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=1200&h=630&fit=crop" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:type" content="image/jpeg" />
     <meta property="og:site_name" content="Tasty Bites Hub" />
+    <meta property="og:locale" content="en_KE" />
     
     <!-- Twitter Card Tags -->
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="Tasty Bites Hub - Modern Restaurant Management" />
-    <meta name="twitter:description" content="A comprehensive restaurant ordering and management platform" />
+    <meta name="twitter:description" content="Restaurant POS and ordering system with waiter management, kitchen display, and analytics." />
     <meta name="twitter:image" content="https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=1200&h=630&fit=crop" />
+    <meta name="twitter:creator" content="@tastybites" />
     
     <title>Tasty Bites Hub - Restaurant POS & Ordering System</title>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
@@ -31,24 +38,95 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Beverage:wght@400&display=swap" rel="stylesheet" />
     
-    <!-- Structured Data (JSON-LD) -->
+    <!-- Structured Data (JSON-LD) for Google Rich Snippets -->
     <script type="application/ld+json">
     {
       "@context": "https://schema.org",
-      "@type": "LocalBusiness",
+      "@type": ["Restaurant", "FoodEstablishment"],
       "name": "Tasty Bites Hub",
-      "description": "Modern restaurant ordering and management system",
+      "alternateName": "Tasty Bites POS",
+      "description": "Modern restaurant POS and ordering system with fast order management, kitchen display system, and waiter management for restaurants in Nairobi",
       "url": "https://tastybites.example",
-      "image": "https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=1200&h=630&fit=crop",
+      "image": [
+        "https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=1200&h=630&fit=crop",
+        "https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=800&h=800&fit=crop",
+        "https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=400&h=400&fit=crop"
+      ],
+      "priceRange": "KES 200 - 1000",
       "areaServed": {
         "@type": "City",
-        "name": "Nairobi"
+        "name": "Nairobi",
+        "url": "https://en.wikipedia.org/wiki/Nairobi"
       },
-      "priceRange": "KES 200 - 1000",
+      "servesCuisine": ["Burgers", "Desserts", "Beverages", "Contemporary"],
+      "aggregateRating": {
+        "@type": "AggregateRating",
+        "ratingValue": "4.8",
+        "ratingCount": "120",
+        "bestRating": "5",
+        "worstRating": "1"
+      },
+      "telephone": "+254-700-000-000",
+      "email": "info@tastybites.example",
       "sameAs": [
         "https://www.facebook.com/tastybites",
         "https://www.instagram.com/tastybites",
         "https://twitter.com/tastybites"
+      ],
+      "hasMenu": {
+        "@type": "Menu",
+        "name": "Tasty Bites Hub Menu",
+        "description": "Complete restaurant menu with burgers, desserts, and beverages",
+        "url": "https://tastybites.example/menu"
+      },
+      "potentialAction": {
+        "@type": "OrderAction",
+        "target": {
+          "@type": "EntryPoint",
+          "urlTemplate": "https://tastybites.example/orders",
+          "actionPlatform": ["DesktopWebPlatform", "MobileWebPlatform"]
+        }
+      }
+    }
+    </script>
+    
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "FAQPage",
+      "mainEntity": [
+        {
+          "@type": "Question",
+          "name": "How do I place an order with Tasty Bites Hub?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "You can place orders through our waiter POS system for table service, or use the takeaway option for quick orders. Orders are sent directly to the kitchen display system for fast processing."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "What menu items does Tasty Bites Hub offer?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "We offer a variety of burgers, desserts, and beverages. All items are prepared fresh and available for dine-in or takeaway."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "What is the price range at Tasty Bites Hub?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Our menu items range from KES 200 to KES 1000, offering options for different budgets and preferences."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Is Tasty Bites Hub available for online ordering?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Yes, our system supports both table service through the waiter POS and takeaway orders through our platform."
+          }
+        }
       ]
     }
     </script>

@@ -113,15 +113,51 @@ const EmployeeTable: React.FC = () => {
 
   // Update page metadata for SEO
   useEffect(() => {
-    document.title = 'Waiter POS | Tasty Bites Hub - Restaurant Management';
-    const metaDescription = document.querySelector('meta[name="description"]');
-    if (metaDescription) {
-      metaDescription.setAttribute('content', 'Waiter Point-of-Sale system for fast order management, kitchen tickets, and table assignments at Tasty Bites Hub.');
+    document.title = 'Waiter POS | Tasty Bites Hub - Fast Order Management';
+    
+    // Update or create meta description
+    let metaDescription = document.querySelector('meta[name="description"]');
+    if (!metaDescription) {
+      metaDescription = document.createElement('meta');
+      metaDescription.setAttribute('name', 'description');
+      document.head.appendChild(metaDescription);
     }
-    const metaKeywords = document.querySelector('meta[name="keywords"]');
-    if (metaKeywords) {
-      metaKeywords.setAttribute('content', 'waiter POS, order management, kitchen tickets, restaurant, Tasty Bites Hub');
+    metaDescription.setAttribute('content', 'Waiter Point-of-Sale system for fast order management, kitchen display tickets, and real-time table assignments at Tasty Bites Hub restaurant.');
+    
+    // Update or create meta keywords
+    let metaKeywords = document.querySelector('meta[name="keywords"]');
+    if (!metaKeywords) {
+      metaKeywords = document.createElement('meta');
+      metaKeywords.setAttribute('name', 'keywords');
+      document.head.appendChild(metaKeywords);
     }
+    metaKeywords.setAttribute('content', 'waiter POS, order management, kitchen tickets, table service, restaurant management, fast ordering, Tasty Bites Hub');
+    
+    // Update Open Graph tags for social sharing and Google
+    let ogTitle = document.querySelector('meta[property="og:title"]');
+    if (!ogTitle) {
+      ogTitle = document.createElement('meta');
+      ogTitle.setAttribute('property', 'og:title');
+      document.head.appendChild(ogTitle);
+    }
+    ogTitle.setAttribute('content', 'Waiter POS - Order Management System');
+    
+    let ogDescription = document.querySelector('meta[property="og:description"]');
+    if (!ogDescription) {
+      ogDescription = document.createElement('meta');
+      ogDescription.setAttribute('property', 'og:description');
+      document.head.appendChild(ogDescription);
+    }
+    ogDescription.setAttribute('content', 'Modern waiter point-of-sale system for managing table orders, kitchen tickets, and staff assignments in real-time.');
+    
+    // Update canonical URL for waiter POS
+    let canonical = document.querySelector('link[rel="canonical"]');
+    if (!canonical) {
+      canonical = document.createElement('link');
+      canonical.setAttribute('rel', 'canonical');
+      document.head.appendChild(canonical);
+    }
+    canonical.setAttribute('href', 'https://tastybites.example/staff/pos');
   }, []);
 
   // Inject schema.org structured data for search engines to display rich snippets
