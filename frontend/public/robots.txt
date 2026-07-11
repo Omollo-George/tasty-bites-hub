@@ -2,12 +2,11 @@ User-agent: *
 Allow: /
 Allow: /menu
 Allow: /orders
+Allow: /staff
 Allow: /auth/login
 Disallow: /admin
-Disallow: /staff
 Disallow: /api
 Disallow: /payments
-Disallow: /pos
 Crawl-delay: 1
 
 # Specific rules for Google
@@ -15,12 +14,11 @@ User-agent: Googlebot
 Allow: /
 Allow: /menu
 Allow: /orders
+Allow: /staff
 Allow: /auth/login
 Disallow: /admin
-Disallow: /staff
 Disallow: /api
 Disallow: /payments
-Disallow: /pos
 Crawl-delay: 1
 
 # Specific rules for Bing
@@ -28,12 +26,11 @@ User-agent: Bingbot
 Allow: /
 Allow: /menu
 Allow: /orders
+Allow: /staff
 Allow: /auth/login
 Disallow: /admin
-Disallow: /staff
 Disallow: /api
 Disallow: /payments
-Disallow: /pos
 Crawl-delay: 2
 
 # Allow social media crawlers

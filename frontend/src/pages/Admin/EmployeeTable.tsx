@@ -748,18 +748,22 @@ const EmployeeTable: React.FC = () => {
             </div>
           </div>
 
-          <div className={`fixed inset-y-0 right-0 z-50 w-full max-w-md flex flex-col bg-slate-900 border-l border-slate-800 shadow-2xl transition-transform duration-300 lg:static lg:w-96 lg:max-w-none lg:rounded-3xl lg:border-l-0 lg:border lg:transform-none overflow-hidden ${
+          <div 
+            role="region"
+            aria-label="Order Summary - Current cart items and checkout"
+            aria-live="polite"
+            className={`fixed inset-y-0 right-0 z-50 w-full max-w-md flex flex-col bg-slate-900 border-l border-slate-800 shadow-2xl transition-transform duration-300 lg:static lg:w-96 lg:max-w-none lg:rounded-3xl lg:border-l-0 lg:border lg:transform-none overflow-hidden ${
             showOrderDrawer ? 'translate-x-0' : 'translate-x-full lg:translate-x-0'
           }`}>
             <div className="p-5 border-b border-slate-800 flex flex-col gap-4 lg:rounded-t-3xl">
               <div className="flex items-center justify-between gap-3">
                 <div className="flex items-center gap-3">
                   <div className="flex h-12 w-12 items-center justify-center rounded-3xl bg-gradient-to-br from-orange-500 to-fuchsia-500 text-white shadow-lg shadow-orange-500/20">
-                    <ShoppingCart size={22} />
+                    <ShoppingCart size={22} aria-hidden="true" />
                   </div>
                   <div>
                     <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Order Summary</p>
-                    <h2 className="text-2xl font-semibold text-white">Ready to send</h2>
+                    <h2 className="text-2xl font-semibold text-white" id="cart-heading">Ready to send</h2>
                   </div>
                 </div>
                 <button
@@ -833,15 +837,24 @@ const EmployeeTable: React.FC = () => {
               </div>
 
               {cartOpen ? (
-                <div className="rounded-3xl border border-slate-800 bg-slate-950/90 p-4">
+                <div className="rounded-3xl border border-slate-800 bg-slate-950/90 p-4" role="region" aria-label="Order items">
                   <div className="grid grid-cols-[1fr_auto_auto] gap-3 border-b border-slate-800 pb-3 text-xs uppercase tracking-[0.3em] text-slate-500">
                     <span>Item</span>
                     <span className="text-right">Qty</span>
                     <span className="text-right">Total</span>
                   </div>
-                  <div className="space-y-3 mt-3">
+                  <ul className="space-y-3 mt-3" role="list" aria-label="Cart items list">
                     {(cart.length > 0 ? cart : visibleOrderItems).map((item, idx) => (
-                      <div key={cart.length > 0 ? item.id : `${item.id}-${idx}`} className="grid grid-cols-[1fr_auto_auto] gap-3 rounded-3xl border border-slate-800 bg-slate-900/90 p-3 items-center">
+                      <li 
+                        key={cart.length > 0 ? item.id : `${item.id}-${idx}`} 
+                        className="grid grid-cols-[1fr_auto_auto] gap-3 rounded-3xl border border-slate-800 bg-slate-900/90 p-3 items-center"
+                        role="listitem"
+                        data-item-id={item.id}
+                        data-item-name={item.name}
+                        data-item-price={item.price}
+                        data-item-qty={item.quantity}
+                        aria-label={`${item.name}, quantity ${item.quantity}, KES ${(item.price * item.quantity).toFixed(2)}`}
+                      >
                         <div className="min-w-0">
                           <p className="text-sm font-semibold text-white truncate">{item.name}</p>
                           <p className="text-xs text-slate-400">{item.modifiers?.length ? item.modifiers.join(', ') : 'No modifiers'}</p>
@@ -850,7 +863,7 @@ const EmployeeTable: React.FC = () => {
                           {cart.length > 0 ? (
                             <>
                               <button onClick={() => updateCartQuantity(item.id, -1)} aria-label={`Decrease ${item.name} quantity`} className="p-2 rounded-xl bg-slate-800 text-slate-200 hover:bg-orange-500 transition"><Minus size={14} /></button>
-                              <span>{item.quantity}</span>
+                              <span aria-live="polite">{item.quantity}</span>
                               <button onClick={() => updateCartQuantity(item.id, 1)} aria-label={`Increase ${item.name} quantity`} className="p-2 rounded-xl bg-slate-800 text-slate-200 hover:bg-orange-500 transition"><Plus size={14} /></button>
                             </>
                           ) : (
@@ -858,9 +871,9 @@ const EmployeeTable: React.FC = () => {
                           )}
                         </div>
                         <div className="text-right text-sm font-semibold text-white">KES {(item.price * item.quantity).toFixed(2)}</div>
-                      </div>
+                      </li>
                     ))}
-                  </div>
+                  </ul>
                   {cart.length === 0 && visibleOrderItems.length === 0 && (
                     <div className="rounded-3xl border border-slate-800 bg-slate-950/80 p-6 text-center text-slate-500">
                       Add items from the menu to begin a new order.
