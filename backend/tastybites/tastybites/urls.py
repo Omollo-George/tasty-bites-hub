@@ -26,8 +26,28 @@ def health_check(request):
 
 
 def homepage(request):
-    # Try to serve the frontend `index.html` if it exists in STATIC_ROOT (production build).
+    # Attempt to serve a route-specific pre-rendered HTML file under STATIC_ROOT first
     try:
+        # Normalize the requested path and look for a matching file or index.html inside a folder.
+        rel_path = request.path.lstrip('/') or ''
+        candidate = settings.STATIC_ROOT / rel_path
+        # If the path maps to a directory, prefer its index.html
+        if candidate.is_dir():
+            index_candidate = candidate / 'index.html'
+            if index_candidate.exists():
+                response = HttpResponse(index_candidate.read_text(encoding='utf-8'), content_type='text/html')
+                response['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+                response['Pragma'] = 'no-cache'
+                response['Expires'] = '0'
+                return response
+        # If the path maps directly to a file, serve it
+        if candidate.exists() and candidate.is_file():
+            response = HttpResponse(candidate.read_text(encoding='utf-8'), content_type='text/html')
+            response['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+            response['Pragma'] = 'no-cache'
+            response['Expires'] = '0'
+            return response
+        # Fallback to the default index.html at STATIC_ROOT
         index_path = settings.STATIC_ROOT / 'index.html'
         if index_path.exists():
             response = HttpResponse(index_path.read_text(encoding='utf-8'), content_type='text/html')

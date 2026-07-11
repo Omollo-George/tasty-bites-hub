@@ -914,8 +914,8 @@ const EmployeeTable: React.FC = () => {
                   <div className="p-4 space-y-2">
                     <p className="text-sm text-slate-300 line-clamp-2">{item.description || 'Tap to add this item.'}</p>
                     <div className="flex items-center justify-between gap-3">
-                      <span className="text-lg font-bold text-orange-400">KES {item.price}</span>
-                      <span className="rounded-full bg-slate-900 px-3 py-2 text-xs uppercase tracking-[0.2em] text-slate-400">Tap to add</span>
+                      <span className="text-lg font-extrabold text-orange-400">KES {item.price}</span>
+                      <span className="rounded-full bg-[#0f1112] border border-orange-500/30 px-3 py-2 text-xs uppercase tracking-[0.22em] text-orange-300 font-bold shadow-sm">TAP TO ADD</span>
                     </div>
                   </div>
                 </button>

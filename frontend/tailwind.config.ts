@@ -7,6 +7,22 @@ export default {
     "./index.html",
     "./src/**/*.{ts,tsx}"
   ],
+  // Safelist classes that are constructed dynamically in templates
+  safelist: [
+    'bg-[#0f1112]',
+    'border-orange-500/30',
+    'text-orange-300',
+    'font-extrabold',
+    'shadow-sm',
+    'bg-orange-600',
+    'bg-white/5',
+    'text-gray-400',
+    'border-white/10',
+    'hover:border-white/20',
+    'rounded-[1.75rem]',
+    'rounded-2xl',
+    'rounded-3xl'
+  ],
   prefix: "",
   theme: {
     container: {
