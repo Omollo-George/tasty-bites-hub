@@ -958,8 +958,10 @@ const ProfessionalCustomerHome = () => {
       <main id="menu" className={`scroll-mt-32 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 -mt-20 relative z-20 transition-opacity duration-500 ${
         showCartModal || lastOrder ? 'opacity-20 pointer-events-none' : 'opacity-100'
       }`}>
+        <div className="rounded-[2rem] border border-white/10 bg-white/10 backdrop-blur-2xl shadow-2xl shadow-black/20 overflow-hidden sm:bg-transparent sm:backdrop-blur-none">
+          <div className="px-4 py-6 sm:px-6 sm:py-8 lg:px-8 lg:py-10">
 
-        {/* Featured Section */}
+            {/* Featured Section */}
         <section className="mt-6 mb-20">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-8">
             <div>
@@ -1052,6 +1054,8 @@ const ProfessionalCustomerHome = () => {
             </section>
           ));
         })()}
+          </div>
+        </div>
       </main>
 
     </div>

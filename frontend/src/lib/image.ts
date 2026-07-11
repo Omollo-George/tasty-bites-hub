@@ -1,7 +1,9 @@
+const FALLBACK_MENU_IMAGE = 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=500&q=80';
+
 export const formatImageUrl = (url?: string) => {
-  if (!url) return ''
+  if (!url) return FALLBACK_MENU_IMAGE
   const trimmed = url.toString().trim()
-  if (!trimmed) return ''
+  if (!trimmed) return FALLBACK_MENU_IMAGE
 
   if (trimmed.startsWith('blob:')) {
     return trimmed

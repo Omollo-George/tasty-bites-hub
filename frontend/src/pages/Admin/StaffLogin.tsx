@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import { useLocation, useNavigate, Link } from 'react-router-dom'
-import { Eye, EyeOff, ShieldCheck, ArrowLeft, Users } from 'lucide-react'
+import { AlertTriangle, Eye, EyeOff, ShieldCheck, ArrowLeft, Users } from 'lucide-react'
 import { setStaffToken, setStaffTokenWithId } from '@/lib/staff-session'
 import { getAdminToken, isAdminSessionValid } from '@/lib/admin-session'
 import { getApiUrl, apiFetch } from '@/lib/api'
@@ -43,15 +43,41 @@ const StaffLogin: React.FC = () => {
   const passwordIssues = passwordRequirements.filter((requirement) => !requirement.validate(password))
   const isPasswordValid = passwordIssues.length === 0
 
+  const formatStaffErrorMessage = (raw?: string) => {
+    const trimmed = raw?.trim() || ''
+    const normalized = trimmed.toLowerCase()
+
+    if (!trimmed) {
+      return 'Authentication failed. Please confirm your username and password and try again.'
+    }
+    if (normalized.includes('invalid credential')) {
+      return 'Authentication failed. Please confirm your username and password and try again.'
+    }
+    if (normalized.includes('no token returned')) {
+      return 'Authentication failed. The server did not return a valid session token. Please try again or contact support.'
+    }
+    if (normalized.includes('connection error') || normalized.includes('failed to fetch')) {
+      return 'Connection error. Please verify your network and try again.'
+    }
+    return trimmed
+  }
+
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     setError('')
     setLoading(true)
 
-    // Before sending to backend, check if password meets frontend requirements
-    // This is a client-side check for user experience, backend will also validate
+    const usernameTrimmed = username.trim()
+    const passwordTrimmed = password.trim()
+
+    if (!usernameTrimmed || !passwordTrimmed) {
+      setError('Username and password are required. Please enter your credentials to continue.')
+      setLoading(false)
+      return
+    }
+
     if (!isPasswordValid) {
-      setError('Your password does not meet the security requirements. Please contact an administrator for a password reset.')
+      setError('Your password must meet the displayed requirements before signing in. Please review the password rules and try again.')
       setLoading(false)
       return
     }
@@ -61,25 +87,28 @@ const StaffLogin: React.FC = () => {
         const data: any = await apiFetch('/payments/staff/signin/', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ username: username.trim(), password: password.trim() }),
+          body: JSON.stringify({ username: usernameTrimmed, password: passwordTrimmed }),
         })
 
         if (!data || !data.token) {
-          setError(data?.error || 'Invalid staff credentials or no token returned')
+          setError(data?.error || 'Authentication failed. Please confirm your username and password and try again.')
         } else {
           const expiresAt = data.expires_at || new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString()
           setStaffTokenWithId(data.token, data.name, String(data.role || ''), expiresAt, data.id)
           navigate(from, { replace: true })
         }
       } catch (err: any) {
-        const message = err?.body || err?.message || 'Connection Error: Please check if the server is running.'
-        setError(message)
+        const body = err?.body
+        const message = typeof body === 'string'
+          ? body
+          : body?.error || err?.message || 'Connection Error: Please check if the server is running.'
+        setError(formatStaffErrorMessage(message))
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
-      setError(message === 'Failed to fetch'
+      setError(formatStaffErrorMessage(message === 'Failed to fetch'
         ? 'Connection Error: Backend server unreachable or CORS blocked.'
-        : 'Connection Error: Please check if the server is running.')
+        : 'Connection Error: Please check if the server is running.'))
     } finally {
       setLoading(false)
     }
@@ -159,7 +188,17 @@ const StaffLogin: React.FC = () => {
           </div>
 
 
-          {error && <div className="bg-red-500/10 border border-red-500/20 text-red-400 p-3 rounded-xl text-sm font-medium">{error}</div>}
+          {error && (
+            <div className="flex gap-3 rounded-3xl border border-red-500/20 bg-red-500/10 p-4 text-sm text-slate-100 shadow-sm">
+              <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-red-500/15 text-red-300">
+                <AlertTriangle size={18} />
+              </div>
+              <div>
+                <p className="font-semibold text-red-100">Authentication issue</p>
+                <p className="mt-1 text-red-200">{error}</p>
+              </div>
+            </div>
+          )}
 
           <button
             type="submit"

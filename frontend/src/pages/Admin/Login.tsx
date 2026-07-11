@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
-import { Eye, EyeOff, Users } from 'lucide-react'
+import { AlertTriangle, Eye, EyeOff, Users } from 'lucide-react'
 import { setAdminToken, getAdminToken, isAdminSessionValid, setAdminUser } from '@/lib/admin-session'
 import { getApiUrl } from '@/lib/api'
 import heroImage from '@/assets/hero-food.jpg'
@@ -17,6 +17,25 @@ const AdminLogin: React.FC = () => {
   const from = (location.state as any)?.from?.pathname || '/admin'
 
   const isPasswordValid = password.trim().length > 0
+
+  const formatAdminErrorMessage = (raw?: string) => {
+    const trimmed = raw?.trim() || ''
+    const normalized = trimmed.toLowerCase()
+
+    if (!trimmed) {
+      return 'Authentication failed. Please confirm your username and password and try again.'
+    }
+
+    if (normalized.includes('invalid credential')) {
+      return 'Authentication failed. Please confirm your username and password and try again.'
+    }
+
+    if (normalized.includes('connection refused') || normalized.includes('failed to fetch')) {
+      return 'Connection error. Please verify your network connection and try again.'
+    }
+
+    return trimmed
+  }
 
   useEffect(() => {
     // Redirect to dashboard if session is already valid
@@ -42,7 +61,7 @@ const AdminLogin: React.FC = () => {
     setLoading(true)
 
     if (!username.trim() || !password.trim()) {
-      setError('Username and password are required.')
+      setError('Username and password are required. Please enter your credentials to continue.')
       setLoading(false)
       return
     }
@@ -68,10 +87,12 @@ const AdminLogin: React.FC = () => {
       const data = await response.json()
 
       if (!response.ok) {
-        setError(data.error || 'Failed to sign in')
+        const baseMessage = formatAdminErrorMessage(data.error)
         setLockoutSeconds(data.lockout_seconds || 0)
         if (data.attempts_left !== undefined && data.lockout_seconds === undefined) {
-          setError(`${data.error || 'Invalid credentials.'} ${data.attempts_left} attempt${data.attempts_left === 1 ? '' : 's'} remaining.`)
+          setError(`${baseMessage} ${data.attempts_left} attempt${data.attempts_left === 1 ? '' : 's'} remaining.`)
+        } else {
+          setError(baseMessage)
         }
       } else {
         setLockoutSeconds(0)
@@ -82,8 +103,8 @@ const AdminLogin: React.FC = () => {
         navigate(from, { replace: true })
       }
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      setError(msg === 'Failed to fetch' ? 'Connection Refused: Ensure the Django server is running on port 8000 and CORS is configured.' : msg);
+      const msg = err instanceof Error ? err.message : String(err)
+      setError(formatAdminErrorMessage(msg === 'Failed to fetch' ? 'Connection Refused: Ensure the Django server is running on port 8000 and CORS is configured.' : msg))
     } finally {
       setLoading(false)
     }
@@ -143,7 +164,17 @@ const AdminLogin: React.FC = () => {
               </button>
             </div>
           </label>
-          {error && <p className="text-sm text-red-500 font-medium">{error}</p>}
+          {error && (
+            <div className="flex gap-3 rounded-3xl border border-red-500/20 bg-red-500/10 p-4 text-sm text-slate-100 shadow-sm">
+              <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-red-500/15 text-red-300">
+                <AlertTriangle size={18} />
+              </div>
+              <div>
+                <p className="font-semibold text-red-100">Authentication issue</p>
+                <p className="mt-1 text-red-200">{error}</p>
+              </div>
+            </div>
+          )}
           {lockoutSeconds > 0 && (
             <p className="text-sm text-yellow-700">
               Please wait {lockoutSeconds} second{lockoutSeconds === 1 ? '' : 's'} before trying again.

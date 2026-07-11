@@ -478,7 +478,7 @@ const StaffPage: React.FC = () => {
             </div>
 
             {visibleStats.length > 0 && (
-              <section className="grid gap-4 md:grid-cols-3">
+              <section className="grid grid-cols-3 gap-4 overflow-x-auto">
                 {visibleStats.map((stat) => (
                   <div key={stat.label} className={`rounded-[2rem] border border-slate-800 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 p-6 shadow-[0_30px_80px_-50px_rgba(0,0,0,0.60)] ${stat.bg}`}>
                     <div className="flex items-center justify-between gap-4">

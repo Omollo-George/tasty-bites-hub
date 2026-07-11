@@ -80,9 +80,17 @@ interface CartItem extends MenuItem {
   modifiers: string[]; // Added modifiers
 }
 
+const fallbackMenuItems: MenuItem[] = [
+  { id: 1, name: 'Classic Smash Burger', price: 750, category: 'Burgers', image_url: '', description: 'Double patty, cheddar, pickles, special sauce', modifiers: [] },
+  { id: 2, name: 'BBQ Bacon Burger', price: 860, category: 'Burgers', image_url: '', description: 'Smoked bacon, BBQ glaze, onion rings', modifiers: [] },
+  { id: 3, name: 'Loaded Fries', price: 360, category: 'Sides', image_url: '', description: 'Cheese sauce, bacon bits, green onions', modifiers: [] },
+  { id: 4, name: 'Classic Milkshake', price: 420, category: 'Drinks', image_url: '', description: 'Vanilla, chocolate, or strawberry', modifiers: [] },
+  { id: 5, name: 'Brownie Sundae', price: 460, category: 'Desserts', image_url: '', description: 'Warm brownie, vanilla ice cream, hot fudge', modifiers: [] },
+];
+
 const EmployeeTable: React.FC = () => {
   const [searchParams] = useSearchParams();
-  const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
+  const [menuItems, setMenuItems] = useState<MenuItem[]>(fallbackMenuItems);
   const [tables, setTables] = useState<Table[]>([]);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [activeOrder, setActiveOrder] = useState<PosOrderReceipt | null>(null);
@@ -94,7 +102,10 @@ const EmployeeTable: React.FC = () => {
   const [initialLoading, setInitialLoading] = useState(true);
   const [showReceiptModal, setShowReceiptModal] = useState(false);
   const [receiptData, setReceiptData] = useState<PosOrderReceipt | null>(null);
+  // waiter POS does not use the customer CartModal
   const [waiterNameOverride, setWaiterNameOverride] = useState<string>('');
+  const [cartOpen, setCartOpen] = useState(true);
+  const [showOrderDrawer, setShowOrderDrawer] = useState(false);
 
   const { toast } = useToast();
   const pollTimerRef = useRef<any>(null);
@@ -106,6 +117,7 @@ const EmployeeTable: React.FC = () => {
   const staffName = getStaffName();
   const authToken = getAuthToken();
   const canAccess = isAdmin || ['waiter', 'cashier', 'manager'].includes(staffRole);
+  const finalWaiterName = waiterNameOverride.trim() || staffName || 'Staff';
 
   const normalizeOrder = (value: any): PosOrderReceipt | null => {
     if (!value || typeof value !== 'object') return null;
@@ -115,52 +127,79 @@ const EmployeeTable: React.FC = () => {
     } as PosOrderReceipt;
   };
 
-  // Determine final waiter name: use override if set, otherwise use staffName, fallback to 'Staff'
-  const finalWaiterName = waiterNameOverride || staffName || 'Staff';
+  const normalizeMenuItem = (item: any): MenuItem => ({
+    id: Number(item?.id ?? item?.menu_item_id ?? 0),
+    name: String(item?.name || 'Unnamed Item'),
+    price: Number(item?.price ?? item?.unit_price ?? 0),
+    category: String(item?.category || item?.menu_category || 'General'),
+    image_url: String(item?.image_url || item?.image || ''),
+    description: String(item?.description || ''),
+    modifiers: Array.isArray(item?.modifiers) ? item.modifiers : [],
+  });
 
   useEffect(() => {
-    const fetchData = async () => {
+    let cancelled = false;
+
+    const loadPosData = async () => {
       try {
-        // Fetch menu items without auth headers (public endpoint) to avoid token mismatch issues
-        try {
-          const menuData: any = await apiFetch('/payments/menu-items/')
-          setMenuItems(menuData.menu_items || [])
-        } catch (err) {
-          console.error('Failed to load menu items', err)
-          setMenuItems([])
-        }
+        const [menuRes, tablesRes] = await Promise.allSettled([
+          fetch(getApiUrl('/payments/menu-items/'), { headers: getAuthHeaders() }),
+          fetch(getApiUrl('/payments/pos/tables/'), { headers: getAuthHeaders() }),
+        ]);
 
-        try {
-          const tablesData: any = await apiFetch('/payments/pos/tables/', { headers: getAuthHeaders() })
-          setTables(tablesData.tables || [])
-        } catch (err) {
-          console.error('Failed to load tables', err)
-          setTables([])
-        }
+        if (!cancelled) {
+          if (menuRes.status === 'fulfilled' && menuRes.value.ok) {
+            const menuData = await menuRes.value.json();
+            const menuItemsPayload = Array.isArray(menuData?.menu_items)
+              ? menuData.menu_items
+              : Array.isArray(menuData)
+                ? menuData
+                : [];
+            setMenuItems(menuItemsPayload.length ? menuItemsPayload.map(normalizeMenuItem) : fallbackMenuItems);
+          } else if (!cancelled) {
+            setMenuItems(fallbackMenuItems);
+          }
 
-        // Auto-select table if provided in URL
-        const urlTable = searchParams.get('table');
-        if (urlTable) {
-          setSelectedTable(urlTable);
-          setOrderType('table');
-
-          // Fetch active order for this table to show existing items
-          try { // Use authToken for auth
-            const orderData: any = await apiFetch(`/payments/pos/active-order/?table_number=${urlTable}`, { headers: getAuthHeaders() })
-            const normalizedOrder = normalizeOrder(orderData?.order || orderData);
-            if (normalizedOrder) setActiveOrder(normalizedOrder)
-          } catch (err) {
-            console.error("Failed to fetch active order", err);
+          if (tablesRes.status === 'fulfilled' && tablesRes.value.ok) {
+            const tablesData = await tablesRes.value.json();
+            const tablePayload = Array.isArray(tablesData?.tables)
+              ? tablesData.tables
+              : Array.isArray(tablesData)
+                ? tablesData
+                : [];
+            setTables(tablePayload.map((table: any) => ({
+              id: Number(table?.id ?? 0),
+              number: String(table?.number ?? table?.table_number ?? ''),
+              status: String(table?.status || ''),
+            })));
           }
         }
       } catch (err) {
-        console.error("Failed to load POS data", err);
+        if (!cancelled) {
+          console.error('Failed to load POS catalog data', err);
+          setMenuItems(fallbackMenuItems);
+        }
       } finally {
-        setInitialLoading(false);
+        if (!cancelled) {
+          setInitialLoading(false);
+        }
       }
     };
-    fetchData();
-  }, [authToken, searchParams]); // Removed adminToken from dependency array
+
+    loadPosData();
+    return () => {
+      cancelled = true;
+    };
+  }, [authToken]);
+
+  useEffect(() => {
+    if (orderType !== 'table' || selectedTable.trim()) return;
+    const fallbackTable = tables.find((table) => table.number?.trim() && table.status?.toLowerCase() !== 'occupied')
+      || tables.find((table) => table.number?.trim());
+    if (fallbackTable) {
+      setSelectedTable(String(fallbackTable.number));
+    }
+  }, [orderType, selectedTable, tables]);
 
   // Listen for Server-Sent Events to keep preview/in-memory orders in sync
   useEffect(() => {
@@ -250,7 +289,15 @@ const EmployeeTable: React.FC = () => {
     }).filter(i => i.quantity > 0));
   };
 
-  const sendToKitchen = async (isNewOrder: boolean) => {
+  // Quantity updates handled via updateCartQuantity for waiter flow
+
+  const canAddToExistingOrder = (order: PosOrderReceipt | null) => {
+    if (!order) return false;
+    const terminalStatuses = ['paid', 'bill_pending', 'ready', 'completed', 'cancelled'];
+    return !terminalStatuses.includes(order.status?.toLowerCase());
+  };
+
+  const sendToKitchen = async (forceNewOrder?: boolean) => {
     if (cart.length === 0) {
       toast({ title: "Cart is empty", description: "Add items before sending to kitchen.", variant: "destructive" });
       return;
@@ -265,20 +312,38 @@ const EmployeeTable: React.FC = () => {
       }
 
       const itemsPayload = cart.map(i => ({
-        menu_item_id: i.id, // Assuming backend expects menu_item_id
+        menu_item_id: i.id, // Assuming backend accepts menu_item_id
         name: i.name,
         price: i.price,
         quantity: i.quantity,
         modifiers: i.modifiers,
       }));
 
-      if (isNewOrder) {
-        if (orderType === 'table' && !selectedTable.trim()) {
+      const existingOrder = activeOrder || lastSentOrder;
+      const useExistingOrder = forceNewOrder === false
+        ? true
+        : forceNewOrder === true
+          ? false
+          : canAddToExistingOrder(existingOrder);
+
+      const resolvedTableNumber = orderType === 'table'
+        ? (selectedTable.trim() || tables.find((table) => table.number?.trim() && table.status?.toLowerCase() !== 'occupied')?.number || tables.find((table) => table.number?.trim())?.number || '')
+        : '';
+
+      if (useExistingOrder && existingOrder?.order_id) {
+        endpoint = `/payments/pos/add-to-order/${existingOrder.order_id}/`;
+        payload = {
+          items: itemsPayload,
+          waiter_name: finalWaiterName,
+          waiter_id: getStaffId() || undefined,
+        };
+      } else {
+        if (orderType === 'table' && !resolvedTableNumber) {
           throw new Error('Please select a table before sending to kitchen.');
         }
         endpoint = '/payments/pos/create-order/';
         payload = {
-          table_number: orderType === 'table' ? selectedTable : 'Counter',
+          table_number: orderType === 'table' ? resolvedTableNumber : 'Counter',
           items: itemsPayload,
           order_type: orderType,
           payment_method: 'unpaid',
@@ -286,23 +351,17 @@ const EmployeeTable: React.FC = () => {
           waiter_name: finalWaiterName,
           waiter_id: getStaffId() || undefined,
         };
-      } else {
-        if (!activeOrder?.order_id) {
-          throw new Error("No active order to add items to.");
-        }
-        endpoint = `/payments/pos/add-to-order/${activeOrder.order_id}/`;
-        payload = {
-          items: itemsPayload,
-          waiter_name: finalWaiterName,
-          waiter_id: getStaffId() || undefined,
-        };
       }
 
       const res = await fetch(getApiUrl(endpoint), {
         method: 'POST',
-        headers: getAuthHeaders(),
-        body: JSON.stringify(payload)
+        headers: {
+          'Content-Type': 'application/json',
+          ...getAuthHeaders(),
+        },
+        body: JSON.stringify(payload),
       });
+
       if (res.ok) {
         const data = await res.json();
         const order = normalizeOrder(data.order || data) || {
@@ -326,21 +385,43 @@ const EmployeeTable: React.FC = () => {
           order_type: 'takeaway',
           stk_response: undefined,
         } as PosOrderReceipt;
-        setCart([]); // Clear new items cart
-        // If the order was sent to kitchen, clear the activeOrder so waiter can start a new one,
-        // but retain a preview of the last sent order so items remain visible.
-        if (order.status === 'sent_kitchen' || order.status === 'preparing') {
+
+        const mergedOrder = !order.items.length && existingOrder && existingOrder.order_id === order.order_id
+          ? {
+              ...existingOrder,
+              ...order,
+              items: [
+                ...existingOrder.items,
+                ...itemsPayload.map((item, idx) => ({
+                  id: Date.now() + idx,
+                  name: item.name,
+                  price: item.price,
+                  food_cost: 0,
+                  quantity: item.quantity,
+                  modifiers: item.modifiers || [],
+                  seat_number: 1,
+                  is_served: false,
+                  subtotal: item.price * item.quantity,
+                })),
+              ],
+            }
+          : order;
+
+        setCart([]);
+
+        if (mergedOrder.status === 'sent_kitchen' || mergedOrder.status === 'preparing') {
           setActiveOrder(null);
-          setLastSentOrder(order);
-          setReceiptData(order);
+          setLastSentOrder(mergedOrder);
+          setReceiptData(mergedOrder);
         } else {
-          setActiveOrder(order);
+          setActiveOrder(mergedOrder);
           setLastSentOrder(null);
         }
-        toast({ title: "KOT Printed", description: `Order ${order.order_id?.substring(0, 6) || ''} ${isNewOrder ? 'created' : 'updated'} and sent to Kitchen.` });
+
+        toast({ title: "KOT Printed", description: `Order ${mergedOrder.order_id?.substring(0, 6) || ''} ${useExistingOrder ? 'updated' : 'created'} and sent to Kitchen.` });
       } else {
-        const errorData = await res.json();
-        toast({ title: "KOT Failed", description: errorData.error || "Failed to send order to kitchen.", variant: "destructive" });
+        const errorData = await res.json().catch(() => ({}));
+        toast({ title: "KOT Failed", description: errorData.error || errorData.message || "Failed to send order to kitchen.", variant: "destructive" });
       }
     } catch (e: any) {
       console.error("Error sending to kitchen:", e);
@@ -495,18 +576,58 @@ const EmployeeTable: React.FC = () => {
   const total = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
   const visibleOrder = activeOrder ?? lastSentOrder;
   const visibleOrderItems = Array.isArray(visibleOrder?.items) ? visibleOrder.items : [];
+  const summaryItems = cart.length > 0 ? cart : visibleOrderItems;
+  const summaryTotal = summaryItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
   const unsentItemCount = cart.reduce((sum, item) => sum + item.quantity, 0);
   const tableDisplay = orderType === 'takeaway' ? 'Counter' : selectedTable ? `Table ${selectedTable}` : 'Unassigned';
   const orderStatusLabel = visibleOrder?.status
     ? visibleOrder.status.replace(/_/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase())
     : 'New Order';
 
+  const existingOrder = activeOrder || lastSentOrder;
+  const resolvedTableNumber = orderType === 'table'
+    ? (selectedTable.trim() || tables.find((table) => table.number?.trim() && table.status?.toLowerCase() !== 'occupied')?.number || tables.find((table) => table.number?.trim())?.number || '')
+    : '';
+  const requiresTableSelection = orderType === 'table' && !resolvedTableNumber && !(existingOrder?.order_type === 'table' && existingOrder.table);
+  const canSendToKitchen = cart.length > 0 && !requiresTableSelection;
+  const hasPrintableContent = cart.length > 0 || visibleOrderItems.length > 0 || Boolean(activeOrder || lastSentOrder || receiptData);
+
   const handlePrintTicket = async () => {
-    const orderToPrint = activeOrder || receiptData;
-    if (!orderToPrint) {
-      toast({ title: "No Order to Print", description: "Please create or select an order first.", variant: "destructive" });
-      return;
-    }
+    const orderToPrint = activeOrder || receiptData || {
+      order_id: `PREVIEW-${Date.now()}`,
+      table: orderType === 'table' ? resolvedTableNumber : 'Counter',
+      table_details: null,
+      phone: '',
+      delivery_address: '',
+      delivery_distance_km: null,
+      delivery_time: '',
+      delivery_cost: 0,
+      status: 'draft',
+      split_count: 0,
+      total_amount: total,
+      food_cost: 0,
+      is_paid: false,
+      is_billed: false,
+      created_at: new Date().toISOString(),
+      items: (cart.length > 0 ? cart : visibleOrderItems).map((item) => ({
+        id: item.id,
+        name: item.name,
+        price: item.price,
+        food_cost: 0,
+        quantity: item.quantity,
+        modifiers: item.modifiers || [],
+        seat_number: 1,
+        is_served: false,
+        subtotal: item.price * item.quantity,
+      })),
+      payment_method: 'unpaid',
+      order_type: orderType,
+      waiter_name: finalWaiterName,
+      waiter_id: getStaffId() || undefined,
+      subtotal: total,
+      discount: 0,
+      tax: 0,
+    } as PosOrderReceipt;
 
     setReceiptData(orderToPrint);
     setShowReceiptModal(true);
@@ -548,7 +669,15 @@ const EmployeeTable: React.FC = () => {
           </div>
         </div>
 
-        <div className="flex flex-col lg:flex-row gap-6 h-full min-h-[calc(100vh-18rem)]">
+        <div className="flex flex-col lg:flex-row gap-6 h-full min-h-[calc(100vh-18rem)] relative">
+          <button
+            onClick={() => setShowOrderDrawer(true)}
+            className="fixed bottom-8 right-8 z-40 rounded-full bg-gradient-to-r from-orange-500 to-fuchsia-500 p-4 text-white shadow-xl hover:shadow-2xl transition lg:hidden"
+            aria-label="Toggle order drawer"
+          >
+            <ShoppingCart size={24} />
+          </button>
+
           <div className="flex-1 flex flex-col min-w-0 bg-slate-900 rounded-3xl border border-slate-800 shadow-2xl shadow-slate-950/20 overflow-hidden">
             <div className="px-5 py-4 bg-slate-800/70 border-b border-slate-800 flex items-center justify-between gap-3">
               <div className="space-y-1">
@@ -606,17 +735,63 @@ const EmployeeTable: React.FC = () => {
             </div>
           </div>
 
-          <div className="w-full lg:w-96 flex flex-col bg-slate-900 rounded-3xl border border-slate-800 shadow-2xl shadow-slate-950/20 overflow-hidden">
-            <div className="p-5 border-b border-slate-800 flex flex-col gap-4">
-              <div className="flex items-center gap-3">
-                <div className="flex h-12 w-12 items-center justify-center rounded-3xl bg-gradient-to-br from-orange-500 to-fuchsia-500 text-white shadow-lg shadow-orange-500/20">
-                  <ShoppingCart size={22} />
+          <div className={`fixed inset-y-0 right-0 z-50 w-full max-w-md flex flex-col bg-slate-900 border-l border-slate-800 shadow-2xl transition-transform duration-300 lg:static lg:w-96 lg:max-w-none lg:rounded-3xl lg:border-l-0 lg:border lg:transform-none overflow-hidden ${
+            showOrderDrawer ? 'translate-x-0' : 'translate-x-full lg:translate-x-0'
+          }`}>
+            <div className="p-5 border-b border-slate-800 flex flex-col gap-4 lg:rounded-t-3xl">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-3xl bg-gradient-to-br from-orange-500 to-fuchsia-500 text-white shadow-lg shadow-orange-500/20">
+                    <ShoppingCart size={22} />
+                  </div>
+                  <div>
+                    <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Order Summary</p>
+                    <h2 className="text-2xl font-semibold text-white">Ready to send</h2>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Order Summary</p>
-                  <h2 className="text-2xl font-semibold text-white">Ready to send</h2>
-                </div>
+                <button
+                  onClick={() => setShowOrderDrawer(false)}
+                  className="rounded-full border border-slate-700 bg-slate-950 p-2 text-slate-300 hover:text-white transition lg:hidden"
+                  aria-label="Close order drawer"
+                >
+                  ✕
+                </button>
               </div>
+
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                <button
+                  type="button"
+                  onClick={() => setOrderType('table')}
+                  className={`rounded-3xl border px-4 py-3 text-sm font-semibold transition ${orderType === 'table' ? 'border-orange-500 bg-orange-500/10 text-orange-200' : 'border-slate-700 bg-slate-950 text-slate-300 hover:border-slate-500'}`}
+                >
+                  Table
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setOrderType('takeaway')}
+                  className={`rounded-3xl border px-4 py-3 text-sm font-semibold transition ${orderType === 'takeaway' ? 'border-orange-500 bg-orange-500/10 text-orange-200' : 'border-slate-700 bg-slate-950 text-slate-300 hover:border-slate-500'}`}
+                >
+                  Takeaway
+                </button>
+              </div>
+
+              {orderType === 'table' && (
+                <div className="mt-4 rounded-3xl border border-slate-800 bg-slate-950/80 p-4">
+                  <label className="block text-xs uppercase tracking-[0.3em] text-slate-500 mb-2">Select table</label>
+                  <select
+                    value={selectedTable}
+                    onChange={(e) => setSelectedTable(e.target.value)}
+                    className="w-full rounded-3xl border border-slate-800 bg-slate-900 px-4 py-3 text-white outline-none transition focus:border-orange-500"
+                  >
+                    <option value="">Choose a table</option>
+                    {tables.map(table => (
+                      <option key={table.id} value={table.number}>
+                        {table.number}{table.status ? ` — ${table.status}` : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
               <div className="grid gap-3 sm:grid-cols-2">
                 <div className="rounded-3xl border border-slate-800 bg-slate-950/80 p-4">
@@ -631,67 +806,61 @@ const EmployeeTable: React.FC = () => {
             </div>
 
             <div className="flex-1 overflow-y-auto p-5 space-y-4 bg-gradient-to-b from-slate-950 to-slate-900">
-              <div className="rounded-3xl border border-slate-800 bg-slate-900/90 p-4">
-                <p className="text-[0.65rem] uppercase tracking-[0.3em] text-slate-500">Order Status</p>
-                <p className="mt-2 text-2xl font-bold text-white">{orderStatusLabel}</p>
-                <p className="mt-1 text-sm text-slate-400">{visibleOrder ? `Order ID: ${visibleOrder.order_id}` : 'No active order yet'}</p>
+              <div className="rounded-3xl border border-slate-800 bg-slate-900/90 p-4 flex items-center justify-between gap-4">
+                <div>
+                  <p className="text-[0.65rem] uppercase tracking-[0.3em] text-slate-500">Order Cart</p>
+                  <p className="mt-2 text-2xl font-bold text-white">{cart.length > 0 ? 'Current Cart' : visibleOrderItems.length > 0 ? 'Existing Order' : 'No items yet'}</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="rounded-3xl bg-slate-800 px-3 py-1 text-xs uppercase tracking-[0.3em] text-slate-300">KES {summaryTotal.toFixed(2)}</span>
+                  <button type="button" onClick={() => setCartOpen(prev => !prev)} className="rounded-full border border-slate-700 bg-slate-950 px-3 py-2 text-xs uppercase tracking-[0.3em] text-slate-300 hover:bg-slate-900 transition">
+                    {cartOpen ? 'Collapse' : 'Expand'}
+                  </button>
+                </div>
               </div>
 
-              <div className="space-y-3">
-                {visibleOrderItems.length > 0 && (
-                  <div className="rounded-3xl border border-slate-800 bg-slate-900/90 p-4">
-                    <div className="flex items-center justify-between mb-3">
-                      <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Sent to Kitchen</p>
-                      {lastSentOrder && !activeOrder && (
-                        <button onClick={() => setLastSentOrder(null)} className="text-xs text-slate-400 hover:text-white">Hide</button>
-                      )}
-                    </div>
-                    <div className="space-y-3">
-                      {visibleOrderItems.map((item, idx) => (
-                        <div key={idx} className="flex items-center justify-between gap-3 rounded-3xl border border-slate-800 bg-slate-950/80 p-3">
-                          <div className="min-w-0">
-                            <p className="text-sm font-semibold text-white truncate">{item.name}</p>
-                            <p className="text-xs text-slate-500">x{item.quantity} • KES {(item.price * item.quantity).toFixed(2)}</p>
-                          </div>
-                          {!item.is_served && (
-                            <button onClick={() => markItemServed(visibleOrder!.order_id, idx)} disabled={loading} className="rounded-2xl bg-orange-500 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.2em] text-slate-950 hover:bg-orange-400 transition">Serve</button>
+              {cartOpen ? (
+                <div className="rounded-3xl border border-slate-800 bg-slate-950/90 p-4">
+                  <div className="grid grid-cols-[1fr_auto_auto] gap-3 border-b border-slate-800 pb-3 text-xs uppercase tracking-[0.3em] text-slate-500">
+                    <span>Item</span>
+                    <span className="text-right">Qty</span>
+                    <span className="text-right">Total</span>
+                  </div>
+                  <div className="space-y-3 mt-3">
+                    {(cart.length > 0 ? cart : visibleOrderItems).map((item, idx) => (
+                      <div key={cart.length > 0 ? item.id : `${item.id}-${idx}`} className="grid grid-cols-[1fr_auto_auto] gap-3 rounded-3xl border border-slate-800 bg-slate-900/90 p-3 items-center">
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold text-white truncate">{item.name}</p>
+                          <p className="text-xs text-slate-400">{item.modifiers?.length ? item.modifiers.join(', ') : 'No modifiers'}</p>
+                        </div>
+                        <div className="flex items-center justify-end gap-2 text-sm font-semibold text-white">
+                          {cart.length > 0 ? (
+                            <>
+                              <button onClick={() => updateCartQuantity(item.id, -1)} aria-label={`Decrease ${item.name} quantity`} className="p-2 rounded-xl bg-slate-800 text-slate-200 hover:bg-orange-500 transition"><Minus size={14} /></button>
+                              <span>{item.quantity}</span>
+                              <button onClick={() => updateCartQuantity(item.id, 1)} aria-label={`Increase ${item.name} quantity`} className="p-2 rounded-xl bg-slate-800 text-slate-200 hover:bg-orange-500 transition"><Plus size={14} /></button>
+                            </>
+                          ) : (
+                            <span>{item.quantity}</span>
                           )}
                         </div>
-                      ))}
+                        <div className="text-right text-sm font-semibold text-white">KES {(item.price * item.quantity).toFixed(2)}</div>
+                      </div>
+                    ))}
+                  </div>
+                  {cart.length === 0 && visibleOrderItems.length === 0 && (
+                    <div className="rounded-3xl border border-slate-800 bg-slate-950/80 p-6 text-center text-slate-500">
+                      Add items from the menu to begin a new order.
                     </div>
-                  </div>
-                )}
+                  )}
+                </div>
+              ) : (
+                <div className="rounded-3xl border border-slate-800 bg-slate-950/80 p-6 text-center text-slate-400">
+                  Cart hidden. Expand to review items.
+                </div>
+              )}
 
-                {cart.length > 0 && (
-                  <div className="rounded-3xl border border-orange-500/20 bg-orange-500/5 p-4">
-                    <p className="text-xs uppercase tracking-[0.3em] text-orange-300">New Items</p>
-                    <div className="mt-3 space-y-3">
-                      {cart.map(item => (
-                        <div key={item.id} className="flex items-center justify-between gap-3 rounded-2xl bg-slate-950/70 p-3">
-                          <div className="min-w-0">
-                            <p className="text-sm font-semibold text-white truncate">{item.name}</p>
-                            <p className="text-xs text-slate-400">x{item.quantity} • KES {item.price * item.quantity}</p>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <button onClick={() => updateCartQuantity(item.id, -1)} aria-label={`Decrease ${item.name} quantity`} className="p-2 rounded-xl bg-slate-800 text-slate-200 hover:bg-orange-500 transition"><Minus size={14} /></button>
-                            <span className="text-sm font-semibold text-white">{item.quantity}</span>
-                            <button onClick={() => updateCartQuantity(item.id, 1)} aria-label={`Increase ${item.name} quantity`} className="p-2 rounded-xl bg-slate-800 text-slate-200 hover:bg-orange-500 transition"><Plus size={14} /></button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {cart.length === 0 && visibleOrderItems.length === 0 && (
-                  <div className="rounded-3xl border border-slate-800 bg-slate-950/80 p-6 text-center text-slate-500">
-                    Add items from the menu to begin a new order.
-                  </div>
-                )}
-              </div>
-            </div>
-
-            <div className="p-5 border-t border-slate-800 space-y-4 bg-slate-950/95">
+              <div className="p-5 border-t border-slate-800 space-y-4 bg-slate-950/95">
               <div className="rounded-3xl border border-slate-800 bg-slate-900/90 p-4 flex items-center justify-between gap-3">
                 <div>
                   <p className="text-xs uppercase tracking-[0.3em] text-slate-400">Order total</p>
@@ -702,8 +871,8 @@ const EmployeeTable: React.FC = () => {
 
               <div className="grid gap-3">
                 <button
-                  disabled={loading || cart.length === 0 || (orderType === 'table' && !selectedTable)}
-                  onClick={() => sendToKitchen(activeOrder ? false : true)}
+                  disabled={loading || !canSendToKitchen}
+                  onClick={() => sendToKitchen()}
                   className="w-full rounded-3xl bg-gradient-to-r from-orange-500 to-fuchsia-500 py-4 text-sm font-bold uppercase tracking-[0.15em] text-slate-950 shadow-xl shadow-orange-500/20 transition hover:shadow-orange-400/30 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <span className="inline-flex items-center justify-center gap-2">
@@ -712,7 +881,7 @@ const EmployeeTable: React.FC = () => {
                   </span>
                 </button>
                 <button
-                  disabled={!(activeOrder || receiptData)}
+                  disabled={loading || !hasPrintableContent}
                   onClick={handlePrintTicket}
                   className="w-full rounded-3xl border border-slate-800 bg-slate-900 py-4 text-sm font-bold uppercase tracking-[0.15em] text-white shadow-sm hover:bg-slate-800 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                 >
@@ -723,8 +892,17 @@ const EmployeeTable: React.FC = () => {
           </div>
         </div>
       </div>
+    </div>
 
-      {/* Receipt Modal */}
+    {/* Order Drawer Backdrop (Mobile) */}
+    {showOrderDrawer && (
+      <div
+        className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm lg:hidden"
+        onClick={() => setShowOrderDrawer(false)}
+      />
+    )}
+
+  {/* Receipt Modal */}
       {showReceiptModal && receiptData && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"> {/* Backdrop */}
           <div className="relative w-full max-w-lg my-auto bg-slate-900 rounded-xl shadow-lg border border-slate-800 flex flex-col max-h-[95vh]"> {/* Main modal container, now flex-col */}
@@ -767,6 +945,7 @@ const EmployeeTable: React.FC = () => {
           </div>
         </div>
       )}
+      
     </>
   );
 };

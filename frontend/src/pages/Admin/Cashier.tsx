@@ -530,7 +530,7 @@ export default function Cashier() {
               No pending bills at this time.
             </div>
           ) : (
-            <div className="grid grid-cols-3 gap-2 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 auto-rows:minmax(0, auto) items-start">
+            <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-4 auto-rows:minmax(0, auto) items-start">
               {filteredBills.map((bill) => {
                 const safeItems = Array.isArray(bill.items) ? bill.items : [];
                 const orderTypeLabel = bill.order_type === 'table' ? 'Dine-in' : (bill.order_type === 'delivery' ? 'Delivery' : 'Takeaway');

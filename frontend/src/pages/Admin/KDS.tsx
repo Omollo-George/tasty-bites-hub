@@ -316,11 +316,6 @@ const AdminKDS: React.FC = () => {
                   <p className="mt-1 text-sm font-semibold leading-tight text-white truncate">{order.waiter_name?.trim() ? order.waiter_name : 'Unassigned'}</p>
                 </div>
 
-                <div className="rounded-2xl border border-slate-800 bg-slate-900/95 p-2 mb-2">
-                  <p className="text-[0.6rem] uppercase tracking-[0.18em] text-slate-500">Preparing</p>
-                  <p className="mt-1 text-sm font-semibold leading-tight text-white truncate">{order.items.length}x {order.items[0]?.name || 'Item'}</p>
-                </div>
-
                 <div className="space-y-2 text-slate-300 mb-3 max-h-28 overflow-auto">
                   {order.items.slice(0, 3).map((item, idx) => (
                     <div key={idx} className="flex items-center justify-between gap-2 rounded-2xl border border-slate-800 bg-slate-900/95 px-2 py-1 min-w-0">

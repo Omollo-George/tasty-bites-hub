@@ -98,9 +98,17 @@ export async function apiFetch(path: string, options?: RequestInit) {
       const status = res.status
       const statusText = res.statusText
       const ct = res.headers.get('content-type') || ''
+      let body: any = text
+      if (ct.includes('application/json')) {
+        try {
+          body = text ? JSON.parse(text) : text
+        } catch {
+          body = text
+        }
+      }
       const err: any = new Error(`Request failed ${status} ${statusText}`)
       err.status = status
-      err.body = text
+      err.body = body
       err.contentType = ct
       throw err
     }
