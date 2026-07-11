@@ -111,6 +111,19 @@ const EmployeeTable: React.FC = () => {
   const pollTimerRef = useRef<any>(null);
   const safetyTimeoutRef = useRef<any>(null);
 
+  // Update page metadata for SEO
+  useEffect(() => {
+    document.title = 'Waiter POS | Tasty Bites Hub - Restaurant Management';
+    const metaDescription = document.querySelector('meta[name="description"]');
+    if (metaDescription) {
+      metaDescription.setAttribute('content', 'Waiter Point-of-Sale system for fast order management, kitchen tickets, and table assignments at Tasty Bites Hub.');
+    }
+    const metaKeywords = document.querySelector('meta[name="keywords"]');
+    if (metaKeywords) {
+      metaKeywords.setAttribute('content', 'waiter POS, order management, kitchen tickets, restaurant, Tasty Bites Hub');
+    }
+  }, []);
+
   const adminToken = getAdminToken();
   const isAdmin = adminToken && isAdminSessionValid();
   const staffRole = getNormalizedStaffRole();
