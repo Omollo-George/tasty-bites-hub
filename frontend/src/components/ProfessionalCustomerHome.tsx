@@ -247,6 +247,11 @@ const ProfessionalCustomerHome = () => {
   const [showCartModal, setShowCartModal] = useState(false); // State to control cart modal visibility
   const [lastOrder, setLastOrder] = useState<OrderReceipt | null>(null); // State to show receipt after checkout
   const [processing, setProcessing] = useState(false);
+  const [cartButtonPosition, setCartButtonPosition] = useState({ x: 24, y: 24 });
+  const [draggingCartButton, setDraggingCartButton] = useState(false);
+  const dragStartRef = useRef({ pointerX: 0, pointerY: 0, startX: 24, startY: 24, moved: false });
+  const suppressClickRef = useRef(false);
+  const cartButtonRef = useRef<HTMLButtonElement | null>(null);
   const [awaitingMpesaConfirm, setAwaitingMpesaConfirm] = useState(false);
   const [awaitingMpesaSimulated, setAwaitingMpesaSimulated] = useState(false);
   const [currentOrderId, setCurrentOrderId] = useState<string | null>(null); // To track order for cancellation
@@ -326,6 +331,50 @@ const ProfessionalCustomerHome = () => {
       document.body.style.overflow = '';
     };
   }, [showCartModal, lastOrder]);
+
+  useEffect(() => {
+    const handlePointerMove = (event: PointerEvent) => {
+      if (!draggingCartButton) return;
+
+      const dx = event.clientX - dragStartRef.current.pointerX;
+      const dy = event.clientY - dragStartRef.current.pointerY;
+      const distance = Math.sqrt(dx * dx + dy * dy);
+      if (distance > 2) {
+        dragStartRef.current.moved = true;
+      }
+
+      const nextX = dragStartRef.current.startX + dx;
+      const nextY = dragStartRef.current.startY + dy;
+
+      const maxX = window.innerWidth - 72;
+      const maxY = window.innerHeight - 72;
+
+      setCartButtonPosition({
+        x: Math.min(Math.max(8, nextX), maxX),
+        y: Math.min(Math.max(8, nextY), maxY),
+      });
+    };
+
+    const handlePointerUp = () => {
+      if (draggingCartButton) {
+        setDraggingCartButton(false);
+        if (dragStartRef.current.moved) {
+          suppressClickRef.current = true;
+        }
+        dragStartRef.current.moved = false;
+      }
+    };
+
+    window.addEventListener('pointermove', handlePointerMove);
+    window.addEventListener('pointerup', handlePointerUp);
+    window.addEventListener('pointercancel', handlePointerUp);
+
+    return () => {
+      window.removeEventListener('pointermove', handlePointerMove);
+      window.removeEventListener('pointerup', handlePointerUp);
+      window.removeEventListener('pointercancel', handlePointerUp);
+    };
+  }, [draggingCartButton]);
 
   useEffect(() => {
     if (heroImages.length <= 1) return;
@@ -843,6 +892,39 @@ const ProfessionalCustomerHome = () => {
           </div>
         </div>
       </nav>
+
+      <button
+        type="button"
+        ref={cartButtonRef}
+        onClick={() => {
+          if (!suppressClickRef.current) {
+            setShowCartModal(true);
+          }
+          suppressClickRef.current = false;
+        }}
+        onPointerDown={(event) => {
+          dragStartRef.current = {
+            pointerX: event.clientX,
+            pointerY: event.clientY,
+            startX: cartButtonPosition.x,
+            startY: cartButtonPosition.y,
+            moved: false,
+          };
+          suppressClickRef.current = false;
+          setDraggingCartButton(true);
+          (event.target as HTMLElement).setPointerCapture(event.pointerId);
+        }}
+        style={{ left: cartButtonPosition.x, top: cartButtonPosition.y }}
+        className="fixed z-50 flex h-14 w-14 items-center justify-center rounded-full border border-white/10 bg-orange-500 text-white shadow-2xl shadow-orange-500/30 transition hover:bg-orange-400 focus:outline-none focus:ring-2 focus:ring-orange-300 touch-action-none"
+        aria-label="Open cart"
+      >
+        <ShoppingCart size={20} />
+        {cartTotalItems > 0 && (
+          <span className="absolute -right-1 -top-1 flex h-6 min-w-[1.5rem] items-center justify-center rounded-full bg-slate-950 px-1.5 text-[10px] font-semibold text-white">
+            {cartTotalItems}
+          </span>
+        )}
+      </button>
 
       {/* Hero Section with Premium Brand Presentation */}
       <header id="home" className={`relative min-h-[70vh] sm:min-h-[85vh] flex items-center justify-center overflow-hidden transition-opacity duration-500 ${
