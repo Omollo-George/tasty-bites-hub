@@ -103,6 +103,9 @@ export default function Cashier() {
     return getOrderCategory(bill.order_type) === ticketFilter;
   });
 
+  // Total amount of pending (uncleared) bills — updated in real-time
+  const pendingTotal = bills.reduce((sum, b) => sum + (Number(b.total_amount) || 0), 0);
+
   useEffect(() => {
     const staffToken = getStaffToken();
     if (!staffName || !staffToken) {
@@ -502,7 +505,18 @@ export default function Cashier() {
               <h2 className="text-3xl font-bold text-white">Open Tickets</h2>
               <p className="text-slate-400 max-w-2xl">Review pending bills, confirm payments, and keep the cashier workflow efficient and organized.</p>
             </div>
-            <div className="text-sm text-slate-500">Updated every few seconds for real-time cashier processing.</div>
+            <div className="flex items-center gap-4">
+              <div className="text-sm text-slate-500">Updated every few seconds for real-time cashier processing.</div>
+              <Card className="rounded-xl border border-slate-800 bg-slate-900/90">
+                <CardHeader>
+                  <CardTitle className="text-xs text-slate-400">Uncleared Cash</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold text-amber-300">KES {pendingTotal.toFixed(2)}</div>
+                  <p className="text-xs text-slate-400 mt-1">Total pending — deducted when cleared</p>
+                </CardContent>
+              </Card>
+            </div>
           </div>
 
           <div className="mb-6 flex flex-wrap gap-3">
