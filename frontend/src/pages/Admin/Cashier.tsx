@@ -103,6 +103,10 @@ export default function Cashier() {
     return getOrderCategory(bill.order_type) === ticketFilter;
   });
 
+  const removePendingBill = (orderId: string | number) => {
+    setBills((prev) => prev.filter((bill) => String(bill.order_id) !== String(orderId)));
+  };
+
   // Total amount of pending (uncleared) bills — updated in real-time
   const pendingTotal = bills.reduce((sum, b) => sum + (Number(b.total_amount) || 0), 0);
 
@@ -299,6 +303,7 @@ export default function Cashier() {
                 }
 
                 setSelectedBill(null);
+                removePendingBill(order.order_id);
                 await fetchPendingBills();
                 setProcessingPayment(false);
                 return;
@@ -362,6 +367,7 @@ export default function Cashier() {
 
       setShowReceipt(true);
       setSelectedBill(null);
+      removePendingBill(order.order_id);
       await fetchPendingBills();
     } catch (err: any) {
       const errorMsg = err.message || 'An error occurred while processing payment';
