@@ -955,7 +955,7 @@ const ProfessionalCustomerHome = () => {
         </div>
       </header>
 
-      <main id="menu" className={`scroll-mt-32 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 -mt-20 relative z-20 transition-opacity duration-500 ${
+      <main id="menu" className={`scroll-mt-32 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-20 relative z-20 transition-opacity duration-500 ${
         showCartModal || lastOrder ? 'opacity-20 pointer-events-none' : 'opacity-100'
       }`}>
         <div className="rounded-[2rem] border border-white/10 bg-white/10 backdrop-blur-2xl shadow-2xl shadow-black/20 overflow-hidden sm:bg-transparent sm:backdrop-blur-none">
