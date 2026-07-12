@@ -4,6 +4,7 @@ import { getStaffName, clearStaffSession, getStaffToken } from '@/lib/staff-sess
 import { getApiUrl, getSseUrl } from '@/lib/api';
 import { getAuthHeaders } from '@/lib/auth';
 import { normalizePhoneNumber, isValidMpesaPhone } from '@/lib/utils';
+import { computePendingTotal, filterVisibleBills } from '@/lib/pending-bills';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
@@ -71,13 +72,14 @@ export default function Cashier() {
   };
 
   const [bills, setBills] = useState<PendingBill[]>([]);
+  const [pendingTotal, setPendingTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [selectedBill, setSelectedBill] = useState<PendingBill | null>(null);
+  const clearedOrderIdsRef = useRef<Set<string>>(new Set());
   const [confirming, setConfirming] = useState(false);
   const [ticketFilter, setTicketFilter] = useState<'all' | 'takeaway' | 'dinein'>('all');
-  const [receipt, setReceipt] = useState<Receipt | null>(null);
-  const [showReceipt, setShowReceipt] = useState(false);
   const [showPaymentMethod, setShowPaymentMethod] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState<'mpesa' | 'cash' | null>(null);
   const [processingPayment, setProcessingPayment] = useState(false);
@@ -104,11 +106,14 @@ export default function Cashier() {
   });
 
   const removePendingBill = (orderId: string | number) => {
-    setBills((prev) => prev.filter((bill) => String(bill.order_id) !== String(orderId)));
+    const normalizedOrderId = String(orderId);
+    clearedOrderIdsRef.current.add(normalizedOrderId);
+    setBills((prev) => filterVisibleBills(prev, clearedOrderIdsRef.current));
   };
 
-  // Total amount of pending (uncleared) bills — updated in real-time
-  const pendingTotal = bills.reduce((sum, b) => sum + (Number(b.total_amount) || 0), 0);
+  useEffect(() => {
+    setPendingTotal(computePendingTotal(bills));
+  }, [bills]);
 
   useEffect(() => {
     const staffToken = getStaffToken();
@@ -144,40 +149,57 @@ export default function Cashier() {
 
   const fetchPendingBills = async () => {
     try {
-      const response = await fetch(getApiUrl('/payments/cashier/pending-bills/'), {
-        method: 'GET',
-        headers: getAuthHeaders(),
-      });
+      const allBills: PendingBill[] = [];
+      let page = 1;
+      const pageSize = 50;
+      let totalPages = 1;
 
-      if (response.status === 401 || response.status === 403) {
-        clearStaffSession();
-        navigate('/staff/login');
-        return;
-      }
+      do {
+        const url = getApiUrl(`/payments/cashier/pending-bills/?page=${page}&page_size=${pageSize}`);
+        const response = await fetch(url, {
+          method: 'GET',
+          headers: getAuthHeaders(),
+        });
 
-      if (!response.ok) {
-        let errorMessage = `Failed to fetch pending bills (${response.status})`
-        try {
-          const errorData = await response.json()
-          if (errorData?.error) errorMessage = errorData.error
-        } catch {
-          const errorText = await response.text().catch(() => '')
-          if (errorText) errorMessage = errorText
+        if (response.status === 401 || response.status === 403) {
+          clearStaffSession();
+          navigate('/staff/login');
+          return;
         }
-        throw new Error(errorMessage)
-      }
 
-      const data = await response.json();
-      const pendingBills = Array.isArray(data.bills) ? data.bills : [];
-      const sortedBills = [...pendingBills].sort((a: PendingBill, b: PendingBill) => {
+        if (!response.ok) {
+          let errorMessage = `Failed to fetch pending bills (${response.status})`;
+          try {
+            const errorData = await response.json();
+            if (errorData?.error) errorMessage = errorData.error;
+          } catch {
+            const errorText = await response.text().catch(() => '');
+            if (errorText) errorMessage = errorText;
+          }
+          throw new Error(errorMessage);
+        }
+
+        const data = await response.json();
+        const pageBills = Array.isArray(data.bills) ? data.bills : [];
+        allBills.push(...pageBills);
+
+        totalPages = Number(data.pagination?.total_pages || page);
+        if (!Number.isFinite(totalPages) || totalPages < page) {
+          totalPages = page;
+        }
+        page += 1;
+      } while (page <= totalPages);
+
+      const sortedBills = [...allBills].sort((a: PendingBill, b: PendingBill) => {
         const aTime = new Date(a.created_at || 0).getTime();
         const bTime = new Date(b.created_at || 0).getTime();
         return aTime - bTime;
       });
-      setBills(sortedBills);
+      const visibleBills = filterVisibleBills(sortedBills, clearedOrderIdsRef.current);
+      setBills(visibleBills);
       setError(null);
     } catch (err: any) {
-      setError(err.message || 'Failed to fetch pending bills')
+      setError(err.message || 'Failed to fetch pending bills');
       console.error('Fetch pending bills error:', err);
     } finally {
       setLoading(false);
@@ -185,6 +207,7 @@ export default function Cashier() {
   };
 
   const handleConfirmPayment = (bill: PendingBill) => {
+    setSuccessMessage(null);
     setSelectedBill(bill);
     setPaymentMethod(null);
     setShowPaymentMethod(true);
@@ -286,8 +309,9 @@ export default function Cashier() {
                       total_amount: ord.total_amount,
                       timestamp: formatClockTime(new Date()),
                     };
-                    setReceipt(receiptData);
-                    setShowReceipt(true);
+                    setSuccessMessage(`Payment confirmed for order #${order.order_id}.`);
+                    setShowReceipt(false);
+                    setReceipt(null);
 
                     // Mark table free if needed
                     if (ord.order_type === 'table' && ord.table_id) {
@@ -351,21 +375,7 @@ export default function Cashier() {
       }
 
       // Generate receipt for cash
-      const cashReceipt: Receipt = {
-        order_id: order.order_id,
-        waiter_name: order.waiter_name,
-        waiter_id: order.waiter_id,
-        order_type: order.order_type,
-        table: order.table,
-        table_id: order.table_id,
-        phone: order.phone,
-        items: order.items,
-        total_amount: order.total_amount,
-        timestamp: formatClockTime(new Date()),
-      };
-      setReceipt(cashReceipt);
-
-      setShowReceipt(true);
+      setSuccessMessage(`Payment confirmed for order #${order.order_id}.`);
       setSelectedBill(null);
       removePendingBill(order.order_id);
       await fetchPendingBills();
@@ -515,11 +525,11 @@ export default function Cashier() {
               <div className="text-sm text-slate-500">Updated every few seconds for real-time cashier processing.</div>
               <Card className="rounded-xl border border-slate-800 bg-slate-900/90">
                 <CardHeader>
-                  <CardTitle className="text-xs text-slate-400">Uncleared Cash</CardTitle>
+                  <CardTitle className="text-xs text-slate-400">Total Cash Uncleared</CardTitle>
                 </CardHeader>
                 <CardContent>
                   <div className="text-2xl font-bold text-amber-300">KES {pendingTotal.toFixed(2)}</div>
-                  <p className="text-xs text-slate-400 mt-1">Total pending — deducted when cleared</p>
+                  <p className="text-xs text-slate-400 mt-1">All uncleared cash still pending</p>
                 </CardContent>
               </Card>
             </div>
@@ -701,7 +711,7 @@ export default function Cashier() {
           </DialogContent>
         </Dialog>
 
-        <Dialog open={showReceipt} onOpenChange={setShowReceipt}>
+        <Dialog open={Boolean(successMessage)} onOpenChange={(open) => { if (!open) setSuccessMessage(null); }}>
           <DialogContent className="max-w-md bg-slate-950 text-slate-100 border border-slate-800">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
@@ -709,35 +719,19 @@ export default function Cashier() {
                 Payment Confirmed
               </DialogTitle>
             </DialogHeader>
-            {receipt && (
-              <div className="space-y-4">
-                <div className="rounded-3xl border border-slate-800 bg-slate-900 p-4 space-y-2 font-mono text-sm text-slate-200">
-                  <p><strong>Order ID:</strong> {receipt.order_id}</p>
-                  <p><strong>Waiter:</strong> {receipt.waiter_name?.trim() ? receipt.waiter_name : 'Unassigned'}</p>
-                  {receipt.waiter_id && <p><strong>Waiter ID:</strong> {receipt.waiter_id}</p>}
-                  <p><strong>Type:</strong> {receipt.order_type}</p>
-                  {receipt.phone && <p><strong>Phone:</strong> {receipt.phone}</p>}
-                  <hr className="my-2 border-slate-800" />
-                  <p><strong>Total:</strong> KES {receipt.total_amount.toFixed(2)}</p>
-                  <p className="text-xs text-slate-500">{receipt.timestamp}</p>
-                </div>
+            <div className="space-y-4">
+              <div className="rounded-3xl border border-slate-800 bg-slate-900 p-4 space-y-2 font-mono text-sm text-slate-200">
+                <p>{successMessage}</p>
               </div>
-            )}
+            </div>
             <DialogFooter className="gap-2">
               <Button
                 onClick={() => {
-                  setShowReceipt(false);
-                  setReceipt(null);
+                  setSuccessMessage(null);
                 }}
                 className="bg-slate-700 text-white hover:bg-slate-600 px-4 py-3 rounded-xl font-bold shadow-lg transition-colors"
               >
                 Close
-              </Button>
-              <Button
-                onClick={handlePrint}
-                className="bg-sky-500 text-slate-950 hover:bg-sky-400"
-              >
-                Print Receipt
               </Button>
             </DialogFooter>
           </DialogContent>
