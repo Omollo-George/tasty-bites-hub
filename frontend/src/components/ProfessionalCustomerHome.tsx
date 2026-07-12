@@ -252,7 +252,7 @@ const ProfessionalCustomerHome = () => {
   const dragStartRef = useRef({ pointerX: 0, pointerY: 0, startX: 24, startY: 24, moved: false });
   const suppressClickRef = useRef(false);
   const cartButtonRef = useRef<HTMLButtonElement | null>(null);
-  const [awaitingMpesaConfirm, setAwaitingMpesaConfirm] = useState(false);
+   const [awaitingMpesaConfirm, setAwaitingMpesaConfirm] = useState(false);
   const [awaitingMpesaSimulated, setAwaitingMpesaSimulated] = useState(false);
   const [currentOrderId, setCurrentOrderId] = useState<string | null>(null); // To track order for cancellation
   const [mpesaCheckoutId, setMpesaCheckoutId] = useState<string | null>(null);
@@ -350,8 +350,8 @@ const ProfessionalCustomerHome = () => {
       const maxY = window.innerHeight - 72;
 
       setCartButtonPosition({
-        x: Math.min(Math.max(8, nextX), maxX),
-        y: Math.min(Math.max(8, nextY), maxY),
+         x: Math.min(Math.max(8, nextX), maxX),
+         y: Math.min(Math.max(8, nextY), maxY),
       });
     };
 
@@ -915,7 +915,7 @@ const ProfessionalCustomerHome = () => {
           (event.target as HTMLElement).setPointerCapture(event.pointerId);
         }}
         style={{ left: cartButtonPosition.x, top: cartButtonPosition.y }}
-        className="fixed z-50 flex h-14 w-14 items-center justify-center rounded-full border border-white/10 bg-orange-500 text-white shadow-2xl shadow-orange-500/30 transition hover:bg-orange-400 focus:outline-none focus:ring-2 focus:ring-orange-300 touch-action-none"
+         className={`fixed z-50 flex h-16 w-16 items-center justify-center rounded-full border border-white/10 bg-orange-500 text-white shadow-2xl shadow-orange-500/30 transition hover:bg-orange-400 focus:outline-none focus:ring-2 focus:ring-orange-300 touch-action-none ${draggingCartButton ? 'cursor-grabbing' : 'cursor-grab'}`}
         aria-label="Open cart"
       >
         <ShoppingCart size={20} />
