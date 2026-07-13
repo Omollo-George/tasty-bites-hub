@@ -362,8 +362,8 @@ const StaffPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 p-6 md:p-10">
-      <div className="w-full space-y-8">
+    <div className="min-h-screen bg-slate-950 text-slate-100 p-6 md:p-10 overflow-x-hidden">
+      <div className="w-full space-y-8 overflow-x-hidden">
         {/* Header Section */}
         <div className="grid gap-6 xl:grid-cols-[1.55fr_0.95fr] items-start">
           <div className="space-y-6">
@@ -478,7 +478,7 @@ const StaffPage: React.FC = () => {
             </div>
 
             {visibleStats.length > 0 && (
-              <section className="grid grid-cols-3 gap-4 overflow-x-auto">
+              <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 {visibleStats.map((stat) => (
                   <div key={stat.label} className={`rounded-[2rem] border border-slate-800 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 p-6 shadow-[0_30px_80px_-50px_rgba(0,0,0,0.60)] ${stat.bg}`}>
                     <div className="flex items-center justify-between gap-4">
@@ -496,9 +496,9 @@ const StaffPage: React.FC = () => {
             )}
 
             {canAccessCashier && (
-              <section className="rounded-[2rem] border border-slate-800 bg-slate-950/90 p-8 shadow-[0_30px_80px_-30px_rgba(0,0,0,0.45)] backdrop-blur-xl">
+              <section className="rounded-[2rem] border border-slate-800 bg-slate-950/90 p-8 shadow-[0_30px_80px_-30px_rgba(0,0,0,0.45)] backdrop-blur-xl overflow-hidden max-w-full">
                 <div className="flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
-                  <div>
+                  <div className="min-w-0">
                     <p className="text-sm font-display uppercase tracking-[0.3em] text-slate-500">Cashier Workstation</p>
                     <h2 className="mt-3 text-3xl text-slate-100 font-display font-bold">Process payments and settle orders</h2>
                   </div>
@@ -513,29 +513,29 @@ const StaffPage: React.FC = () => {
                   </button>
                 </div>
                 {!cashierCollapsed && (
-                  <div className="mt-6 grid gap-8 lg:grid-cols-[1.5fr_1fr] items-start">
-                    <div>
+                  <div className="mt-6 grid grid-cols-1 w-full max-w-full gap-8 lg:grid-cols-[1.5fr_1fr] items-start">
+                    <div className="min-w-0">
                       <p className="mt-0 text-slate-400 leading-7 max-w-2xl">
                         Open the cashier console to confirm payments, print receipts, and manage open tickets in one reliable workflow.
                       </p>
-                      <div className="mt-6 flex flex-wrap gap-3">
+                      <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:flex-wrap w-full max-w-full">
                         <Link
                           to="/staff/cashier"
-                          className="inline-flex items-center justify-center gap-2 rounded-full bg-gradient-to-r from-orange-500 to-amber-500 px-6 py-3 text-sm font-semibold font-display text-slate-950 shadow-lg shadow-orange-500/20 transition duration-300 hover:from-orange-400 hover:to-amber-400"
+                          className="inline-flex min-w-0 w-full items-center justify-center gap-2 rounded-full bg-gradient-to-r from-orange-500 to-amber-500 px-6 py-3 text-sm font-semibold font-display text-slate-950 shadow-lg shadow-orange-500/20 transition duration-300 hover:from-orange-400 hover:to-amber-400 sm:w-auto"
                         >
                           <CreditCard size={20} />
                           <span>Launch Cashier</span>
                         </Link>
-                        <span className="inline-flex items-center gap-2 rounded-full border border-slate-700 bg-slate-950/80 px-4 py-3 text-sm font-display text-slate-300">
+                        <span className="inline-flex min-w-0 w-full items-center justify-center gap-2 rounded-full border border-slate-700 bg-slate-950/80 px-4 py-3 text-sm font-display text-slate-300 sm:w-auto">
                           <Bell size={18} />
                           <span>Live cash flow and ticket management</span>
                         </span>
                       </div>
                     </div>
 
-                    <div className="rounded-[1.75rem] border border-slate-800 bg-slate-950/90 p-6 shadow-sm shadow-black/20">
-                      <div className="flex items-center justify-between gap-3 mb-5">
-                        <div>
+                    <div className="rounded-[1.75rem] border border-slate-800 bg-slate-950/90 p-6 shadow-sm shadow-black/20 w-full max-w-full min-w-0 overflow-hidden">
+                      <div className="flex flex-wrap items-start justify-between gap-3 mb-5">
+                        <div className="min-w-0">
                           <p className="text-sm font-display uppercase tracking-[0.3em] text-slate-500">Cashier Activity</p>
                           <h3 className="mt-2 text-2xl font-display font-bold text-slate-100">Recent events</h3>
                         </div>
@@ -550,13 +550,13 @@ const StaffPage: React.FC = () => {
                           activities.map((activity, activityIndex) => {
                             const activityId = activity.id
                             return (
-                              <div key={activityId ?? `${activity.action}-${activity.time}-${activityIndex}`} className="flex items-center justify-between rounded-3xl border border-slate-800 bg-slate-900/95 px-5 py-4 shadow-sm shadow-slate-950/20 transition duration-300 hover:border-slate-700">
-                                <div>
+                              <div key={activityId ?? `${activity.action}-${activity.time}-${activityIndex}`} className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between rounded-3xl border border-slate-800 bg-slate-900/95 px-5 py-4 shadow-sm shadow-slate-950/20 transition duration-300 hover:border-slate-700">
+                                <div className="min-w-0" className="min-w-0">
                                   <p className="font-semibold font-display text-slate-200">{activity.action}</p>
-                                  {activity.table && <p className="text-xs text-slate-400">Table: {activity.table}</p>}
-                                  {activity.order_id && <p className="text-xs text-slate-400">Order: {activity.order_id}</p>}
+                                  {activity.table && <p className="text-xs text-slate-400 truncate">Table: {activity.table}</p>}
+                                  {activity.order_id && <p className="text-xs text-slate-400 truncate">Order: {activity.order_id}</p>}
                                 </div>
-                                <span className="text-xs text-slate-500 italic">{activity.time}</span>
+                                <span className="text-xs text-slate-500 italic whitespace-nowrap">{activity.time}</span>
                               </div>
                             )
                           })
