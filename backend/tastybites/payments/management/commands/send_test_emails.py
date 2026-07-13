@@ -1,7 +1,12 @@
 from django.core.management.base import BaseCommand, CommandError
-from django.core.mail import send_mail, BadHeaderError
 from django.conf import settings
 from payments.models import Employee
+
+# Use the app's fallback sender so test commands respect console fallback
+try:
+    from payments.views import _send_mail_with_fallback
+except Exception:
+    _send_mail_with_fallback = None
 
 
 class Command(BaseCommand):
@@ -39,23 +44,30 @@ class Command(BaseCommand):
         self.stdout.write(f'EMAIL_HOST_USER_SET={bool(getattr(settings, "EMAIL_HOST_USER", None))}')
         self.stdout.write(f'Sending to {len(recipients)} recipient(s)')
 
-        # Try to open a connection first for clearer diagnostics
-        from django.core.mail import get_connection
-        conn = get_connection()
-        try:
-            conn.open()
-            self.stdout.write(self.style.SUCCESS('Successfully opened mail connection'))
-        except Exception as e:
-            self.stdout.write(self.style.ERROR(f'Could not open mail connection: {e}'))
-            return
         successes = 0
-        for r in recipients:
-            try:
-                send_mail(subject, message, getattr(settings, 'DEFAULT_FROM_EMAIL', None), [r], fail_silently=False)
-                self.stdout.write(self.style.SUCCESS(f'Sent to {r}'))
-                successes += 1
-            except Exception as e:
-                self.stdout.write(self.style.ERROR(f'Failed {r}: {e}'))
+        # Prefer app fallback sender so missing passwords fall back to console
+        if _send_mail_with_fallback:
+            for r in recipients:
+                try:
+                    res = _send_mail_with_fallback(subject, message, getattr(settings, 'DEFAULT_FROM_EMAIL', None), [r])
+                    mode = res.get('mode') if isinstance(res, dict) else 'unknown'
+                    if mode == 'smtp' or mode == 'console':
+                        self.stdout.write(self.style.SUCCESS(f'Sent to {r} (mode={mode})'))
+                        successes += 1
+                    else:
+                        self.stdout.write(self.style.ERROR(f'Failed {r}: unexpected result {res}'))
+                except Exception as e:
+                    self.stdout.write(self.style.ERROR(f'Failed {r}: {e}'))
+        else:
+            # Fallback: use Django send_mail directly
+            from django.core.mail import send_mail
+            for r in recipients:
+                try:
+                    send_mail(subject, message, getattr(settings, 'DEFAULT_FROM_EMAIL', None), [r], fail_silently=False)
+                    self.stdout.write(self.style.SUCCESS(f'Sent to {r}'))
+                    successes += 1
+                except Exception as e:
+                    self.stdout.write(self.style.ERROR(f'Failed {r}: {e}'))
 
         self.stdout.write('')
         self.stdout.write(self.style.NOTICE(f'Total attempted: {len(recipients)}, Sent: {successes}'))
