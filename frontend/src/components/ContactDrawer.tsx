@@ -219,56 +219,6 @@ const ContactDrawer = () => {
                 ),
               },
               {
-                key: 'orders',
-                title: 'My Orders',
-                subtitle: 'Track and manage your orders',
-                content: (
-                  <div className="space-y-3 rounded border border-slate-700/50 bg-slate-800/50 p-3 text-sm text-slate-300">
-                    <p className="text-[11px] leading-relaxed">Enter the order ID from your receipt to see the latest updates without leaving the page.</p>
-                    <form onSubmit={handleTrackOrder} className="space-y-2">
-                      <input
-                        type="text"
-                        value={orderIdInput}
-                        onChange={(e) => setOrderIdInput(e.target.value)}
-                        placeholder="Order ID"
-                        className="w-full rounded border border-slate-700 bg-slate-900/80 px-3 py-2 text-xs text-slate-100 outline-none ring-0 focus:border-orange-500"
-                      />
-                      <button
-                        type="submit"
-                        disabled={trackingLoading}
-                        className="w-full rounded bg-orange-500 px-3 py-2 text-xs font-semibold text-white transition hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-60"
-                      >
-                        {trackingLoading ? 'Tracking...' : 'Track order'}
-                      </button>
-                    </form>
-
-                    {trackingError && <p className="text-[11px] text-red-400">{trackingError}</p>}
-                    {kitchenNotice && (
-                      <div className="rounded border border-emerald-500/30 bg-emerald-500/10 p-3 text-emerald-100 text-[11px]">
-                        {kitchenNotice}
-                      </div>
-                    )}
-
-                    {trackedOrder && (
-                      <div className="rounded border border-orange-500/20 bg-slate-900/70 p-3">
-                        <div className="flex items-center justify-between gap-2">
-                          <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-orange-400">Order #{trackedOrder.order_id}</p>
-                          <span className={`rounded-full px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] ${trackedOrder.status === 'ready' || trackedOrder.status === 'served' ? 'bg-emerald-500/15 text-emerald-400' : 'bg-amber-500/15 text-amber-400'}`}>
-                            {trackedOrder.status.toUpperCase()}
-                          </span>
-                        </div>
-                        <div className="mt-2 space-y-1 text-[11px] text-slate-400">
-                          <p>Table: {trackedOrder.table || 'Takeaway'}</p>
-                          <p>Total: KES {Number(trackedOrder.total_amount || 0).toFixed(2)}</p>
-                          <p>Paid: {trackedOrder.is_paid ? 'Yes' : 'Pending'}</p>
-                          <p>Placed: {trackedOrder.created_at ? new Date(trackedOrder.created_at).toLocaleString() : 'Just now'}</p>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                ),
-              },
-              {
                 key: 'account',
                 title: 'Account',
                 subtitle: 'Manage your profile details',

@@ -29,6 +29,13 @@ for env_path in env_candidates:
     if env_path.exists():
         load_dotenv(env_path, override=False)
 
+# Load environment variables from local override files if present.
+# This allows backend/.env.local to contain real secrets without committing them.
+local_env_candidates = [BASE_DIR / '.env.local', BASE_DIR.parent / '.env.local', BASE_DIR.parent.parent / '.env.local']
+for env_path in local_env_candidates:
+    if env_path.exists():
+        load_dotenv(env_path, override=True)
+
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/6.0/howto/deployment/checklist/
@@ -361,6 +368,14 @@ EMAIL_USE_TLS = os.environ.get('EMAIL_USE_TLS', 'True') == 'True'
 EMAIL_HOST_USER = (os.environ.get('EMAIL_HOST_USER', '') or '').strip()
 EMAIL_HOST_PASSWORD = (os.environ.get('EMAIL_HOST_PASSWORD', '') or '').strip()
 DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL', 'Tasty Bites Admin <admin@tastybites.local>')
+
+# If a Gmail app password is configured but EMAIL_HOST is missing, default
+# to Gmail's SMTP host so the app can send without requiring every local dev
+# environment to define it explicitly.
+if not EMAIL_HOST and EMAIL_HOST_PASSWORD and EMAIL_HOST_USER.lower().endswith('@gmail.com'):
+    EMAIL_HOST = 'smtp.gmail.com'
+    EMAIL_PORT = int(os.environ.get('EMAIL_PORT', '587'))
+    EMAIL_USE_TLS = True
 
 # Use console email backend during local testing when explicitly requested.
 # Set FORCE_CONSOLE_EMAIL=1 to route mail to the console backend without needing a live SMTP server.

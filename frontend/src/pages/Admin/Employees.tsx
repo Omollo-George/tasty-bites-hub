@@ -227,7 +227,11 @@ const AdminEmployees: React.FC = () => {
 
       const data = await res.json()
       if (res.ok) {
-        alert('Email sent successfully!')
+        if (data.mode === 'console') {
+          alert('Email queued to console backend, not actually sent. Configure SMTP if you want real delivery.')
+        } else {
+          alert(`Email sent successfully! mode=${data.mode || 'unknown'} sent=${data.sent ?? 1}`)
+        }
       } else {
         alert(data.error || 'Failed to send email. Ensure server SMTP is configured.')
       }

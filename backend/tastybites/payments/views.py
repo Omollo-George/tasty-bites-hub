@@ -23,9 +23,10 @@ from django.http import JsonResponse, HttpResponseBadRequest, HttpResponseServer
 from django.http import StreamingHttpResponse
 from django.utils import timezone
 from django.core.mail import send_mail
+from django.core.validators import validate_email
+from django.core.exceptions import FieldError, ImproperlyConfigured, ValidationError
 from django.views.decorators.csrf import csrf_exempt
 from django.db import connection, utils as db_utils
-from django.core.exceptions import FieldError, ImproperlyConfigured
 from datetime import timedelta
 from .models import AdminToken, AdminUser, AppSettings, MenuItem, Transaction, Table, Order, OrderItem, WastageLog, Employee, StockLog, AdminSessionLog, StaffActivity, MiscellaneousExpense, StaffToken, Review
 import smtplib
@@ -135,21 +136,28 @@ def payments_stream(request):
         yield ': connected\n\n'
         last_sent = 0
         while True:
-            with EVENTS_COND:
-                if len(EVENTS_QUEUE) <= last_sent:
-                    EVENTS_COND.wait(timeout=15)
-                if len(EVENTS_QUEUE) > last_sent:
-                    items = EVENTS_QUEUE[last_sent:]
-                    last_sent = len(EVENTS_QUEUE)
+            try:
+                with EVENTS_COND:
+                    if len(EVENTS_QUEUE) <= last_sent:
+                        EVENTS_COND.wait(timeout=15)
+                    if len(EVENTS_QUEUE) > last_sent:
+                        items = EVENTS_QUEUE[last_sent:]
+                        last_sent = len(EVENTS_QUEUE)
+                    else:
+                        items = []
+                if items:
+                    for item in items:
+                        yield f"data: {item}\n\n"
                 else:
-                    items = []
-            if items:
-                for item in items:
-                    yield f"data: {item}\n\n"
-            else:
-                # keep-alive comment
-                yield ': ping\n\n'
-            time.sleep(0.1)
+                    # keep-alive comment
+                    yield ': ping\n\n'
+                time.sleep(0.1)
+            except GeneratorExit:
+                # Client disconnected; stop the generator cleanly.
+                break
+            except Exception as exc:
+                logger.warning('SSE generator error: %s', exc)
+                break
 
     return StreamingHttpResponse(event_generator(), content_type='text/event-stream')
 
@@ -3444,25 +3452,32 @@ def _send_mail_with_fallback(subject: str, message: str, sender: str, recipients
     password = str(getattr(settings, 'EMAIL_HOST_PASSWORD', '') or '').strip()
     force_console = os.environ.get('FORCE_CONSOLE_EMAIL', '0') == '1'
 
+    # Console backend path (for local/dev testing)
     if force_console or str(backend).endswith('console.EmailBackend'):
-        send_mail(subject, message, sender, recipients, fail_silently=False)
-        return {'ok': True, 'mode': 'console'}
-
-    # If no SMTP password is configured, fall back to console to avoid raising
-    # authentication errors for environments where secrets are stored elsewhere.
-    if not password:
-        logger.warning('EMAIL_HOST_PASSWORD is not set; falling back to console backend. Set EMAIL_HOST_PASSWORD (Gmail app password) to enable real SMTP delivery.')
-        # Use an explicit console connection so Django does not attempt SMTP
-        from django.core.mail import get_connection
+        from django.core.mail import EmailMessage, get_connection
         console_conn = get_connection(backend='django.core.mail.backends.console.EmailBackend')
         try:
-            send_mail(subject, message, sender, recipients, fail_silently=False, connection=console_conn)
-            return {'ok': True, 'mode': 'console', 'warning': 'EMAIL_HOST_PASSWORD not set; using console fallback'}
+            msg = EmailMessage(subject, message, from_email=sender, to=recipients)
+            sent = console_conn.send_messages([msg])
+            return {'ok': True, 'mode': 'console', 'sent': sent}
         finally:
             try:
                 console_conn.close()
             except Exception:
                 pass
+
+    # If no SMTP password is configured, only allow console routing when
+    # explicitly requested or when the backend is already set to console.
+    # For remote SMTP hosts (like Gmail), missing credentials should fail fast.
+    remote_smtp = host and host not in ('127.0.0.1', 'localhost', '[::1]')
+    if not password and remote_smtp and not force_console and not str(backend).endswith('console.EmailBackend'):
+        raise ImproperlyConfigured(
+            'EMAIL_HOST_PASSWORD is required for remote SMTP delivery. Set EMAIL_HOST_PASSWORD (Gmail app password) or enable FORCE_CONSOLE_EMAIL=1 for local testing.'
+        )
+
+    if not password and not remote_smtp and not force_console and not str(backend).endswith('console.EmailBackend'):
+        # Allow unauthenticated SMTP for local mail testing with MailHog/MailCatcher.
+        logger.info('No EMAIL_HOST_PASSWORD set; attempting local SMTP delivery without authentication.')
 
     if not host:
         raise ImproperlyConfigured(
@@ -3481,6 +3496,16 @@ def _send_mail_with_fallback(subject: str, message: str, sender: str, recipients
     )
     try:
         conn.open()
+        # If backend exposed the raw smtplib connection, enable debug logging
+        try:
+            raw = getattr(conn, 'connection', None)
+            if raw is not None:
+                try:
+                    raw.set_debuglevel(1)
+                except Exception:
+                    pass
+        except Exception:
+            pass
     except smtplib.SMTPAuthenticationError as exc:
         logger.exception('SMTP authentication failed: %s', exc)
         # Provide a clear, actionable error for the caller
@@ -3490,8 +3515,29 @@ def _send_mail_with_fallback(subject: str, message: str, sender: str, recipients
         raise
 
     try:
-        send_mail(subject, message, sender, recipients, fail_silently=False, connection=conn)
-        return {'ok': True, 'mode': 'smtp'}
+        # For SMTP delivery, use the authenticated SMTP user as the actual
+        # envelope sender. If the public sender is a friendly display name,
+        # preserve that name while sending from the Gmail account itself.
+        def build_from_address(sender_value: str, smtp_user: str) -> str:
+            sender_value = (sender_value or '').strip()
+            smtp_user = (smtp_user or '').strip()
+            if not smtp_user:
+                return sender_value or smtp_user
+            if sender_value and '<' in sender_value and '>' in sender_value:
+                display_name = sender_value.split('<')[0].strip()
+                if display_name:
+                    return f'{display_name} <{smtp_user}>'
+            if sender_value and '@' not in sender_value:
+                return f'{sender_value} <{smtp_user}>'
+            return smtp_user
+
+        from_email = build_from_address(sender, user)
+        from django.core.mail import EmailMessage
+        msg = EmailMessage(subject, message, from_email=from_email, to=recipients)
+        sent = conn.send_messages([msg])
+        if not sent:
+            raise Exception('SMTP send did not deliver any messages.')
+        return {'ok': True, 'mode': 'smtp', 'from': from_email, 'sent': sent}
     except smtplib.SMTPAuthenticationError as exc:
         logger.exception('SMTP authentication failed during send: %s', exc)
         raise Exception('SMTP authentication failed. Verify EMAIL_HOST_USER and EMAIL_HOST_PASSWORD (for Gmail use an app password) and check account security settings.') from exc
@@ -3519,6 +3565,11 @@ def send_employee_email(request, employee_id: int):
         return JsonResponse({'error': 'Employee not found'}, status=404)
     if not emp.email:
         return JsonResponse({'error': 'Employee has no email address registered'}, status=400)
+
+    try:
+        validate_email(emp.email)
+    except ValidationError:
+        return JsonResponse({'error': 'Employee email address is invalid'}, status=400)
 
     try:
         payload = json.loads(request.body.decode('utf-8'))
@@ -3593,11 +3644,16 @@ def send_bulk_employee_email(request):
 
         count = 0
         failed = []
+        modes = set()
         for emp in employees:
             try:
                 result = _send_mail_with_fallback(subject, message, sender, [emp.email])
                 if result.get('ok'):
                     count += 1
+                    if result.get('mode'):
+                        modes.add(result.get('mode'))
+                else:
+                    failed.append({'id': emp.id, 'email': emp.email, 'error': f'unexpected result {result}'})
             except Exception as e:
                 logger.exception("Bulk email error for %s: %s", emp.email, e)
                 failed.append({'id': emp.id, 'email': emp.email, 'error': str(e)})
@@ -3605,7 +3661,8 @@ def send_bulk_employee_email(request):
         if count == 0:
             return JsonResponse({'error': 'No emails were sent.', 'failed': failed, 'skipped': skipped_emails}, status=500)
 
-        return JsonResponse({'ok': True, 'count': count, 'attempted': attempted_emails, 'failed': failed, 'skipped': skipped_emails, 'mode': 'console' if count and not failed else 'smtp'})
+        final_mode = 'smtp' if 'smtp' in modes else ('console' if 'console' in modes else 'unknown')
+        return JsonResponse({'ok': True, 'count': count, 'attempted': attempted_emails, 'failed': failed, 'skipped': skipped_emails, 'mode': final_mode})
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
 

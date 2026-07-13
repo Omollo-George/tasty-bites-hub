@@ -1015,9 +1015,8 @@ const ProfessionalCustomerHome = () => {
                   Find Food
                 </button>
               </div>
-              <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
+              <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <button type="button" onClick={() => scrollToCategory(data.categories[0])} className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-white transition hover:bg-white/10">Browse Menu</button>
-                <Link to="/track" className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-white transition hover:bg-white/10">My Orders</Link>
               </div>
               <div className="mt-4 overflow-x-auto no-scrollbar">
                 <div className="flex gap-4 py-2">

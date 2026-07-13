@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { getApiUrl, getSseUrl } from '@/lib/api'
+import { createSse } from '@/lib/sse'
 import { getAdminToken } from '@/lib/admin-session'
 
 const normalizeStatus = (status: string, isPaid?: boolean) => {
@@ -174,15 +175,11 @@ const OrdersTable: React.FC = () => {
 
   // Server-Sent Events: subscribe for instant updates when orders change
   useEffect(() => {
-    let es: EventSource | null = null;
-    try {
-      es = new EventSource(getSseUrl('/payments/stream/'));
-      es.onmessage = (e) => {
+    const sse = createSse(getSseUrl('/payments/stream/'), {
+      onmessage: (e) => {
         try {
           const payload = JSON.parse(e.data);
           if (payload && payload.type === 'order_update') {
-            // Debounce SSE-triggered refetches to batch rapid updates and
-            // avoid small layout jumps caused by frequent refreshes.
             if (sseDebounceRef.current) window.clearTimeout(sseDebounceRef.current)
             sseDebounceRef.current = window.setTimeout(() => {
               fetchOrders()
@@ -192,15 +189,13 @@ const OrdersTable: React.FC = () => {
         } catch (err) {
           // ignore parse errors
         }
-      };
-      es.onerror = (err) => {
+      },
+      onerror: (err) => {
         console.error('SSE error', err);
-        if (es) { es.close(); es = null; }
-      };
-    } catch (err) {
-      console.error('Failed to open EventSource', err);
-    }
-    return () => { if (es) es.close(); };
+      },
+      retryDelayMs: 3000,
+    })
+    return () => { sse.close(); };
   }, [statusFilter]);
 
   // old checkbox toggle removed; using explicit status selector now

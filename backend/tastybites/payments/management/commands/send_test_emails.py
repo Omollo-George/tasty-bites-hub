@@ -1,5 +1,7 @@
 from django.core.management.base import BaseCommand, CommandError
 from django.conf import settings
+from django.core.validators import validate_email
+from django.core.exceptions import ValidationError
 from payments.models import Employee
 
 # Use the app's fallback sender so test commands respect console fallback
@@ -32,7 +34,14 @@ class Command(BaseCommand):
         else:
             qs = Employee.objects.filter(id__in=ids).exclude(email__isnull=True).exclude(email='')
 
-        recipients = list(qs.values_list('email', flat=True))
+        recipients = []
+        for email in qs.values_list('email', flat=True):
+            try:
+                validate_email(email)
+                recipients.append(email)
+            except ValidationError:
+                self.stdout.write(self.style.WARNING(f'Skipping invalid email address: {email}'))
+
         if not recipients:
             self.stdout.write(self.style.WARNING('No recipients found (no employees with valid email addresses).'))
             return
@@ -51,8 +60,8 @@ class Command(BaseCommand):
                 try:
                     res = _send_mail_with_fallback(subject, message, getattr(settings, 'DEFAULT_FROM_EMAIL', None), [r])
                     mode = res.get('mode') if isinstance(res, dict) else 'unknown'
-                    if mode == 'smtp' or mode == 'console':
-                        self.stdout.write(self.style.SUCCESS(f'Sent to {r} (mode={mode})'))
+                    if res.get('ok') and mode in ('smtp', 'console'):
+                        self.stdout.write(self.style.SUCCESS(f'Sent to {r} (mode={mode}, from={res.get("from", getattr(settings, "EMAIL_HOST_USER", getattr(settings, "DEFAULT_FROM_EMAIL", "")))})'))
                         successes += 1
                     else:
                         self.stdout.write(self.style.ERROR(f'Failed {r}: unexpected result {res}'))
