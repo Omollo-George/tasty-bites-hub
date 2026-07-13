@@ -58,6 +58,7 @@ const Reports: React.FC = () => {
   const [loading, setLoading] = useState(false)
   const [savingWastage, setSavingWastage] = useState(false)
   const [savingMisc, setSavingMisc] = useState(false)
+  const [hourlyExpanded, setHourlyExpanded] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
   const makeReportParams = () => {
@@ -151,6 +152,8 @@ const Reports: React.FC = () => {
             cash_revenue: 0,
             mpesa_revenue: 0,
             food_cost: 0,
+            sold_stock_cost: 0,
+            stock_inventory_cost: 0,
             wastage: 0,
             miscellaneous: 0,
             profit: 0,
@@ -166,9 +169,25 @@ const Reports: React.FC = () => {
         return
       }
 
-      setData(json)
-      setWastageLogs(Array.isArray(json.wastage) ? json.wastage : [])
-      setMiscLogs(Array.isArray(json.miscellaneous) ? json.miscellaneous : [])
+      const normalizedData = {
+        ...json,
+        totals: {
+          revenue: Number(json.totals?.revenue) || 0,
+          cash_revenue: Number(json.totals?.cash_revenue) || 0,
+          mpesa_revenue: Number(json.totals?.mpesa_revenue) || 0,
+          food_cost: Number(json.totals?.food_cost) || 0,
+          sold_stock_cost: Number(json.totals?.sold_stock_cost) || 0,
+          stock_inventory_cost: Number(json.totals?.stock_inventory_cost) || 0,
+          wastage: Number(json.totals?.wastage) || 0,
+          miscellaneous: Number(json.totals?.miscellaneous) || 0,
+          profit: Number(json.totals?.profit) || 0,
+          food_cost_ratio: Number(json.totals?.food_cost_ratio) || 0,
+        },
+      }
+
+      setData(normalizedData as ReportData)
+      setWastageLogs(Array.isArray(normalizedData.wastage) ? normalizedData.wastage : [])
+      setMiscLogs(Array.isArray(normalizedData.miscellaneous) ? normalizedData.miscellaneous : [])
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unknown error'
       console.error('Error fetching report:', message)
@@ -600,7 +619,16 @@ const Reports: React.FC = () => {
 
       <div className="grid grid-cols-1 xl:grid-cols-[0.7fr_0.3fr] gap-6">
         <section className="bg-slate-900 p-6 rounded-xl shadow-card border border-slate-800">
-          <h3 className="font-semibold text-xl text-slate-100 mb-4">Hourly Sales</h3>
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-4">
+            <h3 className="font-semibold text-xl text-slate-100">Hourly Sales</h3>
+            <button
+              type="button"
+              onClick={() => setHourlyExpanded((prev) => !prev)}
+              className="inline-flex items-center gap-2 rounded-full border border-slate-700 bg-slate-800 px-4 py-2 text-sm font-semibold text-slate-100 hover:bg-slate-700"
+            >
+              {hourlyExpanded ? 'Collapse details' : 'Expand details'}
+            </button>
+          </div>
           {loading ? (
             <p className="text-slate-400">Loading hourly data…</p>
           ) : (
@@ -610,14 +638,20 @@ const Reports: React.FC = () => {
                   <ReportsCharts hourlyData={hourlyData} />
                 </Suspense>
               </div>
-              <div className="grid grid-cols-1 gap-3">
-                {hourlyData.slice(0, 24).map((row) => (
-                  <div key={row.hour} className="flex items-center justify-between rounded-xl border border-slate-700 p-4"> {/* Changed border and padding */}
-                    <span className="text-slate-100">{row.label}</span> {/* Added text color */}
-                    <span>{row.orders} orders • {new Intl.NumberFormat('en-KE', { style: 'currency', currency: 'KES' }).format(row.revenue)}</span>
-                  </div>
-                ))}
-              </div>
+              {hourlyExpanded ? (
+                <div className="grid grid-cols-1 gap-3">
+                  {hourlyData.slice(0, 24).map((row) => (
+                    <div key={row.hour} className="flex items-center justify-between rounded-xl border border-slate-700 p-4">
+                      <span className="text-slate-100">{row.label}</span>
+                      <span>{row.orders} orders • {new Intl.NumberFormat('en-KE', { style: 'currency', currency: 'KES' }).format(row.revenue)}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="rounded-xl border border-slate-700 bg-slate-800/70 p-4 text-slate-400">
+                  Hourly details are hidden. Click expand to show the hourly order breakdown.
+                </div>
+              )}
             </div>
           )}
         </section>
@@ -635,8 +669,8 @@ const Reports: React.FC = () => {
               <p className="text-xs text-slate-500 mt-1">Cost Ratio: {data?.totals.food_cost_ratio}%</p>
             </div>
             <div className="rounded-xl border border-slate-700 p-4">
-              <p className="text-sm text-slate-400">Stock Cost (Menu Inventory)</p>
-              <p className="text-lg font-semibold text-cyan-400">{data ? new Intl.NumberFormat('en-KE', { style: 'currency', currency: 'KES' }).format(data.totals.sold_stock_cost) : '-'}</p>
+              <p className="text-sm text-slate-400">Inventory Value (Stock On Hand)</p>
+              <p className="text-lg font-semibold text-cyan-400">{data ? new Intl.NumberFormat('en-KE', { style: 'currency', currency: 'KES' }).format(data.totals.stock_inventory_cost) : '-'}</p>
             </div>
             <div className="rounded-xl border border-slate-700 p-4">
               <p className="text-sm text-slate-400">Total Logged Cost</p>

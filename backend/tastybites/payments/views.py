@@ -25,9 +25,10 @@ from django.utils import timezone
 from django.core.mail import send_mail
 from django.views.decorators.csrf import csrf_exempt
 from django.db import connection, utils as db_utils
-from django.core.exceptions import FieldError
+from django.core.exceptions import FieldError, ImproperlyConfigured
 from datetime import timedelta
 from .models import AdminToken, AdminUser, AppSettings, MenuItem, Transaction, Table, Order, OrderItem, WastageLog, Employee, StockLog, AdminSessionLog, StaffActivity, MiscellaneousExpense, StaffToken, Review
+import smtplib
 
 logger = logging.getLogger(__name__)
 
@@ -64,7 +65,7 @@ def _process_deferred_stock_updates(items_data):
                 mi = _resolve_menu_item_from_payload(item)
                 
                 if mi:
-                    mi.stock_level = (mi.stock_level or 0) - quantity
+                    mi.stock_level = max(0, (mi.stock_level or 0) - quantity)
                     mi.save(update_fields=['stock_level'])
                     
                     # Log stock change
@@ -74,6 +75,16 @@ def _process_deferred_stock_updates(items_data):
                             quantity=-quantity,
                             cost=float(Decimal(str(cost or 0)))
                         )
+                    except Exception:
+                        pass
+
+                    try:
+                        _emit_event('stock_update', {
+                            'item_id': mi.id,
+                            'name': mi.name,
+                            'stock_level': mi.stock_level,
+                            'min_stock_level': mi.min_stock_level,
+                        })
                     except Exception:
                         pass
                     
@@ -2295,10 +2306,46 @@ def menu_item_update(request, item_id: int):
         except (TypeError, ValueError, InvalidOperation):
             return JsonResponse({'error': 'invalid food_cost'}, status=400)
 
+    if 'stock_level' in payload:
+        try:
+            stock_level = int(payload.get('stock_level'))
+            if stock_level < 0:
+                return JsonResponse({'error': 'stock_level cannot be negative'}, status=400)
+            item.stock_level = stock_level
+        except (TypeError, ValueError):
+            return JsonResponse({'error': 'invalid stock_level'}, status=400)
+
+    if 'min_stock_level' in payload:
+        try:
+            min_stock_level = int(payload.get('min_stock_level'))
+            if min_stock_level < 0:
+                return JsonResponse({'error': 'min_stock_level cannot be negative'}, status=400)
+            item.min_stock_level = min_stock_level
+        except (TypeError, ValueError):
+            return JsonResponse({'error': 'invalid min_stock_level'}, status=400)
+
     if item.price < 0 or item.food_cost < 0:
         return JsonResponse({'error': 'values must be non-negative'}, status=400)
 
     item.save()
+
+    try:
+        _emit_event('stock_update', {
+            'item_id': item.id,
+            'name': item.name,
+            'stock_level': item.stock_level,
+            'min_stock_level': item.min_stock_level,
+        })
+        if item.stock_level is not None and item.min_stock_level is not None and item.stock_level <= item.min_stock_level:
+            _emit_event('stock_alert', {
+                'item_id': item.id,
+                'name': item.name,
+                'stock_level': item.stock_level,
+                'min_stock_level': item.min_stock_level,
+            })
+    except Exception:
+        pass
+
     return JsonResponse({'menu_item': _serialize_menu_item(item)})
 
 @csrf_exempt
@@ -2338,6 +2385,24 @@ def menu_item_stock_update(request, item_id: int):
             return JsonResponse({'error': 'invalid min_stock_level'}, status=400)
 
     item.save()
+
+    try:
+        _emit_event('stock_update', {
+            'item_id': item.id,
+            'name': item.name,
+            'stock_level': item.stock_level,
+            'min_stock_level': item.min_stock_level,
+        })
+        if item.stock_level is not None and item.min_stock_level is not None and item.stock_level <= item.min_stock_level:
+            _emit_event('stock_alert', {
+                'item_id': item.id,
+                'name': item.name,
+                'stock_level': item.stock_level,
+                'min_stock_level': item.min_stock_level,
+            })
+    except Exception:
+        pass
+
     return JsonResponse({'menu_item': _serialize_menu_item(item)})
 
 @csrf_exempt
@@ -2351,14 +2416,45 @@ def admin_add_stock(request):
 
     try:
         payload = json.loads(request.body.decode('utf-8'))
-        item_id = payload.get('item_id')
-        quantity = int(payload.get('quantity', 0))
-        cost = Decimal(str(payload.get('cost', 0)))
-        created_at_str = payload.get('created_at')
-        
-        item = MenuItem.objects.get(id=item_id)
-    except (MenuItem.DoesNotExist, ValueError, InvalidOperation, Exception):
+    except Exception:
         return JsonResponse({'error': 'invalid_request'}, status=400)
+
+    item_id = payload.get('item_id')
+    try:
+        item = MenuItem.objects.get(id=item_id)
+    except (MenuItem.DoesNotExist, ValueError, TypeError):
+        return JsonResponse({'error': 'invalid_request'}, status=400)
+
+    try:
+        quantity = int(payload.get('quantity', 0))
+        if quantity <= 0:
+            return JsonResponse({'error': 'quantity must be a positive integer'}, status=400)
+    except (TypeError, ValueError):
+        return JsonResponse({'error': 'invalid quantity'}, status=400)
+
+    try:
+        cost = Decimal(str(payload.get('cost', 0)))
+        if cost < 0:
+            return JsonResponse({'error': 'cost cannot be negative'}, status=400)
+    except (TypeError, ValueError, InvalidOperation):
+        return JsonResponse({'error': 'invalid cost'}, status=400)
+
+    created_at_str = payload.get('created_at')
+
+    if 'price' in payload:
+        try:
+            item.price = Decimal(str(payload.get('price')))
+        except (TypeError, ValueError, InvalidOperation):
+            return JsonResponse({'error': 'invalid price'}, status=400)
+
+    if 'food_cost' in payload:
+        try:
+            item.food_cost = Decimal(str(payload.get('food_cost')))
+        except (TypeError, ValueError, InvalidOperation):
+            return JsonResponse({'error': 'invalid food_cost'}, status=400)
+
+    if item.price < 0 or item.food_cost < 0:
+        return JsonResponse({'error': 'values must be non-negative'}, status=400)
 
     created_at = timezone.now()
     if created_at_str:
@@ -2373,7 +2469,76 @@ def admin_add_stock(request):
     item.stock_level += quantity
     item.save()
 
-    return JsonResponse({'ok': True, 'new_stock': item.stock_level})
+    try:
+        _emit_event('stock_update', {
+            'item_id': item.id,
+            'name': item.name,
+            'stock_level': item.stock_level,
+            'min_stock_level': item.min_stock_level,
+        })
+    except Exception:
+        pass
+
+    return JsonResponse({'menu_item': _serialize_menu_item(item)})
+
+@csrf_exempt
+def admin_stock_availability(request):
+    """Return stock availability for a given date/time."""
+    if request.method != 'GET':
+        return HttpResponseBadRequest('Only GET allowed')
+
+    if not _is_admin(request):
+        return JsonResponse({'error': 'unauthorized'}, status=403)
+
+    requested_at_str = request.GET.get('at')
+    if not requested_at_str:
+        return JsonResponse({'error': 'at parameter is required'}, status=400)
+
+    try:
+        requested_at = datetime.datetime.fromisoformat(requested_at_str)
+        if timezone.is_naive(requested_at):
+            requested_at = timezone.make_aware(requested_at)
+    except (ValueError, TypeError):
+        return JsonResponse({'error': 'invalid at datetime format'}, status=400)
+
+    item_id = request.GET.get('item_id')
+    stock_logs = StockLog.objects.filter(created_at__gt=requested_at)
+    if item_id:
+        try:
+            item_id_int = int(item_id)
+        except (TypeError, ValueError):
+            return JsonResponse({'error': 'invalid item_id'}, status=400)
+        stock_logs = stock_logs.filter(item_id=item_id_int)
+
+    log_totals = {
+        log['item_id']: log['total_quantity']
+        for log in stock_logs.values('item_id').annotate(total_quantity=Sum('quantity'))
+    }
+
+    if item_id:
+        item = MenuItem.objects.filter(id=item_id_int).values(
+            'id', 'name', 'price', 'food_cost', 'stock_level', 'min_stock_level'
+        ).first()
+        if not item:
+            return JsonResponse({'error': 'item_not_found'}, status=404)
+        item_stock_at_time = int(item['stock_level'] - Decimal(str(log_totals.get(item['id'], 0))))
+        item['stock_at_time'] = item_stock_at_time
+        return JsonResponse({
+            'requested_at': requested_at.isoformat(),
+            'items': [item],
+        })
+
+    items = []
+    for item in MenuItem.objects.all().values('id', 'name', 'price', 'food_cost', 'stock_level', 'min_stock_level'):
+        item_stock_at_time = int(item['stock_level'] - Decimal(str(log_totals.get(item['id'], 0))))
+        item['stock_at_time'] = item_stock_at_time
+        items.append(item)
+
+    return JsonResponse({
+        'requested_at': requested_at.isoformat(),
+        'items': items,
+    })
+
 
 def most_consumed_stock(request):
     """Returns top consumed stock items based on orders."""
@@ -3271,6 +3436,59 @@ def employee_detail(request, employee_id: int):
 
     return HttpResponseBadRequest('Method not allowed')
 
+def _send_mail_with_fallback(subject: str, message: str, sender: str, recipients: list[str]):
+    """Send mail through SMTP when possible and fail clearly when no real delivery path is available."""
+    backend = getattr(settings, 'EMAIL_BACKEND', None)
+    host = str(getattr(settings, 'EMAIL_HOST', '') or '').strip()
+    user = str(getattr(settings, 'EMAIL_HOST_USER', '') or '').strip()
+    password = str(getattr(settings, 'EMAIL_HOST_PASSWORD', '') or '').strip()
+    force_console = os.environ.get('FORCE_CONSOLE_EMAIL', '0') == '1'
+
+    if force_console or str(backend).endswith('console.EmailBackend'):
+        send_mail(subject, message, sender, recipients, fail_silently=False)
+        return {'ok': True, 'mode': 'console'}
+
+    if not host:
+        raise ImproperlyConfigured(
+            'SMTP email delivery is not configured. Set EMAIL_HOST, EMAIL_HOST_USER, and EMAIL_HOST_PASSWORD or explicitly enable FORCE_CONSOLE_EMAIL=1 for local testing.'
+        )
+
+    from django.core.mail import get_connection
+
+    conn = get_connection(
+        host=host,
+        port=int(getattr(settings, 'EMAIL_PORT', 587) or 587),
+        username=user or None,
+        password=password or None,
+        use_tls=bool(getattr(settings, 'EMAIL_USE_TLS', False)),
+        use_ssl=False,
+    )
+    try:
+        conn.open()
+    except smtplib.SMTPAuthenticationError as exc:
+        logger.exception('SMTP authentication failed: %s', exc)
+        # Provide a clear, actionable error for the caller
+        raise Exception('SMTP authentication failed. Verify EMAIL_HOST_USER and EMAIL_HOST_PASSWORD (for Gmail use an app password) and check account security settings.') from exc
+    except Exception as exc:
+        logger.warning('SMTP connection unavailable: %s', exc)
+        raise
+
+    try:
+        send_mail(subject, message, sender, recipients, fail_silently=False, connection=conn)
+        return {'ok': True, 'mode': 'smtp'}
+    except smtplib.SMTPAuthenticationError as exc:
+        logger.exception('SMTP authentication failed during send: %s', exc)
+        raise Exception('SMTP authentication failed. Verify EMAIL_HOST_USER and EMAIL_HOST_PASSWORD (for Gmail use an app password) and check account security settings.') from exc
+    except Exception as exc:
+        logger.warning('SMTP send failed: %s', exc)
+        raise
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+
 @csrf_exempt
 def send_employee_email(request, employee_id: int):
     """API endpoint for the system to send an email to an employee."""
@@ -3295,24 +3513,16 @@ def send_employee_email(request, employee_id: int):
             return JsonResponse({'error': 'Message body is required'}, status=400)
 
         sender = getattr(settings, 'EMAIL_HOST_USER', getattr(settings, 'DEFAULT_FROM_EMAIL', 'admin@tastybites.com'))
-        from django.core.mail import get_connection
-        conn = get_connection()
+
         try:
-            conn.open()
-            send_mail(
-                subject,
-                message,
-                sender,
-                [emp.email],
-                fail_silently=False,
-                connection=conn,
-            )
-        finally:
-            try:
-                conn.close()
-            except Exception:
-                pass
-        return JsonResponse({'ok': True})
+            result = _send_mail_with_fallback(subject, message, sender, [emp.email])
+            return JsonResponse(result)
+        except Exception as exc:
+            logger.exception('Failed to send employee email for %s: %s', emp.email, exc)
+            msg = str(exc)
+            if 'SMTP authentication failed' in msg or 'Authentication' in msg:
+                return JsonResponse({'error': 'SMTP authentication failed. Ensure EMAIL_HOST_USER and EMAIL_HOST_PASSWORD are correct (Gmail requires an app password) and check account security settings.'}, status=401)
+            return JsonResponse({'error': f'Email delivery failed: {exc}'}, status=500)
     except Exception as e:
         return JsonResponse({'error': f"Failed to send email: {str(e)}"}, status=500)
 
@@ -3365,48 +3575,21 @@ def send_bulk_employee_email(request):
 
         sender = getattr(settings, 'EMAIL_HOST_USER', getattr(settings, 'DEFAULT_FROM_EMAIL', 'admin@tastybites.com'))
 
-        # Diagnose connection upfront
-        from django.core.mail import get_connection
-        conn = get_connection()
-        try:
-            conn.open()
-        except Exception as e:
-            logger.exception('Failed to open mail connection: %s', e)
-            return JsonResponse({'error': f'Could not connect to mail server: {str(e)}', 'settings': {
-                'EMAIL_BACKEND': getattr(settings, 'EMAIL_BACKEND', None),
-                'EMAIL_HOST': getattr(settings, 'EMAIL_HOST', None),
-                'EMAIL_PORT': getattr(settings, 'EMAIL_PORT', None),
-                'EMAIL_USE_TLS': getattr(settings, 'EMAIL_USE_TLS', None),
-                'EMAIL_HOST_USER': bool(getattr(settings, 'EMAIL_HOST_USER', None)),
-            }, 'skipped': skipped_emails}, status=500)
-
         count = 0
         failed = []
         for emp in employees:
             try:
-                send_mail(
-                    subject,
-                    message,
-                    sender,
-                    [emp.email],
-                    fail_silently=False,
-                    connection=conn,
-                )
-                count += 1
+                result = _send_mail_with_fallback(subject, message, sender, [emp.email])
+                if result.get('ok'):
+                    count += 1
             except Exception as e:
                 logger.exception("Bulk email error for %s: %s", emp.email, e)
                 failed.append({'id': emp.id, 'email': emp.email, 'error': str(e)})
 
-        try:
-            conn.close()
-        except Exception:
-            pass
-
         if count == 0:
-            # No successful sends
             return JsonResponse({'error': 'No emails were sent.', 'failed': failed, 'skipped': skipped_emails}, status=500)
 
-        return JsonResponse({'ok': True, 'count': count, 'attempted': attempted_emails, 'failed': failed, 'skipped': skipped_emails})
+        return JsonResponse({'ok': True, 'count': count, 'attempted': attempted_emails, 'failed': failed, 'skipped': skipped_emails, 'mode': 'console' if count and not failed else 'smtp'})
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
 
@@ -3947,12 +4130,45 @@ def create_order(request):
                         })
                 except Exception:
                     pass
+
+                try:
+                    _emit_event('stock_update', {
+                        'item_id': mi.id,
+                        'name': mi.name,
+                        'stock_level': mi.stock_level,
+                        'min_stock_level': mi.min_stock_level,
+                    })
+                except Exception:
+                    pass
         except Exception:
             pass
         total += price * quantity
 
     total += delivery_cost
     order.total_amount = total
+
+    waiter_id_raw = payload.get('waiter_id')
+    waiter_name_raw = (payload.get('waiter_name') or '').strip()
+    if waiter_id_raw not in (None, ''):
+        try:
+            waiter_obj = Employee.objects.filter(id=int(waiter_id_raw)).first()
+        except (TypeError, ValueError):
+            return JsonResponse({'error': 'invalid waiter_id'}, status=400)
+        if not waiter_obj:
+            return JsonResponse({'error': 'waiter_not_found'}, status=404)
+        order.waiter = waiter_obj
+        order.waiter_name = waiter_obj.name
+    elif waiter_name_raw:
+        order.waiter_name = waiter_name_raw
+        waiter_obj = Employee.objects.filter(name__iexact=waiter_name_raw).first()
+        if waiter_obj:
+            order.waiter = waiter_obj
+    else:
+        staff = _get_staff_employee(request)
+        if staff:
+            order.waiter = staff
+            order.waiter_name = staff.name
+
     order.save()
 
     if table:
@@ -5067,6 +5283,12 @@ def create_pos_order(request):
             except Exception:
                 waiter_obj = None
 
+        if not waiter_obj and not waiter_name_raw:
+            staff = _get_staff_employee(request)
+            if staff:
+                waiter_obj = staff
+                waiter_name_raw = staff.name
+
         # Create order - fast path
         order = Order.objects.create(
             table=table,
@@ -5302,7 +5524,12 @@ def add_to_pos_order(request, order_id):
                     order.waiter = waiter_obj
             except Exception:
                 pass
-        
+        elif not order.waiter and not order.waiter_name:
+            staff = _get_staff_employee(request)
+            if staff:
+                order.waiter = staff
+                order.waiter_name = staff.name
+
         order.save(update_fields=['total_amount', 'waiter_name', 'waiter'])
         
         # ASYNC: Stock updates and alerts happen asynchronously in background thread

@@ -6,6 +6,8 @@ import { Download, ChevronDown } from 'lucide-react'
 const AdminHome: React.FC = () => {
   const [loading, setLoading] = useState(false)
   const [isOpen, setIsOpen] = useState(true)
+  const [clearCashierLoading, setClearCashierLoading] = useState(false)
+  const [clearCashierMessage, setClearCashierMessage] = useState('')
 
   const downloadBackup = async () => {
     try {
@@ -91,6 +93,36 @@ const AdminHome: React.FC = () => {
           >
             {loading ? 'Clearing...' : 'Clear All Operational Data'}
           </button>
+          <button
+            onClick={async () => {
+              if (!window.confirm('Clear cashier activity (payments, recent transactions) from the system? This cannot be undone.')) return
+              const token = localStorage.getItem('admin_token')
+              if (!token) {
+                window.location.href = '/admin/login'
+                return
+              }
+              setClearCashierMessage('')
+              setClearCashierLoading(true)
+              try {
+                const data = await fetch(getApiUrl('/payments/admin/clear-cashier-activity/'), {
+                  method: 'POST',
+                  headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+                })
+                let body: any = {}
+                try { body = await data.json() } catch (e) { /* ignore */ }
+                setClearCashierMessage(body?.message || 'Cashier activity cleared successfully.')
+              } catch (err: any) {
+                setClearCashierMessage(err?.message || 'Failed to clear cashier activity')
+              } finally {
+                setClearCashierLoading(false)
+              }
+            }}
+            disabled={clearCashierLoading}
+            className="w-full sm:w-auto rounded-xl border border-red-900/50 bg-red-600 px-4 py-2.5 text-sm font-semibold text-white transition-all hover:bg-red-500 disabled:opacity-50 shadow-lg shadow-red-900/10"
+          >
+            {clearCashierLoading ? 'Clearing…' : 'Clear Cashier Activity'}
+          </button>
+          {clearCashierMessage ? <p className="text-sm text-slate-300 mt-2 sm:mt-0">{clearCashierMessage}</p> : null}
         </div>
       </div>
 

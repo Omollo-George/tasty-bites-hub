@@ -20,7 +20,7 @@ const AdminAutomation = lazyWithPreload(() => import("./components/AdminAutomati
 const EmployeeTable = lazyWithPreload(() => import("./pages/Admin/EmployeeTable"));
 const AdminKDS = lazyWithPreload(() => import("./pages/Admin/KDS"));
 const Cashier = lazyWithPreload(() => import("./pages/Admin/Cashier"));
-import AdminLogin from "./pages/Admin/Login";
+import AdminLogin from "./pages/Admin/Login";;
 import AdminAuthGuard from "./components/AdminAuthGuard";
 import ProfessionalCustomerHome from "./components/ProfessionalCustomerHome"; // Import the new component
 import OrderTracking from "./pages/OrderTracking";

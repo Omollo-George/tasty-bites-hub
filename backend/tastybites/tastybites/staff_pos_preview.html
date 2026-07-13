@@ -24,7 +24,7 @@
         font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
       }
       * { box-sizing: border-box; }
-      body { margin: 0; min-height: 100vh; padding: 32px; display: flex; align-items: center; justify-content: center; background: radial-gradient(circle at top, rgba(248,250,252,0.05), transparent 45%), #05101b; }
+      body { margin: 0; min-height: 100vh; padding: 32px; display: flex; align-items: center; justify-content: center; background: radial-gradient(circle at top, rgba(248,250,252,0.06), transparent 45%), #05101b; }
       .panel { width: min(580px, 100%); background: rgba(15, 23, 42, 0.98); border: 1px solid rgba(148,163,184,0.12); border-radius: 32px; box-shadow: 0 32px 80px rgba(0,0,0,0.35); overflow: hidden; }
       .panel-header { padding: 32px 32px 24px; display: grid; gap: 16px; }
       .panel-header h1 { margin: 0; font-size: clamp(1.9rem, 4vw, 2.5rem); font-weight: 800; letter-spacing: -0.03em; }
@@ -53,6 +53,74 @@
     </style>
   </head>
   <body>
+    <div class="panel">
+      <div class="panel-header">
+        <div class="header-row">
+          <span class="badge">POS cart preview</span>
+          <span class="badge">Live-style design</span>
+        </div>
+        <h1>Ready to send</h1>
+        <p>Waiter POS order summary with the same cart layout and style as the local VS Code preview.</p>
+      </div>
+      <div class="section">
+        <div class="split">
+          <div class="card">
+            <strong>Table</strong>
+            <div class="value">Unassigned</div>
+          </div>
+          <div class="card">
+            <strong>Waiter</strong>
+            <div class="value">Omollog</div>
+          </div>
+        </div>
+        <div class="order-cart">
+          <div class="title-row">
+            <h2>Order Cart</h2>
+            <div style="display:flex; gap:12px; align-items:center;">
+              <span class="price-pill">KES 2,330.00</span>
+              <button id="cart-collapse-btn" class="tap-pill" type="button">Collapse</button>
+            </div>
+          </div>
+          <div id="cart-collapsed-message" class="item-row" style="display:none; justify-content: space-between;">
+            <div class="item-details">
+              <div class="item-name">Cart hidden</div>
+              <div class="item-meta">Expand to review items in this order.</div>
+            </div>
+          </div>
+          <div class="item-list">
+            <div class="item-row">
+              <div class="item-details">
+                <div class="item-name">Classic Smash Burger</div>
+                <div class="item-meta">Double patty, cheddar, pickles</div>
+              </div>
+              <div class="item-qty">x2</div>
+            </div>
+            <div class="item-row">
+              <div class="item-details">
+                <div class="item-name">Loaded Fries</div>
+                <div class="item-meta">Cheese sauce, bacon bits</div>
+              </div>
+              <div class="item-qty">x1</div>
+            </div>
+            <div class="item-row">
+              <div class="item-details">
+                <div class="item-name">Classic Milkshake</div>
+                <div class="item-meta">Vanilla, chocolate, or strawberry</div>
+              </div>
+              <div class="item-qty">x1</div>
+            </div>
+            <div class="footer">
+              <div class="total">KES 2,330.00</div>
+              <div class="status">Ready to send</div>
+            </div>
+          </div>
+        </div>
+        <div class="card">
+          <strong>Quick action</strong>
+          <div class="tap-pill">TAP TO ADD</div>
+        </div>
+      </div>
+    </div>
     <script>
       document.addEventListener('DOMContentLoaded', function () {
         const collapseBtn = document.getElementById('cart-collapse-btn');
@@ -75,73 +143,5 @@
         });
       });
     </script>
-    <div class="panel">
-      <div class="panel-header">
-        <div class="header-row">
-          <span class="badge">Waiter POS</span>
-          <span class="badge">Order Cart Preview</span>
-        </div>
-        <h1>Waiter POS | Tasty Bites Hub</h1>
-        <p>See the same live-style order summary card that staff use in the local POS preview including item quantity controls, table selection, and totals.</p>
-      </div>
-      <div class="section">
-        <div class="split">
-          <div class="card">
-            <strong>Table</strong>
-            <div class="value">Unassigned</div>
-          </div>
-          <div class="card">
-            <strong>Waiter</strong>
-            <div class="value">Omollog</div>
-          </div>
-        </div>
-        <div class="order-cart">
-          <div class="title-row">
-            <h2>Order Cart</h2>
-            <div style="display:flex; gap:12px; align-items:center;">
-              <span class="price-pill">KES 0.00</span>
-              <button id="cart-collapse-btn" class="tap-pill" type="button">Collapse</button>
-            </div>
-          </div>
-          <div id="cart-collapsed-message" class="item-row" style="display:none; justify-content: space-between;">
-            <div class="item-details">
-              <div class="item-name">Cart hidden</div>
-              <div class="item-meta">Expand to review items in this order.</div>
-            </div>
-          </div>
-          <div class="item-list">
-            <div class="item-row">
-              <div class="item-details">
-                <div class="item-name">Classic Smash Burger</div>
-                <div class="item-meta">Double patty, cheddar, pickles</div>
-              </div>
-              <div class="item-qty">Qty 2</div>
-            </div>
-            <div class="item-row">
-              <div class="item-details">
-                <div class="item-name">Loaded Fries</div>
-                <div class="item-meta">Cheese sauce, bacon bits</div>
-              </div>
-              <div class="item-qty">Qty 1</div>
-            </div>
-            <div class="item-row">
-              <div class="item-details">
-                <div class="item-name">Classic Milkshake</div>
-                <div class="item-meta">Vanilla, chocolate, or strawberry</div>
-              </div>
-              <div class="item-qty">Qty 1</div>
-            </div>
-            <div class="footer">
-              <div class="total">KES 2,330.00</div>
-              <div class="status">Ready to send</div>
-            </div>
-          </div>
-        </div>
-        <div class="card">
-          <strong>Quick action</strong>
-          <div class="tap-pill">TAP TO ADD</div>
-        </div>
-      </div>
-    </div>
   </body>
 </html>

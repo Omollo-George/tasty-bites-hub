@@ -565,7 +565,7 @@ const MenuSection = () => {
               </div>
             ))}
           </div>
-          <aside className="bg-[#1F2937] rounded-xl p-6 shadow-card border border-[#1F2937]">
+          <aside className="bg-[#1F2937] rounded-xl p-6 shadow-card border border-[#1F2937] mt-[35px] self-start">
             <div className="mb-6">
               <p className="text-sm text-[#E5E7EB]">Session Management</p>
               <h3 className="font-display text-2xl text-[#E5E7EB]">Table Billing</h3>

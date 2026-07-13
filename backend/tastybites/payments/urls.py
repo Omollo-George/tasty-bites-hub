@@ -50,6 +50,7 @@ urlpatterns = [
     # Stock Management
     path('stock/most-consumed/', views.most_consumed_stock, name='most_consumed_stock'),
     path('admin/stock/add/', views.admin_add_stock, name='admin_add_stock'),
+    path('admin/stock/availability/', views.admin_stock_availability, name='admin_stock_availability'),
 
     # Staff Briefing
     path('staff/briefing/', views.staff_briefing, name='staff_briefing'),

@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useMemo } from 'react'; // Removed Fragment import
 import { Search, Filter, AlertTriangle, CheckCircle, XCircle, Trash2, Edit2, Plus } from 'lucide-react'; // Removed Fragment import
-import { getApiUrl, apiFetch } from '@/lib/api';
+import { getApiUrl, getSseUrl, apiFetch } from '@/lib/api';
+import { useToast } from '@/hooks/use-toast';
 import { getAdminToken } from '@/lib/admin-session';
 import { getCachedStock, clearStockCache, preloadStockData } from '@/lib/admin-data-cache';
 
@@ -19,6 +20,16 @@ type MenuItemType = {
   // Add other fields from MenuItemType if needed for editing
 };
 
+type StockAvailabilityItem = {
+  id: number;
+  name: string;
+  price: number;
+  food_cost: number;
+  stock_level: number;
+  min_stock_level: number;
+  stock_at_time: number;
+};
+
 const AdminStock: React.FC = () => {
   const [menuItems, setMenuItems] = useState<MenuItemType[]>([]);
   const [loading, setLoading] = useState(true);
@@ -32,8 +43,15 @@ const AdminStock: React.FC = () => {
     item_id: '',
     quantity: 0,
     cost: 0,
+    price: 0,
     created_at: new Date().toISOString().slice(0, 16)
   });
+  const [selectedStockItemId, setSelectedStockItemId] = useState('');
+  const [stockQueryTime, setStockQueryTime] = useState(new Date().toISOString().slice(0, 16));
+  const [availabilityAtTime, setAvailabilityAtTime] = useState<StockAvailabilityItem[] | null>(null);
+  const [availabilityLoading, setAvailabilityLoading] = useState(false);
+  const [availabilityError, setAvailabilityError] = useState<string | null>(null);
+  const [availabilityCollapsed, setAvailabilityCollapsed] = useState(false);
 
   const adminToken = getAdminToken() || ''; 
 
@@ -80,6 +98,47 @@ const AdminStock: React.FC = () => {
     }
   };
 
+  const fetchStockAvailability = async () => {
+    setAvailabilityLoading(true);
+    setAvailabilityError(null);
+
+    try {
+      const params = new URLSearchParams({ at: stockQueryTime });
+      if (selectedStockItemId) {
+        params.set('item_id', selectedStockItemId);
+      }
+
+      const data: any = await apiFetch(`/payments/admin/stock/availability/?${params.toString()}`, {
+        headers: {
+          Authorization: `Bearer ${adminToken}`,
+        },
+      });
+
+      if (!Array.isArray(data.items)) {
+        setAvailabilityAtTime(null);
+        setAvailabilityError('Unexpected response from stock availability endpoint.');
+      } else {
+        setAvailabilityAtTime(data.items.map((item: any) => ({
+          id: Number(item.id),
+          name: String(item.name),
+          price: Number(item.price || 0),
+          food_cost: Number(item.food_cost || 0),
+          stock_level: Number(item.stock_level || 0),
+          min_stock_level: Number(item.min_stock_level || 0),
+          stock_at_time: Number(item.stock_at_time || 0),
+        })));
+      }
+    } catch (error) {
+      console.error('Failed to fetch stock availability:', error);
+      setAvailabilityAtTime(null);
+      setAvailabilityError(error instanceof Error ? error.message : 'Unable to load stock availability.');
+    } finally {
+      setAvailabilityLoading(false);
+    }
+  };
+
+  const { toast } = useToast();
+
   useEffect(() => {
     // Try to use cached data first for instant display
     const cachedData = getCachedStock()
@@ -97,6 +156,60 @@ const AdminStock: React.FC = () => {
     // Preload for next visit
     preloadStockData()
   }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.EventSource) {
+      return;
+    }
+
+    let es: EventSource | null = null
+    try {
+      es = new EventSource(getSseUrl('/payments/stream/'))
+      es.onmessage = (event) => {
+        try {
+          const payload = JSON.parse(event.data)
+          if (!payload || !payload.type) return
+
+          if (payload.type === 'stock_update' && payload.data) {
+            const data = payload.data
+            setMenuItems((items) => items.map((item) => {
+              if (item.id !== Number(data.item_id)) return item
+              return {
+                ...item,
+                stock_level: Number(data.stock_level ?? item.stock_level),
+                min_stock_level: Number(data.min_stock_level ?? item.min_stock_level),
+              }
+            }))
+          }
+
+          if (payload.type === 'stock_alert' && payload.data) {
+            const data = payload.data
+            toast({
+              title: `Low stock: ${data.name}`,
+              description: `Remaining ${data.stock_level}. Minimum ${data.min_stock_level}.`,
+              variant: 'destructive',
+            })
+          }
+        } catch (error) {
+          // ignore malformed event payloads
+        }
+      }
+      es.onerror = () => {
+        if (es) {
+          es.close()
+          es = null
+        }
+      }
+    } catch (error) {
+      console.error('Failed to open stock SSE connection', error)
+    }
+
+    return () => {
+      if (es) {
+        es.close()
+      }
+    }
+  }, [toast]);
 
   const categories = useMemo(() => ['All', ...new Set(menuItems.map(i => i.category))], [menuItems]);
 
@@ -124,8 +237,7 @@ const AdminStock: React.FC = () => {
     if (!editingItem) return;
 
     try {
-      // 1. Update basic item metadata (Name, Price, etc.)
-      const metaRes = await apiFetch(`/payments/menu-items/${editingItem.id}/update-price/`, {
+      const updateRes = await apiFetch(`/payments/menu-items/${editingItem.id}/update-price/`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -139,27 +251,17 @@ const AdminStock: React.FC = () => {
           description: editingItem.description,
           popular: editingItem.popular,
           spicy: editingItem.spicy,
-        }),
-      });
-      // 2. Update stock levels
-      const stockRes = await apiFetch(`/payments/menu-items/${editingItem.id}/update-stock/`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${adminToken}`,
-        },
-        body: JSON.stringify({
           stock_level: editingItem.stock_level,
           min_stock_level: editingItem.min_stock_level,
         }),
       });
 
-      if (metaRes.ok && stockRes.ok) {
+      if (updateRes.ok) {
         clearStockCache();
-        await fetchMenuItems(); // Refresh data
+        await fetchMenuItems(); // Refresh data to keep menu and stock in sync
         setEditingItem(null);
       } else {
-        alert('Failed to update some item details. Please check your connection.');
+        alert('Failed to update item details. Please check your connection.');
       }
     } catch (error) {
       console.error('Error updating item:', error);
@@ -194,12 +296,15 @@ const AdminStock: React.FC = () => {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${adminToken}`,
           },
-          body: JSON.stringify(stockFormData),
+          body: JSON.stringify({
+            ...stockFormData,
+            price: stockFormData.price,
+          }),
         })
         clearStockCache();
         await fetchMenuItems();
         setIsAddingStock(false);
-        setStockFormData({ item_id: '', quantity: 0, cost: 0, created_at: new Date().toISOString().slice(0, 16) });
+        setStockFormData({ item_id: '', quantity: 0, cost: 0, price: 0, created_at: new Date().toISOString().slice(0, 16) });
       } catch (err) {
         const errorMsg = err?.body || err?.message || 'Failed to add stock.'
         alert(errorMsg)
@@ -272,6 +377,92 @@ const AdminStock: React.FC = () => {
           ))}
         </div>
       </div>
+
+      <section className="bg-slate-900 border border-slate-800 p-6 rounded-2xl mb-6">
+        <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+          <div>
+            <h3 className="font-semibold text-xl text-slate-100">Stock Availability At Specific Time</h3>
+            <p className="text-sm text-slate-400">Choose a date/time and optionally an item to see the available stock then.</p>
+          </div>
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              onClick={() => setAvailabilityCollapsed((prev) => !prev)}
+              className="rounded-full border border-slate-700 bg-slate-800 px-4 py-2 text-sm font-semibold text-slate-100 hover:bg-slate-700 transition-colors"
+            >
+              {availabilityCollapsed ? 'Expand' : 'Collapse'}
+            </button>
+            <button
+              type="button"
+              onClick={fetchStockAvailability}
+              disabled={availabilityLoading}
+              className="inline-flex items-center justify-center rounded-full bg-orange-500 px-5 py-3 text-sm font-semibold text-white hover:bg-orange-600 disabled:opacity-50 transition-colors"
+            >
+              {availabilityLoading ? 'Loading…' : 'Show Availability'}
+            </button>
+          </div>
+        </div>
+
+        {!availabilityCollapsed && (
+          <>
+            <div className="mt-4 grid gap-4 sm:grid-cols-[minmax(240px,1fr)_minmax(240px,1fr)] w-full md:w-auto">
+              <div>
+                <label className="block text-sm text-slate-400 mb-1">Lookup Time</label>
+                <input
+                  type="datetime-local"
+                  value={stockQueryTime}
+                  onChange={(e) => setStockQueryTime(e.target.value)}
+                  className="w-full rounded-xl border border-slate-700 bg-slate-800 px-4 py-2.5 text-sm text-slate-100 outline-none focus:ring-2 focus:ring-orange-500/20"
+                />
+              </div>
+              <div>
+                <label className="block text-sm text-slate-400 mb-1">Focus Item (optional)</label>
+                <select
+                  value={selectedStockItemId}
+                  onChange={(e) => setSelectedStockItemId(e.target.value)}
+                  className="w-full rounded-xl border border-slate-700 bg-slate-800 px-4 py-2.5 text-sm text-slate-100 outline-none focus:ring-2 focus:ring-orange-500/20"
+                >
+                  <option value="">All Items</option>
+                  {menuItems.map(item => (
+                    <option key={item.id} value={item.id}>{item.name}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {availabilityError ? (
+              <div className="mt-4 rounded-xl border border-red-500/30 bg-red-900/20 p-4 text-sm text-red-200">
+                {availabilityError}
+              </div>
+            ) : null}
+
+            {availabilityAtTime ? (
+              <div className="mt-6 overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="border-b border-slate-700 text-sm text-slate-400">
+                      <th className="py-3">Item</th>
+                      <th className="py-3">Current Stock</th>
+                      <th className="py-3">Stock At Time</th>
+                      <th className="py-3">Min Level</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {availabilityAtTime.map((item) => (
+                      <tr key={item.id} className="border-b border-slate-700 last:border-b-0">
+                        <td className="py-3 text-slate-100">{item.name}</td>
+                        <td className="py-3 text-slate-400">{item.stock_level}</td>
+                        <td className="py-3 text-slate-100">{item.stock_at_time}</td>
+                        <td className="py-3 text-slate-400">{item.min_stock_level}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : null}
+          </>
+        )}
+      </section>
 
       {/* Filters Bar */}
       <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl flex flex-col lg:flex-row gap-4 items-center">
@@ -399,7 +590,15 @@ const AdminStock: React.FC = () => {
                 <select
                   required
                   value={stockFormData.item_id}
-                  onChange={(e) => setStockFormData({ ...stockFormData, item_id: e.target.value })}
+                  onChange={(e) => {
+                    const selectedItemId = e.target.value
+                    const item = menuItems.find((m) => String(m.id) === selectedItemId)
+                    setStockFormData({
+                      ...stockFormData,
+                      item_id: selectedItemId,
+                      price: item ? item.price : 0,
+                    })
+                  }}
                   className="w-full rounded-xl border border-slate-700 bg-slate-800 px-4 py-2.5 text-sm text-slate-100 outline-none focus:ring-2 focus:ring-orange-500/20"
                 >
                   <option value="">-- Choose Item --</option>
@@ -419,7 +618,16 @@ const AdminStock: React.FC = () => {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-400 mb-1">Cost (Total)</label>
+                  <label className="block text-sm font-medium text-slate-400 mb-1">Menu Price (Auto)</label>
+                  <input
+                    type="number"
+                    value={stockFormData.price}
+                    readOnly
+                    className="w-full rounded-xl border border-slate-700 bg-slate-800 px-4 py-2.5 text-sm text-slate-400 outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-400 mb-1">Food Cost (Total)</label>
                   <input
                     type="number"
                     required

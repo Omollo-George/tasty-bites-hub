@@ -14,15 +14,30 @@ Including another URLconf
     1. Import the include() function: from django.urls import include, path
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
+from pathlib import Path
+
 from django.contrib import admin
 from django.urls import path, include, re_path
 from django.http import JsonResponse, HttpResponse
 from django.conf import settings
 from django.conf.urls.static import static
 
+
 def health_check(request):
     """Health check endpoint for Render deployment monitoring."""
     return JsonResponse({'status': 'ok', 'service': 'tasty-bites-backend'})
+
+
+def staff_pos_preview(request):
+    preview_path = Path(__file__).resolve().parent / 'staff_pos_preview.html'
+    try:
+        response = HttpResponse(preview_path.read_text(encoding='utf-8'), content_type='text/html')
+        response['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+        response['Pragma'] = 'no-cache'
+        response['Expires'] = '0'
+        return response
+    except Exception:
+        return HttpResponse('Staff POS preview unavailable', content_type='text/plain', status=500)
 
 
 def homepage(request):
@@ -82,6 +97,8 @@ urlpatterns = [
     path('admin/<path:path>', homepage),
     path('staff/login', homepage),
     path('staff', homepage),
+    path('staff/pos', staff_pos_preview),
+    path('staff/pos/', staff_pos_preview),
     path('staff/<path:path>', homepage),
     re_path(r'^(?!(api/|payments/|media/|django-admin/)).*$', homepage),
 ]

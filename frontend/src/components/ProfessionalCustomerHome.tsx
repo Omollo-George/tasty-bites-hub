@@ -237,7 +237,7 @@ const DEFAULT_HOME_DATA: HomeData = buildDefaultHomeData();
 const ProfessionalCustomerHome = () => {
   const [data, setData] = useState<HomeData | null>(DEFAULT_HOME_DATA);
   const [scrolled, setScrolled] = useState(false);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [cart, setCart] = useState<CartItem[]>([]); // Cart state
   const [phoneNumber, setPhoneNumber] = useState('');
@@ -252,6 +252,9 @@ const ProfessionalCustomerHome = () => {
   const dragStartRef = useRef({ pointerX: 0, pointerY: 0, startX: 24, startY: 24, moved: false });
   const suppressClickRef = useRef(false);
   const cartButtonRef = useRef<HTMLButtonElement | null>(null);
+  const pointerLatestRef = useRef({ x: 0, y: 0 });
+  const rafRef = useRef<number | null>(null);
+  const dragCurrentRef = useRef({ x: 24, y: 24 });
    const [awaitingMpesaConfirm, setAwaitingMpesaConfirm] = useState(false);
   const [awaitingMpesaSimulated, setAwaitingMpesaSimulated] = useState(false);
   const [currentOrderId, setCurrentOrderId] = useState<string | null>(null); // To track order for cancellation
@@ -280,45 +283,7 @@ const ProfessionalCustomerHome = () => {
   const safetyTimeoutRef = useRef<any>(null);
 
   useEffect(() => {
-    const handleScroll = () => setScrolled(window.scrollY > 50);
-    window.addEventListener('scroll', handleScroll);
-    
-    const fetchData = async () => {
-      try {
-        const homeRes = await fetch(getApiUrl('/payments/customer/home/'));
-
-        if (!homeRes.ok) {
-          const text = await homeRes.text().catch(() => '');
-          console.error('customer_home failed response:', homeRes.status, text);
-          setError(`HTTP error! status: ${homeRes.status} from home data`);
-          return;
-        }
-
-        const homeJson = await homeRes.json();
-        if (!homeJson || !homeJson.menu_by_category) {
-          console.error('customer_home returned invalid payload:', homeJson);
-          setError('Invalid menu response from backend. Showing fallback menu.');
-          return;
-        }
-
-        setData(homeJson);
-      } catch (err: any) {
-        setError(err.message || "Failed to fetch data. Check backend connection.");
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchData();
-
-    return () => {
-      window.removeEventListener('scroll', handleScroll);
-      if (pollTimerRef.current) clearTimeout(pollTimerRef.current);
-      if (safetyTimeoutRef.current) clearTimeout(safetyTimeoutRef.current);
-    };
-  }, []);
-
-  // Lock scroll on both body and html to ensure background is strictly static
-  useEffect(() => {
+    // Lock scroll on both body and html to ensure background is strictly static
     if (showCartModal || lastOrder) {
       document.documentElement.style.overflow = 'hidden';
       document.body.style.overflow = 'hidden';
@@ -333,39 +298,64 @@ const ProfessionalCustomerHome = () => {
   }, [showCartModal, lastOrder]);
 
   useEffect(() => {
-    const handlePointerMove = (event: PointerEvent) => {
-      if (!draggingCartButton) return;
+    // Use rAF-driven updates for smoother dragging on mobile devices.
+    const maxX = () => window.innerWidth - 88;
+    const maxY = () => window.innerHeight - 88;
 
-      const dx = event.clientX - dragStartRef.current.pointerX;
-      const dy = event.clientY - dragStartRef.current.pointerY;
-      const distance = Math.sqrt(dx * dx + dy * dy);
-      if (distance > 2) {
-        dragStartRef.current.moved = true;
+    const step = () => {
+      if (!draggingCartButton) {
+        rafRef.current = null;
+        return;
       }
 
-      const nextX = dragStartRef.current.startX + dx;
-      const nextY = dragStartRef.current.startY + dy;
+      const px = pointerLatestRef.current.x;
+      const py = pointerLatestRef.current.y;
+      const dx = px - dragStartRef.current.pointerX;
+      const dy = py - dragStartRef.current.pointerY;
 
-      const maxX = window.innerWidth - 72;
-      const maxY = window.innerHeight - 72;
+      const distance = Math.hypot(dx, dy);
+      if (distance > 1) dragStartRef.current.moved = true;
 
-      setCartButtonPosition({
-         x: Math.min(Math.max(8, nextX), maxX),
-         y: Math.min(Math.max(8, nextY), maxY),
-      });
+      const nextX = Math.min(Math.max(8, dragStartRef.current.startX + dx), maxX());
+      const nextY = Math.min(Math.max(8, dragStartRef.current.startY + dy), maxY());
+
+      dragCurrentRef.current.x = nextX;
+      dragCurrentRef.current.y = nextY;
+
+      // Apply GPU-accelerated transform relative to the element's start position
+      if (cartButtonRef.current) {
+        const tx = nextX - dragStartRef.current.startX;
+        const ty = nextY - dragStartRef.current.startY;
+        cartButtonRef.current.style.transform = `translate3d(${tx}px, ${ty}px, 0)`;
+      }
+
+      rafRef.current = requestAnimationFrame(step);
+    };
+
+    const handlePointerMove = (event: PointerEvent) => {
+      if (!draggingCartButton) return;
+      event.preventDefault();
+      pointerLatestRef.current.x = event.clientX;
+      pointerLatestRef.current.y = event.clientY;
+      if (!rafRef.current) rafRef.current = requestAnimationFrame(step);
     };
 
     const handlePointerUp = () => {
       if (draggingCartButton) {
         setDraggingCartButton(false);
-        if (dragStartRef.current.moved) {
-          suppressClickRef.current = true;
-        }
+        if (dragStartRef.current.moved) suppressClickRef.current = true;
         dragStartRef.current.moved = false;
+
+        // Commit final position and clear transform
+        const finalX = dragCurrentRef.current.x;
+        const finalY = dragCurrentRef.current.y;
+        setCartButtonPosition({ x: finalX, y: finalY });
+        if (cartButtonRef.current) cartButtonRef.current.style.transform = '';
       }
+      if (rafRef.current) { cancelAnimationFrame(rafRef.current); rafRef.current = null; }
     };
 
-    window.addEventListener('pointermove', handlePointerMove);
+    window.addEventListener('pointermove', handlePointerMove, { passive: false });
     window.addEventListener('pointerup', handlePointerUp);
     window.addEventListener('pointercancel', handlePointerUp);
 
@@ -373,6 +363,7 @@ const ProfessionalCustomerHome = () => {
       window.removeEventListener('pointermove', handlePointerMove);
       window.removeEventListener('pointerup', handlePointerUp);
       window.removeEventListener('pointercancel', handlePointerUp);
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
     };
   }, [draggingCartButton]);
 
@@ -903,6 +894,8 @@ const ProfessionalCustomerHome = () => {
           suppressClickRef.current = false;
         }}
         onPointerDown={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
           dragStartRef.current = {
             pointerX: event.clientX,
             pointerY: event.clientY,
@@ -910,12 +903,19 @@ const ProfessionalCustomerHome = () => {
             startY: cartButtonPosition.y,
             moved: false,
           };
+          dragCurrentRef.current = {
+            x: cartButtonPosition.x,
+            y: cartButtonPosition.y,
+          };
+          if (cartButtonRef.current) {
+            cartButtonRef.current.style.transform = 'translate3d(0, 0, 0)';
+          }
           suppressClickRef.current = false;
           setDraggingCartButton(true);
-          (event.target as HTMLElement).setPointerCapture(event.pointerId);
+          (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
         }}
-        style={{ left: cartButtonPosition.x, top: cartButtonPosition.y }}
-         className={`fixed z-50 flex h-16 w-16 items-center justify-center rounded-full border border-white/10 bg-orange-500 text-white shadow-2xl shadow-orange-500/30 transition hover:bg-orange-400 focus:outline-none focus:ring-2 focus:ring-orange-300 touch-action-none ${draggingCartButton ? 'cursor-grabbing' : 'cursor-grab'}`}
+        style={{ left: cartButtonPosition.x, top: cartButtonPosition.y, touchAction: 'none' as const, transform: 'translate3d(0, 0, 0)' }}
+         className={`fixed z-[9999] flex h-16 w-16 items-center justify-center rounded-full border border-white/10 bg-orange-500 text-white shadow-2xl shadow-orange-500/30 transition-none hover:bg-orange-400 focus:outline-none focus:ring-2 focus:ring-orange-300 will-change-transform ${draggingCartButton ? 'cursor-grabbing' : 'cursor-grab'}`}
         aria-label="Open cart"
       >
         <ShoppingCart size={20} />
@@ -1040,7 +1040,7 @@ const ProfessionalCustomerHome = () => {
       <main id="menu" className={`scroll-mt-32 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-20 relative z-20 transition-opacity duration-500 ${
         showCartModal || lastOrder ? 'opacity-20 pointer-events-none' : 'opacity-100'
       }`}>
-        <div className="rounded-[2rem] border border-white/10 bg-white/10 backdrop-blur-2xl shadow-2xl shadow-black/20 overflow-hidden sm:bg-transparent sm:backdrop-blur-none">
+        <div className="overflow-hidden">
           <div className="px-4 py-6 sm:px-6 sm:py-8 lg:px-8 lg:py-10">
 
             {/* Featured Section */}

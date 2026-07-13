@@ -939,6 +939,14 @@ const EmployeeTable: React.FC = () => {
                 <p className="mt-3 text-xl font-bold text-white">{unsentItemCount}</p>
               </div>
             </div>
+            <div className="mt-3 lg:mt-0 lg:ml-4">
+              <button
+                onClick={() => window.history.back()}
+                className="rounded-3xl border border-slate-800/70 bg-slate-900/95 px-4 py-2 text-sm text-slate-300 hover:bg-slate-800 transition"
+              >
+                Back to Dashboard
+              </button>
+            </div>
           </div>
         </div>
 

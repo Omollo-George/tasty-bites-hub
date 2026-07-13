@@ -377,19 +377,20 @@ const OrdersTable: React.FC = () => {
                 </div>
               </td>
               <td className="text-sm truncate" style={{paddingTop: 12, paddingBottom: 12}}>
-                <select
-                  value={s.waiter_id ?? ''}
-                  disabled={assigningOrderId === s.order_id}
-                  onChange={(e) => assignWaiter(s.order_id, e.target.value)}
-                  className="w-full px-2 py-1 bg-slate-800/40 border border-slate-600 text-slate-100 rounded text-sm"
-                >
-                  <option value="">{s.waiter_name ? `Assigned: ${s.waiter_name}` : 'Assign waiter'}</option>
-                  {employees.map(emp => (
-                    <option key={emp.id} value={String(emp.id)}>
-                      {emp.special_id ? `${emp.special_id} - ${emp.name}` : emp.name}
-                    </option>
-                  ))}
-                </select>
+                {s.waiter_name || s.waiter_id ? (
+                  <div className="inline-flex flex-col gap-1 bg-slate-800/40 text-slate-100 px-3 py-2 rounded" style={{minWidth: 120}}>
+                    <span className="truncate font-semibold">
+                      {s.waiter_name ? s.waiter_name : `Waiter ID: ${s.waiter_id}`}
+                    </span>
+                    {s.waiter_name && s.waiter_id ? (
+                      <span className="text-xs text-slate-400 truncate">ID: {s.waiter_id}</span>
+                    ) : null}
+                  </div>
+                ) : (
+                  <div className="inline-flex items-center bg-slate-800/40 text-slate-300 px-3 py-2 rounded" style={{minWidth: 120}}>
+                    <span className="truncate font-semibold text-white">Customer</span>
+                  </div>
+                )}
               </td>
               <td style={{paddingTop: 12, paddingBottom: 12}}><Badge status={s.status} /></td>
 

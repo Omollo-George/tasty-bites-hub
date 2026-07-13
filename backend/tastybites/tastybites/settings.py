@@ -355,17 +355,24 @@ MPESA_ADMIN_TOKEN = os.environ.get('MPESA_ADMIN_TOKEN', 'dev-admin-token')
 
 # Email Configuration for sending employee emails
 EMAIL_BACKEND = os.environ.get('EMAIL_BACKEND', 'django.core.mail.backends.smtp.EmailBackend')
-EMAIL_HOST = os.environ.get('EMAIL_HOST', 'smtp.gmail.com')
-EMAIL_PORT = int(os.environ.get('EMAIL_PORT', 587))
+EMAIL_HOST = (os.environ.get('EMAIL_HOST', '') or '').strip()
+EMAIL_PORT = int(os.environ.get('EMAIL_PORT', '587'))
 EMAIL_USE_TLS = os.environ.get('EMAIL_USE_TLS', 'True') == 'True'
-EMAIL_HOST_USER = os.environ.get('EMAIL_HOST_USER', 'omollogeorge096@gmail.com')
-EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD', '')
-DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL', f"Tasty Bites Admin <{EMAIL_HOST_USER}>")
+EMAIL_HOST_USER = (os.environ.get('EMAIL_HOST_USER', '') or '').strip()
+EMAIL_HOST_PASSWORD = (os.environ.get('EMAIL_HOST_PASSWORD', '') or '').strip()
+DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL', 'Tasty Bites Admin <admin@tastybites.local>')
 
-# Use console email backend in development only when explicitly requested.
-# Set FORCE_CONSOLE_EMAIL=1 to use the console backend during local testing.
-if DEBUG and os.environ.get('FORCE_CONSOLE_EMAIL', '0') == '1':
+# Use console email backend during local testing when explicitly requested.
+# Set FORCE_CONSOLE_EMAIL=1 to route mail to the console backend without needing a live SMTP server.
+if os.environ.get('FORCE_CONSOLE_EMAIL', '0') == '1':
     EMAIL_BACKEND = os.environ.get('EMAIL_BACKEND', 'django.core.mail.backends.console.EmailBackend')
+elif not EMAIL_HOST and DEBUG:
+    # Local development default: prefer a local SMTP listener such as MailHog.
+    EMAIL_HOST = '127.0.0.1'
+    EMAIL_PORT = int(os.environ.get('EMAIL_PORT', '1025'))
+    EMAIL_USE_TLS = False
+    if not DEFAULT_FROM_EMAIL or DEFAULT_FROM_EMAIL == 'Tasty Bites Admin <admin@tastybites.local>':
+        DEFAULT_FROM_EMAIL = 'Tasty Bites Admin <admin@tastybites.local>'
 
 MPESA_TO_KES_RATE = float(os.environ.get('MPESA_TO_KES_RATE', '1'))
 

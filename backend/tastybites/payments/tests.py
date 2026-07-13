@@ -1,6 +1,6 @@
 import importlib
 import json
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from django.core.exceptions import ImproperlyConfigured
 from django.db import connection
@@ -13,6 +13,7 @@ from datetime import timedelta
 
 from .views import admin_signin, _build_mpesa_callback_url, _ensure_required_tables, _payments_schema_ready, order_detail, order_status_update, report_summary, create_pos_order, menu_items, cashier_pending_bills, claim_order
 from .models import AdminToken, AdminUser, Employee, MiscellaneousExpense, Order, OrderItem, StaffActivity, StaffToken, Transaction, WastageLog
+from tastybites import startup
 
 
 class SchemaCleanupMixin:
@@ -61,6 +62,21 @@ class AdminSigninSchemaTests(SchemaCleanupMixin, TestCase):
 
         self.assertTrue(reloaded_settings.DEBUG)
         self.assertEqual(reloaded_settings.DATABASES['default']['ENGINE'], 'django.db.backends.sqlite3')
+
+    def test_wait_for_database_skips_psycopg_for_sqlite_urls(self):
+        import os
+        import sys
+        import types
+
+        connect = Mock()
+        fake_psycopg2 = types.SimpleNamespace(connect=connect)
+
+        with patch.dict(os.environ, {'DATABASE_URL': 'sqlite:///db.sqlite3'}, clear=False):
+            with patch.object(startup, '_get_int_env', return_value=1):
+                with patch.dict(sys.modules, {'psycopg2': fake_psycopg2}):
+                    startup._wait_for_database()
+
+        connect.assert_not_called()
 
     def test_create_pos_order_retries_when_schema_check_is_transient(self):
         employee = Employee.objects.create(name='Waiter Mike', role='Waiter', status='on_shift')

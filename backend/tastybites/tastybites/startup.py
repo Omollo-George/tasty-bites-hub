@@ -1,6 +1,7 @@
 import os
 import time
 import sys
+from urllib.parse import urlparse
 
 from django.core.management import call_command
 
@@ -23,9 +24,19 @@ def _get_float_env(name: str, default: str) -> float:
         return float(default)
 
 
+def _is_sqlite_database_url(db_url: str) -> bool:
+    if not db_url:
+        return False
+    try:
+        parsed = urlparse(db_url)
+    except Exception:
+        return False
+    return parsed.scheme.lower() in {'sqlite', 'sqlite3'}
+
+
 def _wait_for_database():
     db_url = os.environ.get('DATABASE_URL', '').strip()
-    if not db_url:
+    if not db_url or _is_sqlite_database_url(db_url):
         return
 
     retries = _get_int_env('DB_STARTUP_RETRIES', '5')
