@@ -3452,8 +3452,17 @@ def _send_mail_with_fallback(subject: str, message: str, sender: str, recipients
     # authentication errors for environments where secrets are stored elsewhere.
     if not password:
         logger.warning('EMAIL_HOST_PASSWORD is not set; falling back to console backend. Set EMAIL_HOST_PASSWORD (Gmail app password) to enable real SMTP delivery.')
-        send_mail(subject, message, sender, recipients, fail_silently=False)
-        return {'ok': True, 'mode': 'console', 'warning': 'EMAIL_HOST_PASSWORD not set; using console fallback'}
+        # Use an explicit console connection so Django does not attempt SMTP
+        from django.core.mail import get_connection
+        console_conn = get_connection(backend='django.core.mail.backends.console.EmailBackend')
+        try:
+            send_mail(subject, message, sender, recipients, fail_silently=False, connection=console_conn)
+            return {'ok': True, 'mode': 'console', 'warning': 'EMAIL_HOST_PASSWORD not set; using console fallback'}
+        finally:
+            try:
+                console_conn.close()
+            except Exception:
+                pass
 
     if not host:
         raise ImproperlyConfigured(
