@@ -3448,6 +3448,13 @@ def _send_mail_with_fallback(subject: str, message: str, sender: str, recipients
         send_mail(subject, message, sender, recipients, fail_silently=False)
         return {'ok': True, 'mode': 'console'}
 
+    # If no SMTP password is configured, fall back to console to avoid raising
+    # authentication errors for environments where secrets are stored elsewhere.
+    if not password:
+        logger.warning('EMAIL_HOST_PASSWORD is not set; falling back to console backend. Set EMAIL_HOST_PASSWORD (Gmail app password) to enable real SMTP delivery.')
+        send_mail(subject, message, sender, recipients, fail_silently=False)
+        return {'ok': True, 'mode': 'console', 'warning': 'EMAIL_HOST_PASSWORD not set; using console fallback'}
+
     if not host:
         raise ImproperlyConfigured(
             'SMTP email delivery is not configured. Set EMAIL_HOST, EMAIL_HOST_USER, and EMAIL_HOST_PASSWORD or explicitly enable FORCE_CONSOLE_EMAIL=1 for local testing.'
