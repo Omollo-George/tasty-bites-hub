@@ -34,7 +34,7 @@ export const DEFAULT_MENU_ITEMS: MenuItem[] = [
   { name: "Spicy Chicken Burger", price: 780, category: "Burgers", popular: false, spicy: true, description: "Crispy chicken, jalapeños, sriracha mayo" },
   { name: "BBQ Bacon Burger", price: 860, category: "Burgers", popular: true, spicy: false, description: "Smoked bacon, BBQ glaze, onion rings" },
   { name: "Veggie Deluxe", price: 690, category: "Burgers", popular: false, spicy: false, description: "Plant-based patty, avocado, fresh greens" },
-  { name: "Loaded Fries", price: 360, category: "Sides", popular: true, spicy: false, description: "Cheese sauce, bacon bits, green onions" },
+  { name: "Loaded Fries", price: 360, category: "Sides", popular: true, spicy: false, description: "Cheese sauce, bacon bits, green onions", image_url: "https://images.unsplash.com/photo-1573015084185-7205ba3d6ea8?w=500&q=80" },
   { name: "Onion Rings", price: 280, category: "Sides", popular: false, spicy: false, description: "Beer-battered, crispy golden perfection" },
   { name: "Chicken Wings (8pc)", price: 720, category: "Sides", popular: true, spicy: false, description: "Choice of buffalo, BBQ, or garlic parmesan" },
   { name: "Coleslaw", price: 210, category: "Sides", popular: false, spicy: false, description: "Creamy homestyle coleslaw" },
